@@ -1,8 +1,12 @@
 module Test where
 
+-- TODO:
+-- * Blocks, statements, etc.
+-- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
+
 import Data.Either(isLeft, lefts)
 
-data Type = Unknown | JBoolean | JNumber | JString | JRegex | JArray Type | JObject [(String, Type)] | JFunc [Type] Type
+data Type = TVar String | JBoolean | JNumber | JString | JRegex | JArray Type | JObject [(String, Type)] | JFunc [Type] Type
           deriving (Show, Eq)
 
 data Op = Plus | Minus | GreaterThan | LessThan | Equals
@@ -11,7 +15,7 @@ data Op = Plus | Minus | GreaterThan | LessThan | Equals
 --data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
 data Expr = LitBoolean Bool | LitNumber Double | LitString String | LitRegex String | LitArray [Expr] | LitObject [(String, Expr)]
           | BinOp Op Expr Expr 
-          | Assign Expr Expr
+          | Assign Expr Expr -- lvalue must be a property (could represent a variable)
           | Property Expr String  -- lvalue must be a JObject
           | Index Expr Expr  -- lvalue must be a JArray
           | GlobalObject
@@ -27,7 +31,7 @@ inferType (LitBoolean _) = Right JBoolean
 inferType (LitNumber _) = Right JNumber
 inferType (LitString _) = Right JString
 inferType (LitRegex _) = Right JRegex
-inferType (LitArray []) = Right $ JArray Unknown
+inferType (LitArray []) = Right . JArray $ TVar "name" -- generate unique name
 inferType ar@(LitArray (x:xs))
     | areSameType = fmap JArray headType
     | otherwise = Left $ TypeError "array elements are of inconsistent type" ar []
