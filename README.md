@@ -1,0 +1,4 @@
+sjs
+===
+
+Safe JavaScript
