@@ -33,7 +33,7 @@ data Expr a = Expr (Body (Expr a)) a
 
 -- there are no variables. a variable is a property accessor on either the global scope or an anonymous local object.
 
-data TypeError = TypeError String [TypeError]
+data TypeError = TypeError String
                deriving (Show, Eq)
 
 rightExpr :: Body (Expr (Either a b)) -> b -> Expr (Either a b)
@@ -41,6 +41,9 @@ rightExpr body t = Expr body (Right t)
 
 exprType :: Expr t -> t
 exprType (Expr _ t) = t
+
+setType :: Type -> Expr (Either TypeError Type) -> Expr (Either TypeError Type)
+setType t (Expr body _) = Expr body (Right t)
 
 inferType :: Expr (Either TypeError Type) -> Expr (Either TypeError Type)
 inferType (Expr body _) = 
@@ -52,25 +55,32 @@ inferType (Expr body _) =
                                         
       LitArray [] -> rightExpr body (JArray $ TVar "name") -- TODO: generate unique name
       LitArray (x:xs) -> if (isRight headType) && areSameType
-                         then rightExpr body (JArray . fromRight $ headType)
-                         else Expr body 
+                         then rightExpr newBody (JArray . fromRight $ headType)
+                         else Expr newBody 
                                   $ Left 
-                                  $ TypeError "could not infer array type: elements are of inconsistent type" []
+                                  $ TypeError "could not infer array type: elements are of inconsistent type"
           where headType = exprType . inferType $ x
-                areSameType = all ((headType ==) . exprType) 
-                              $ map inferType xs
+                restTypes = map inferType xs
+                areSameType = all ((headType ==) . exprType) restTypes
+                newBody = (LitArray ((setType (fromRight headType) x) : restTypes))
 
-      LitObject xs -> if any isLeft propTypes 
-                      then Expr body 
+      LitObject xs -> if any isLeft (map snd propTypes)
+                      then Expr newBody
                                $ Left 
-                               $ TypeError "could not infer object type: properties are badly typed" (lefts propTypes) 
-                      else rightExpr body . JObject $ map (\(name, expr) -> (name, fromRight expr)) propNamedTypes
-          where propNamedTypes = map (\(name, expr) -> (name, exprType . inferType $ expr)) xs
-                propTypes = map snd propNamedTypes
+                               $ TypeError "could not infer object type: properties are badly typed"
+                      else rightExpr newBody . JObject $ map (\(name, expr) -> (name, fromRight expr)) propTypes
+          where propNamedTypes = map (\(name, expr) -> (name, inferType expr)) xs
+                propTypes = map (\(name, expr) -> (name, exprType expr)) propNamedTypes
+                newBody = LitObject propNamedTypes
 
-      _ -> Expr body $ Left $ TypeError "not implemented" []
+      _ -> Expr body $ Left $ TypeError "not implemented"
 
 
 fromRight :: Either a b -> b
 fromRight (Right x) = x
 fromRight _ = error "Expected Right" 
+
+
+newExpr x=  (Expr x (Left $ TypeError "not inferred"))
+bla = inferType (newExpr (LitArray [newExpr $ LitString "3", newExpr $ LitNumber 3]))
+blo = inferType (newExpr (LitObject [("test", newExpr $ LitString "3"), ("mest", newExpr $ LitNumber 3)]))
