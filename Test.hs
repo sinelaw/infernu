@@ -31,6 +31,7 @@ data Body expr = LitBoolean Bool
                | Assign expr expr -- lvalue must be a property (could represent a variable)
                | Property expr String  -- lvalue must be a JObject
                | Index expr expr  -- lvalue must be a JArray
+               | Var String
           deriving (Show, Eq)
 
 data Expr a = Expr (Body (Expr a)) a
@@ -84,8 +85,9 @@ inferType (Expr body (Right ctx)) =
                           funcType = either makeBadBody makeFuncType
                                      $ exprData newFuncBody
                           makeBadBody = const . Left $ TypeError "func body is badly typed"
-                          makeFuncType bodyContext = Right . mkContext ctx $ JFunc argTypes (curType bodyContext)
+                          makeFuncType bodyContext = Right . newContext $ JFunc argTypes (curType bodyContext)
                           newBody = LitFunc argNames newFuncBody
+                          newContext t = Context ctx (zip argNames argTypes) t
                                             
                 LitArray [] -> rightExpr ctx body (JArray $ TVar "todo") -- TODO: generate unique name
                 LitArray (x:xs) -> 
@@ -141,6 +143,11 @@ inferType (Expr body (Right ctx)) =
                           inferredCallee = inferType callee
                           inferredArgs = map inferType args
                           inferredArgTypes = map exprData inferredArgs
+
+                Var name -> 
+                    case lookup name (vars ctx) of
+                      Nothing -> Expr body (Right ctx)
+                      Just t -> Expr body (Right $ Context ctx [] t)
 
                 x -> Expr body $ Left $ TypeError ("expression not implemented: " ++ show x)
 
