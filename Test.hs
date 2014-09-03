@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Test where
 
 -- TODO:
@@ -6,6 +8,7 @@ module Test where
 
 import Data.Maybe(fromJust, isJust)
 import Data.Either(isLeft, lefts, isRight)
+import Text.PrettyPrint.GenericPretty(Generic(..), Out(..), pp)
 
 
 data Type = Top
@@ -14,10 +17,14 @@ data Type = Top
           | JArray Type 
           | JObject [(String, Type)] 
           | JFunc [Type] Type
-          deriving (Show, Eq)
+          deriving (Show, Eq, Generic)
+
+instance Out Type
 
 data Op = Plus | Minus | GreaterThan | LessThan | Equals
-          deriving (Show, Eq)
+          deriving (Show, Eq, Generic)
+
+instance Out Op
 
 --data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
 data Body expr = LitBoolean Bool 
@@ -32,18 +39,28 @@ data Body expr = LitBoolean Bool
                | Property expr String  -- lvalue must be a JObject
                | Index expr expr  -- lvalue must be a JArray
                | Var String
-          deriving (Show, Eq)
+          deriving (Show, Eq, Generic)
+
+instance (Out a) => Out (Body a)
 
 data Expr a = Expr (Body (Expr a)) a
-          deriving (Show, Eq)
+          deriving (Show, Eq, Generic)
+
+
+instance (Out a) => Out (Expr a)
 
 -- there are no variables. a variable is a property accessor on either the global scope or an anonymous local object.
 
 data TypeError = TypeError String
-               deriving (Show, Eq)
+               deriving (Show, Eq, Generic)
+
+instance Out TypeError
 
 data Context = Global | Context { parent :: Context, vars :: [(String, Type)], curType :: Type }
-             deriving (Show, Eq)
+             deriving (Show, Eq, Generic)
+
+instance Out Context
+
 
 mkContext :: Context -> Type -> Context
 mkContext ctx t = Context ctx [] t
@@ -181,7 +198,13 @@ blo = inferType (newExpr (LitObject [("test", newExpr $ LitString "3"), ("mest",
 blf = inferType . newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitString "3") "x"]
 
 -- function (x, y) { return [ { x: "bla" }.x ]; }
-myFunc = newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitObject [("x", newExpr $ LitString "bla")]) "x"]
+myFunc = newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitObject [("a", newExpr $ LitString "bla")]) "a"]
 
 blf1 = inferType . newExpr $ Call myFunc [newExpr $ LitString "1", newExpr $ LitString "2"]
+
+-- function (x) { return x; }
+polyFunc = newExpr . LitFunc ["x"] . newExpr $ Var "x"
+
+blf2 = inferType . newExpr $ Call polyFunc [newExpr $ LitString "3"]
+
 
