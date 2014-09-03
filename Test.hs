@@ -140,8 +140,9 @@ inferType (Expr body (Right ctx)) =
                                   $ headType
                          else makeErrorExpr "could not infer array type: elements are of inconsistent type"
                     else makeErrorExpr "array head is badly typed"
-                    where headType = exprData . inferType $ x
-                          restTypes = map inferType xs
+                    where headType = exprData . inferSubExprType $ x
+                          inferSubExprType = inferType . withVars (vars ctx)
+                          restTypes = map inferSubExprType xs
                           areSameType = all ((headType ==) . exprData) restTypes
                           newBody = LitArray $ (inferType x) : restTypes
                           makeErrorExpr str = Expr newBody . Left $ TypeError str
@@ -153,7 +154,7 @@ inferType (Expr body (Right ctx)) =
                              . JObject 
                              . map (\(name, expr) -> (name, curType . fromRight $ expr)) 
                              $ propTypes
-                    where propNamedTypes = map (\(name, expr) -> (name, inferType expr)) xs
+                    where propNamedTypes = map (\(name, expr) -> (name, inferType . withVars (vars ctx) $ expr)) xs
                           propTypes = map (\(name, expr) -> (name, exprData expr)) propNamedTypes
                           newBody = LitObject propNamedTypes
 
@@ -165,7 +166,7 @@ inferType (Expr body (Right ctx)) =
                             Just propType -> rightExpr ctx newBody propType
                       _ -> makeError "property accessor on non-object"
                     where makeError = Expr newBody . Left . TypeError
-                          inferredObjExpr = inferType objExpr
+                          inferredObjExpr = inferType . withVars (vars ctx) $ objExpr
                           newBody = Property inferredObjExpr propName
 
                 Call callee args ->
@@ -189,7 +190,7 @@ inferType (Expr body (Right ctx)) =
 
                       _ -> makeError "call target is not a callable type"
 
-                    where inferredCallee = inferType callee
+                    where inferredCallee = inferType  . withVars (vars ctx) $ callee
                           makeError = Expr (Call inferredCallee inferredArgs) . Left . TypeError
                           inferredArgs = map inferType args
                           inferredArgTypes = map exprData inferredArgs
