@@ -100,14 +100,15 @@ inferType (Expr body (Right t)) = case t of
                                  newBody = LitObject propNamedTypes
 
                        Property objExpr propName ->
-                           case objExpr of
-                             Expr _ (Right $ JObject props) -> 
+                           case inferredObjExpr of
+                             Expr _ (Right (JObject props)) -> 
                                  case lookup propName props of
-                                   
-                             _ ->  Expr body 
-                                        $ Left
-                                        $ TypeError "property accessor on non-object"
-                                 
+                                   Nothing -> makeError $ "object type has no property '" ++ propName ++ "'"
+                                   Just propType -> rightExpr newBody propType
+                             _ -> makeError "property accessor on non-object"
+                           where makeError = Expr newBody . Left . TypeError
+                                 inferredObjExpr = inferType objExpr
+                                 newBody = Property inferredObjExpr propName
                        x -> Expr body $ Left $ TypeError ("expression not implemented: " ++ show x)
 
 
@@ -121,4 +122,7 @@ newExpr x = Expr x $ Right Top
 bla = inferType (newExpr (LitArray [newExpr $ LitString "3", newExpr $ LitNumber 3]))
 blo = inferType (newExpr (LitObject [("test", newExpr $ LitString "3"), ("mest", newExpr $ LitNumber 3)]))
 blf = inferType . newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitString "3") "x"]
+
+-- function (x, y) { return [ { x: "bla" }.x ]; }
+blf1 = inferType . newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitObject [("x", newExpr $ LitString "bla")]) "x"]
 
