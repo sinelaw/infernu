@@ -79,6 +79,29 @@ getType :: Expr (Either TypeError Context) -> Maybe Type
 getType (Expr _ (Left _)) = Nothing
 getType (Expr _ (Right t)) = Just . curType $ t
 
+
+pushTVar :: String -> Type -> Type -> Type
+pushTVar _ _ Top = Top
+pushTVar x t (TVar y)
+          | x == y = t
+          | otherwise = TVar y
+pushTVar _ _ JBoolean = JBoolean
+pushTVar _ _ JNumber = JNumber
+pushTVar _ _ JString = JString
+pushTVar _ _ JRegex = JRegex
+pushTVar x t (JArray u) = JArray $ pushTVar x t u
+pushTVar x t (JObject props) = JObject $ map (\(propName, propT) -> (propName, pushTVar x t propT)) props
+pushTVar x t (JFunc args res) = JFunc (map (pushTVar x t) args) (pushTVar x t res)
+
+pushTVars :: [(String, Type)] -> Type -> Type
+pushTVars [] t = t
+pushTVars ((varName, varType):vars) t = pushTVar varName varType (pushTVars vars t)
+
+withVars :: [(String, Type)] -> Expr (Either a Context) -> Expr (Either a Context)
+withVars _ expr@(Expr _ (Left _)) = expr
+withVars [] expr = expr
+withVars xs expr@(Expr body (Right ctx)) = Expr body . Right $ Context ctx xs (pushTVars xs $ curType ctx)
+
 inferType :: Expr (Either TypeError Context) -> Expr (Either TypeError Context)
 inferType e@(Expr _ (Left _)) = e
 inferType (Expr body (Right ctx)) = 
@@ -95,10 +118,12 @@ inferType (Expr body (Right ctx)) =
                 LitString _ -> rightExpr ctx body JString
                 LitRegex _ -> rightExpr ctx body JRegex
 
-                LitFunc argNames (Expr funcBody (Right bodyContext)) -> 
+                LitFunc argNames bodyExpr@(Expr funcBody (Right bodyContext)) -> 
                     Expr newBody funcType
                     where argTypes = map TVar argNames -- currently type args get value arg names. TODO fix - genreate names
-                          newFuncBody = inferType (Expr funcBody $ Right $ Context bodyContext (zip argNames argTypes) (curType bodyContext))
+                          newFuncBody = inferType 
+                                        . withVars (zip argNames argTypes) 
+                                        $ bodyExpr
                           funcType = either makeBadBody makeFuncType
                                      $ exprData newFuncBody
                           makeBadBody = const . Left $ TypeError "func body is badly typed"
@@ -158,12 +183,7 @@ inferType (Expr body (Right ctx)) =
                                       Nothing -> Nothing
                                       Just t -> coerceTypes reqArgType t
                                 resolvedArgMap = newContextVars coercedArgTypes
-                                resolvedReturnType = 
-                                    case returnType of
-                                      TVar x -> case lookup x resolvedArgMap of
-                                                  Nothing -> TVar x
-                                                  Just t -> t
-                                      t -> t
+                                resolvedReturnType = pushTVars resolvedArgMap returnType
                                 newBody = Call inferredCallee inferredArgs -- TODO
 
 
@@ -219,7 +239,7 @@ myFunc = newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (
 blf1 = inferType . newExpr $ Call myFunc [newExpr $ LitString "1", newExpr $ LitString "2"]
 
 -- function (x) { return x; }
-polyFunc = newExpr . LitFunc ["x"] . newExpr $ Var "x"
+polyFunc = newExpr . LitFunc ["x"] . newExpr $ LitObject [("id", newExpr $ Var "x")]
 
 blf2 = inferType . newExpr $ Call polyFunc [newExpr $ LitString "3"]
 
