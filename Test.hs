@@ -26,10 +26,11 @@ data Body expr = LitBoolean Bool
                | LitRegex String 
                | LitArray [expr] 
                | LitObject [(String, expr)]
+               | LitFunc [String] expr
+               | Call expr [expr]
                | Assign expr expr -- lvalue must be a property (could represent a variable)
                | Property expr String  -- lvalue must be a JObject
                | Index expr expr  -- lvalue must be a JArray
-               | LitFunc [String] expr
           deriving (Show, Eq)
 
 data Expr a = Expr (Body (Expr a)) a
@@ -61,55 +62,71 @@ inferType (Expr body (Right t)) = case t of
                             _ -> if t == (fromJust . getType $ inferred)
                                  then inferred
                                  else Expr body (Left $ TypeError "type mismatch")
-    where inferred = case body of 
-                       LitBoolean _ -> rightExpr body JBoolean
-                       LitNumber _ -> rightExpr body JNumber
-                       LitString _ -> rightExpr body JString
-                       LitRegex _ -> rightExpr body JRegex
-                       LitFunc argNames funcBody -> 
-                           Expr newBody funcType
-                           where argTypes = map (const $ TVar "todo") argNames
-                                 newFuncBody = inferType funcBody
-                                 funcType = either (const . Left $ TypeError "func body is badly typed") (\bodyType -> Right $ JFunc argTypes bodyType) 
-                                         $ exprData newFuncBody
-                                 newBody = LitFunc argNames newFuncBody
+    where inferred = 
+              case body of 
+                LitBoolean _ -> rightExpr body JBoolean
+                LitNumber _ -> rightExpr body JNumber
+                LitString _ -> rightExpr body JString
+                LitRegex _ -> rightExpr body JRegex
+
+                LitFunc argNames funcBody -> 
+                    Expr newBody funcType
+                    where argTypes = map (const $ TVar "todo") argNames
+                          newFuncBody = inferType funcBody
+                          funcType = either (const . Left $ TypeError "func body is badly typed") (\bodyType -> Right $ JFunc argTypes bodyType) $ exprData newFuncBody
+                          newBody = LitFunc argNames newFuncBody
                                             
-                       LitArray [] -> rightExpr body (JArray $ TVar "todo") -- TODO: generate unique name
-                       LitArray (x:xs) -> 
-                           if isRight headType
-                           then if areSameType 
-                                then rightExpr newBody (JArray . fromRight $ headType)
-                                else makeErrorExpr "could not infer array type: elements are of inconsistent type"
-                           else makeErrorExpr "array head is badly typed"
-                           where headType = exprData . inferType $ x
-                                 restTypes = map inferType xs
-                                 areSameType = all ((headType ==) . exprData) restTypes
-                                 newBody = LitArray $ (inferType x) : restTypes
-                                 makeErrorExpr str = Expr newBody 
-                                                     $ Left 
-                                                     $ TypeError str
+                LitArray [] -> rightExpr body (JArray $ TVar "todo") -- TODO: generate unique name
+                LitArray (x:xs) -> 
+                    if isRight headType
+                    then if areSameType 
+                         then rightExpr newBody (JArray . fromRight $ headType)
+                         else makeErrorExpr "could not infer array type: elements are of inconsistent type"
+                    else makeErrorExpr "array head is badly typed"
+                    where headType = exprData . inferType $ x
+                          restTypes = map inferType xs
+                          areSameType = all ((headType ==) . exprData) restTypes
+                          newBody = LitArray $ (inferType x) : restTypes
+                          makeErrorExpr str = Expr newBody . Left $ TypeError str
+                                                
+                LitObject xs -> 
+                    if any isLeft (map snd propTypes)
+                    then Expr newBody . Left $ TypeError "could not infer object type: properties are badly typed"
+                    else rightExpr newBody . JObject $ map (\(name, expr) -> (name, fromRight expr)) propTypes
+                    where propNamedTypes = map (\(name, expr) -> (name, inferType expr)) xs
+                          propTypes = map (\(name, expr) -> (name, exprData expr)) propNamedTypes
+                          newBody = LitObject propNamedTypes
 
-                       LitObject xs -> 
-                           if any isLeft (map snd propTypes)
-                           then Expr newBody
-                                    $ Left 
-                                    $ TypeError "could not infer object type: properties are badly typed"
-                           else rightExpr newBody . JObject $ map (\(name, expr) -> (name, fromRight expr)) propTypes
-                           where propNamedTypes = map (\(name, expr) -> (name, inferType expr)) xs
-                                 propTypes = map (\(name, expr) -> (name, exprData expr)) propNamedTypes
-                                 newBody = LitObject propNamedTypes
+                Property objExpr propName ->
+                    case inferredObjExpr of
+                      Expr _ (Right (JObject props)) -> 
+                          case lookup propName props of
+                            Nothing -> makeError $ "object type has no property '" ++ propName ++ "'"
+                            Just propType -> rightExpr newBody propType
+                      _ -> makeError "property accessor on non-object"
+                    where makeError = Expr newBody . Left . TypeError
+                          inferredObjExpr = inferType objExpr
+                          newBody = Property inferredObjExpr propName
 
-                       Property objExpr propName ->
-                           case inferredObjExpr of
-                             Expr _ (Right (JObject props)) -> 
-                                 case lookup propName props of
-                                   Nothing -> makeError $ "object type has no property '" ++ propName ++ "'"
-                                   Just propType -> rightExpr newBody propType
-                             _ -> makeError "property accessor on non-object"
-                           where makeError = Expr newBody . Left . TypeError
-                                 inferredObjExpr = inferType objExpr
-                                 newBody = Property inferredObjExpr propName
-                       x -> Expr body $ Left $ TypeError ("expression not implemented: " ++ show x)
+                Call callee args ->
+                    case inferredCallee of
+                      Expr _ (Right (JFunc reqArgTypes returnType)) -> 
+                          if any isLeft inferredArgTypes
+                          then makeError "some arguments are badly typed"
+                          else if any id 
+                                   $ zipWith (/=) reqArgTypes 
+                                   $ map fromRight inferredArgTypes
+                                      -- TODO: support polymorphism - handle type variables in the req list
+                               then makeError "argument types do not match callee"
+                               else Expr newBody (Right returnType)
+                      _ -> makeError "call target is not a callable type"
+                    where makeError = Expr newBody . Left . TypeError
+                          newBody = Call inferredCallee inferredArgs
+                          inferredCallee = inferType callee
+                          inferredArgs = map inferType args
+                          inferredArgTypes = map exprData inferredArgs
+
+                x -> Expr body $ Left $ TypeError ("expression not implemented: " ++ show x)
 
 
 fromRight :: (Show a, Show b)=> Either a b -> b
@@ -124,5 +141,7 @@ blo = inferType (newExpr (LitObject [("test", newExpr $ LitString "3"), ("mest",
 blf = inferType . newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitString "3") "x"]
 
 -- function (x, y) { return [ { x: "bla" }.x ]; }
-blf1 = inferType . newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitObject [("x", newExpr $ LitString "bla")]) "x"]
+myFunc = newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitObject [("x", newExpr $ LitString "bla")]) "x"]
+
+blf1 = inferType . newExpr $ Call myFunc [newExpr $ LitString "1", newExpr $ LitString "2"]
 
