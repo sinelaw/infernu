@@ -95,10 +95,10 @@ inferType (Expr body (Right ctx)) =
                 LitString _ -> rightExpr ctx body JString
                 LitRegex _ -> rightExpr ctx body JRegex
 
-                LitFunc argNames funcBody -> 
+                LitFunc argNames (Expr funcBody (Right bodyContext)) -> 
                     Expr newBody funcType
-                    where argTypes = map (const $ TVar "todo") argNames
-                          newFuncBody = inferType funcBody
+                    where argTypes = map TVar argNames -- currently type args get value arg names. TODO fix - genreate names
+                          newFuncBody = inferType (Expr funcBody $ Right $ Context bodyContext (zip argNames argTypes) (curType bodyContext))
                           funcType = either makeBadBody makeFuncType
                                      $ exprData newFuncBody
                           makeBadBody = const . Left $ TypeError "func body is badly typed"
@@ -150,28 +150,44 @@ inferType (Expr body (Right ctx)) =
                           then makeError "some arguments are badly typed"
                           else if any isLeft inferredArgTypes 
                                then makeError "argument types do not match callee"
-                               else Expr newBody (Right $ Context ctx (newContextVars coercedArgTypes) returnType)
+                               else Expr newBody (Right $ Context ctx [] resolvedReturnType)
                           where coercedArgTypes = map coerceArgTypes
                                                   $ zip reqArgTypes argTypes
                                 coerceArgTypes (reqArgType, argType) = 
                                     case argType of
                                       Nothing -> Nothing
                                       Just t -> coerceTypes reqArgType t
+                                resolvedArgMap = newContextVars coercedArgTypes
+                                resolvedReturnType = 
+                                    case returnType of
+                                      TVar x -> case lookup x resolvedArgMap of
+                                                  Nothing -> TVar x
+                                                  Just t -> t
+                                      t -> t
+                                newBody = Call inferredCallee inferredArgs -- TODO
+
 
                       _ -> makeError "call target is not a callable type"
+
                     where inferredCallee = inferType callee
-                          makeError = Expr newBody . Left . TypeError
-                          newBody = Call inferredCallee inferredArgs
+                          makeError = Expr (Call inferredCallee inferredArgs) . Left . TypeError
                           inferredArgs = map inferType args
                           inferredArgTypes = map exprData inferredArgs
                           argTypes = map (either (const Nothing) (Just . curType)) inferredArgTypes
 
                 Var name -> 
-                    case lookup name (vars ctx) of
+                    case lookupVar name ctx of
                       Nothing -> Expr body (Right ctx)
                       Just t -> Expr body (Right $ Context ctx [] t)
 
                 x -> Expr body $ Left $ TypeError ("expression not implemented: " ++ show x)
+
+
+lookupVar :: String -> Context -> Maybe Type
+lookupVar name Global = Nothing
+lookupVar name ctx = case lookup name (vars ctx) of
+                       Nothing -> lookupVar name (parent ctx)
+                       Just t -> Just t
 
 newContextVars :: [Maybe (Maybe String, Type)] -> [(String, Type)]
 newContextVars = map (\(maybeName, t) -> (fromJust maybeName, t))
