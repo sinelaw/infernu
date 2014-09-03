@@ -4,7 +4,7 @@ module Test where
 -- * Blocks, statements, etc.
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
-import Data.Maybe(fromJust)
+import Data.Maybe(fromJust, isJust)
 import Data.Either(isLeft, lefts, isRight)
 
 
@@ -131,18 +131,23 @@ inferType (Expr body (Right ctx)) =
                       Expr _ (Right (Context _ _ (JFunc reqArgTypes returnType))) -> 
                           if any isLeft inferredArgTypes
                           then makeError "some arguments are badly typed"
-                          else if any id 
-                                   $ zipWith (/=) reqArgTypes 
-                                   $ map (curType . fromRight) inferredArgTypes
-                                      -- TODO: support polymorphism - handle type variables in the req list
+                          else if any isLeft inferredArgTypes 
                                then makeError "argument types do not match callee"
-                               else Expr newBody (Right $ mkContext ctx returnType)
+                               else Expr newBody (Right $ Context ctx (newContextVars coercedArgTypes) returnType)
+                          where coercedArgTypes = map coerceArgTypes
+                                                  $ zip reqArgTypes argTypes
+                                coerceArgTypes (reqArgType, argType) = 
+                                    case argType of
+                                      Nothing -> Nothing
+                                      Just t -> coerceTypes reqArgType t
+
                       _ -> makeError "call target is not a callable type"
-                    where makeError = Expr newBody . Left . TypeError
+                    where inferredCallee = inferType callee
+                          makeError = Expr newBody . Left . TypeError
                           newBody = Call inferredCallee inferredArgs
-                          inferredCallee = inferType callee
                           inferredArgs = map inferType args
                           inferredArgTypes = map exprData inferredArgs
+                          argTypes = map (either (const Nothing) (Just . curType)) inferredArgTypes
 
                 Var name -> 
                     case lookup name (vars ctx) of
@@ -151,6 +156,18 @@ inferType (Expr body (Right ctx)) =
 
                 x -> Expr body $ Left $ TypeError ("expression not implemented: " ++ show x)
 
+newContextVars :: [Maybe (Maybe String, Type)] -> [(String, Type)]
+newContextVars = map (\(maybeName, t) -> (fromJust maybeName, t))
+                 . filter (isJust . fst) 
+                 . map fromJust 
+                 . filter isJust
+
+coerceTypes :: Type -> Type -> Maybe (Maybe String, Type)
+coerceTypes Top x = Just (Nothing, x)
+coerceTypes x Top = Just (Nothing, x)
+coerceTypes (TVar s) x = Just (Just s, x)
+coerceTypes x (TVar s) = Just (Just s, x)
+coerceTypes _ _ = Nothing
 
 fromRight :: (Show a, Show b)=> Either a b -> b
 fromRight (Right x) = x
