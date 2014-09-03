@@ -4,67 +4,71 @@ module Test where
 -- * Blocks, statements, etc.
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
-import Data.Either(isLeft, lefts)
+import Data.Either(isLeft, lefts, isRight)
 
-data Type = TVar String | JBoolean | JNumber | JString | JRegex | JArray Type | JObject [(String, Type)] | JFunc [Type] Type
+data Type = TVar String 
+          | JBoolean | JNumber | JString | JRegex 
+          | JArray Type 
+          | JObject [(String, Type)] 
+          | JFunc [Type] Type
           deriving (Show, Eq)
 
 data Op = Plus | Minus | GreaterThan | LessThan | Equals
           deriving (Show, Eq)
 
 --data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
-data Expr = LitBoolean Bool | LitNumber Double | LitString String | LitRegex String | LitArray [Expr] | LitObject [(String, Expr)]
-          | BinOp Op Expr Expr 
-          | Assign Expr Expr -- lvalue must be a property (could represent a variable)
-          | Property Expr String  -- lvalue must be a JObject
-          | Index Expr Expr  -- lvalue must be a JArray
-          | GlobalObject
+data Body expr = LitBoolean Bool 
+               | LitNumber Double 
+               | LitString String 
+               | LitRegex String 
+               | LitArray [expr] 
+               | LitObject [(String, expr)]
+               | Assign expr expr -- lvalue must be a property (could represent a variable)
+               | Property expr String  -- lvalue must be a JObject
+               | Index expr expr  -- lvalue must be a JArray
+          deriving (Show, Eq)
+
+data Expr a = Expr (Body (Expr a)) a
           deriving (Show, Eq)
 
 -- there are no variables. a variable is a property accessor on either the global scope or an anonymous local object.
 
-data TypeError = TypeError String Expr [TypeError]
+data TypeError = TypeError String [TypeError]
                deriving (Show, Eq)
 
-inferType :: Expr -> Either TypeError Type
-inferType (LitBoolean _) = Right JBoolean
-inferType (LitNumber _) = Right JNumber
-inferType (LitString _) = Right JString
-inferType (LitRegex _) = Right JRegex
-inferType (LitArray []) = Right . JArray $ TVar "name" -- generate unique name
-inferType ar@(LitArray (x:xs))
-    | areSameType = fmap JArray headType
-    | otherwise = Left $ TypeError "array elements are of inconsistent type" ar []
-    where headType = inferType x
-          areSameType = all (headType ==) $ map inferType xs
+rightExpr :: Body (Expr (Either a b)) -> b -> Expr (Either a b)
+rightExpr body t = Expr body (Right t)
 
-inferType obj@(LitObject xs) 
-    | any isLeft propTypes = Left $ TypeError "properties are badly typed" obj (lefts propTypes) 
-    | otherwise = Right . JObject $ map (\(name, expr) -> (name, fromRight expr)) propNamedTypes
-    where propNamedTypes = map (\(name, expr) -> (name, inferType expr)) xs
-          propTypes = map snd propNamedTypes
+exprType :: Expr t -> t
+exprType (Expr _ t) = t
 
-inferType expr@(BinOp op a b)
-    | (aType == bType) = if (any isLeft types)
-                         then Left $ TypeError "error in expression" expr (lefts types)
-                         else case op of 
-                           Plus -> case (fromRight aType) of
-                                     JString -> Right JString
-                                     JNumber -> Right JNumber
-                                     _ -> Left $ TypeError "operator requires numbers or strings only" expr []
-                           Minus -> requireNumber aType aType
-                           GreaterThan -> requireNumber aType (Right JBoolean)
-                           LessThan -> requireNumber aType (Right JBoolean)
-                           Equals -> Right JBoolean
-    | otherwise = Left $ TypeError "refusing to coerce mismatching types in binary expression" expr []
-    where aType = inferType a
-          bType = inferType b
-          types = [aType, bType]
-          requireNumber t tRes = if (fromRight t) == JNumber 
-                                 then tRes 
-                                 else Left $ TypeError "operator requires numbers only" expr [] 
+inferType :: Expr (Either TypeError Type) -> Expr (Either TypeError Type)
+inferType (Expr body _) = 
+    case body of 
+      LitBoolean _ -> rightExpr body JBoolean
+      LitNumber _ -> rightExpr body JNumber
+      LitString _ -> rightExpr body JString
+      LitRegex _ -> rightExpr body JRegex
+                                        
+      LitArray [] -> rightExpr body (JArray $ TVar "name") -- TODO: generate unique name
+      LitArray (x:xs) -> if (isRight headType) && areSameType
+                         then rightExpr body (JArray . fromRight $ headType)
+                         else Expr body 
+                                  $ Left 
+                                  $ TypeError "could not infer array type: elements are of inconsistent type" []
+          where headType = exprType . inferType $ x
+                areSameType = all ((headType ==) . exprType) 
+                              $ map inferType xs
 
-inferType expr = Left $ TypeError "not implemented" expr []
+      LitObject xs -> if any isLeft propTypes 
+                      then Expr body 
+                               $ Left 
+                               $ TypeError "could not infer object type: properties are badly typed" (lefts propTypes) 
+                      else rightExpr body . JObject $ map (\(name, expr) -> (name, fromRight expr)) propNamedTypes
+          where propNamedTypes = map (\(name, expr) -> (name, exprType . inferType $ expr)) xs
+                propTypes = map snd propNamedTypes
+
+      _ -> Expr body $ Left $ TypeError "not implemented" []
 
 
 fromRight :: Either a b -> b
