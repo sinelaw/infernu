@@ -6,6 +6,7 @@ module Test where
 -- * Blocks, statements, etc.
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
+import Data.List(intersperse)
 import Data.Maybe(fromJust, isJust)
 import Data.Either(isLeft, lefts, isRight)
 import Text.PrettyPrint.GenericPretty(Generic(..), Out(..), pp)
@@ -41,6 +42,8 @@ data Body expr = LitBoolean Bool
                | Var String
           deriving (Show, Eq, Generic)
 
+
+
 instance (Out a) => Out (Body a)
 
 data Expr a = Expr (Body (Expr a)) a
@@ -49,7 +52,29 @@ data Expr a = Expr (Body (Expr a)) a
 
 instance (Out a) => Out (Expr a)
 
--- there are no variables. a variable is a property accessor on either the global scope or an anonymous local object.
+commafy :: [String] -> String
+commafy [] = []
+commafy (x:[]) = x
+commafy (x:xs) = x ++ ", " ++ (commafy xs)
+
+toJs :: Expr a -> String
+toJs (Expr body _) = 
+    case body of
+      LitBoolean x -> if x then "true" else "false"
+      LitNumber x -> show x
+      LitString s -> "'" ++ s ++ "'" -- todo escape
+      LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
+      LitArray xs -> "[ " ++ (commafy $ map toJs xs) ++ " ]"
+      LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ (toJs val)) xs) ++ " }"
+      LitFunc args x -> "function (" ++ argsJs ++ ") { return " ++ (toJs x) ++ "; }"
+          where argsJs = commafy $ args
+      Call callee args -> (toJs callee) ++ "(" ++ (commafy $ map toJs args) ++ ")"
+      Assign target src -> (toJs target) ++ " = " ++ (toJs src)
+      Property obj name -> (toJs obj) ++ "." ++ name
+      Index arr idx -> (toJs arr) ++ "[" ++ (toJs idx) ++ "]"
+      Var name -> name
+
+
 
 data TypeError = TypeError String
                deriving (Show, Eq, Generic)
@@ -104,7 +129,7 @@ withVars xs expr@(Expr body (Right ctx)) = Expr body . Right $ Context ctx xs (p
 
 inferType :: Expr (Either TypeError Context) -> Expr (Either TypeError Context)
 inferType e@(Expr _ (Left _)) = e
-inferType (Expr body (Right ctx)) = 
+inferType (Expr body (Right ctx)) =
     case curType ctx of
       Top -> inferred
       TVar name -> inferred -- TODO deduce that "name" must be the type given by inferred
