@@ -91,6 +91,13 @@ substitueTypeSig m (TypeSig names t) =
 
 --------------------------------------------------------------------
 
+data JSConsType = JSConsBoolean | JSConsNumber | JSConsString | JSConsRegex
+                | JSConsFunc
+                | JSConsArray
+                | JSConsObject [String]
+                  deriving (Show, Eq)
+                  
+
 data JSType = JSBoolean | JSNumber | JSString | JSRegex
             | JSFunc [JSType] JSType
             | JSArray JSType
@@ -98,21 +105,27 @@ data JSType = JSBoolean | JSNumber | JSString | JSRegex
             | JSTVar Name
               deriving (Show, Eq)
 
-toType :: JSType -> Type JSType
+toType :: JSType -> Type JSConsType
 toType (JSTVar name) = TVar name
-toType t@JSBoolean = TCons t []
-toType t@JSNumber = TCons t []
-toType t@JSString = TCons t []
-toType t@JSRegex = TCons t []
-toType t@(JSFunc argsT resT) = TCons t $ (toType resT) : (map toType argsT)
-toType t@(JSArray elemT) = TCons t [toType elemT]
-toType t@(JSObject propsT) = TCons t $ map (toType . snd) propsT
+toType JSBoolean = TCons JSConsBoolean []
+toType JSNumber = TCons JSConsNumber []
+toType JSString = TCons JSConsString []
+toType JSRegex = TCons JSConsRegex []
+toType (JSFunc argsT resT) = TCons JSConsFunc $ (toType resT) : (map toType argsT)
+toType (JSArray elemT) = TCons JSConsArray [toType elemT]
+toType (JSObject propsT) = TCons (JSConsObject $ map fst propsT) 
+                           $ map (toType . snd) propsT
 
 
-
-fromType :: Type JSType -> JSType
+fromType :: Type JSConsType -> JSType
 fromType (TVar name) = JSTVar name
-fromType (TCons jst _) = jst
+fromType (TCons consName types) =
+    case consName of
+      JSConsBoolean -> JSBoolean
+      JSConsNumber -> JSNumber
+      JSConsString -> JSString
+      JSConsRegex -> JSRegex
+      JSConsFunc -> JSFunc (map fromType . tail $ types) (fromType . head $ types)
+      JSConsArray -> JSArray (fromType . head $ types) -- TODO ensure single
+      JSConsObject names -> JSObject $ zip names (map fromType types)
 
--- fromType (TVar name) = JSTVar name
--- fromType (TCons consName types) = 
