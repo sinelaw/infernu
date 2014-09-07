@@ -3,7 +3,7 @@ module Types where
 
 
 import qualified Data.Map.Lazy as Map
-
+import qualified Data.List as List 
 
 type Name = Int
 
@@ -64,4 +64,18 @@ unifyl :: TSubst -> [(Type, Type)] -> Maybe TSubst
 unifyl m types = foldr unify' (Just m) types
     where unify' (t1, t2) (Just m') = unify m' t1 t2
           unify' _ Nothing = Nothing
+
+
+-- type signature = type scheme
+-- page 172
+data TypeSig = TypeSig [Name] Type
+
+freeVariables :: TypeSig -> [Name]
+freeVariables (TypeSig names t) = (List.\\) boundVars names
+    where boundVars = tvarsIn t
+
+substitueTypeSig :: TSubst -> TypeSig -> TypeSig
+substitueTypeSig m (TypeSig names t) =
+    TypeSig names $ substituteType (m `Map.difference` boundNames) t
+    where boundNames = Map.fromList . zip names $ repeat ()
 
