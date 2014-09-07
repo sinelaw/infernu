@@ -96,6 +96,7 @@ data JSType = JSBoolean | JSNumber | JSString | JSRegex
             | JSArray JSType
             | JSObject [(String, JSType)]
             | JSTVar Name
+              deriving (Show, Eq)
 
 toType :: JSType -> Type JSType
 toType (JSTVar name) = TVar name
@@ -108,6 +109,10 @@ toType t@(JSArray elemT) = TCons t [toType elemT]
 toType t@(JSObject propsT) = TCons t $ map (toType . snd) propsT
 
 
--- fromType :: Type -> JSType
+
+fromType :: Type JSType -> JSType
+fromType (TVar name) = JSTVar name
+fromType (TCons jst _) = jst
+
 -- fromType (TVar name) = JSTVar name
 -- fromType (TCons consName types) = 
