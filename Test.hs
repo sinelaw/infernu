@@ -7,15 +7,15 @@ module Test where
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
 --import Data.List(intersperse)
-import Data.Maybe(fromJust)--, isJust)
+import Data.Maybe(fromJust, isJust, fromMaybe)
 --import Data.Either(isLeft, lefts, isRight)
 import Text.PrettyPrint.GenericPretty(Generic(..), Out(..), pp)
 import Data.Traversable(Traversable(..))
 import Data.Foldable(Foldable(..))
-
-import Control.Monad.State
- 
-import Prelude hiding (foldr)
+import Control.Monad.State(State(..), runState, forM, get, put)
+import qualified Data.Map.Lazy as Map
+import Prelude hiding (foldr, mapM)
+import Control.Monad(join)
 
 data Type = Top
           | TVar Int
@@ -95,10 +95,10 @@ data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, Type)]
 
 instance Out VarScope
 
-data TypeScope = TypeScope { tVars :: [(Int, Maybe Type)] }
+data TypeScope = TypeScope { tVars :: Map.Map Int (Maybe Type) }
                deriving (Show, Eq, Generic)
 
-instance Out TypeScope
+--instance Out TypeScope
 
 data FuncScope = FuncScope { funcVars :: [(String, Type)]
                            , returnType :: Type }
@@ -111,7 +111,7 @@ data Scope = Scope { typeScope :: TypeScope
                    , funcScope :: Maybe FuncScope }
                deriving (Show, Eq, Generic)
 
-instance Out Scope
+--instance Out Scope
 
 getVarType :: VarScope -> String -> Maybe Type
 getVarType Global _ = Nothing
@@ -129,9 +129,9 @@ intrVars names scope = do
 
 allocTVar' :: TypeScope -> (Type, TypeScope)
 allocTVar' tscope = (TVar allocedNum, updatedScope)
-    where updatedScope = TypeScope { tVars = (allocedNum, Nothing) : oldTVars }
+    where updatedScope = TypeScope { tVars = Map.insert allocedNum Nothing oldTVars }
           oldTVars = tVars tscope
-          maxNum = foldr max 0 $ map fst oldTVars
+          maxNum = foldr max 0 $ Map.keys oldTVars
           allocedNum = maxNum + 1
 
 
@@ -143,9 +143,26 @@ allocTVar = do
   put $ scope { typeScope = typeScope'' }
   return varType'
 
+getTVar :: Int -> State Scope (Maybe Type)
+getTVar name = do
+  scope <- get
+  return . join . Map.lookup name . tVars $ typeScope scope
+
+setTVar :: Int -> Type -> State Scope Type
+setTVar name newT = do
+  curType <- getTVar name
+  case curType of
+    Nothing -> return $ error ("can't set type variable that is not allocated: " ++ (show name)) -- TODO!
+    Just t -> do 
+      scope <- get
+      let typeScope' = typeScope scope
+      put $ scope {typeScope = typeScope' { 
+                                 tVars = Map.insert name (Just newT) (tVars typeScope') }}
+      return t
+      
 
 emptyTypeScope :: TypeScope
-emptyTypeScope = TypeScope []
+emptyTypeScope = TypeScope Map.empty
 
 emptyScope :: Scope
 emptyScope = Scope { typeScope = emptyTypeScope, funcScope = Nothing }
@@ -174,6 +191,12 @@ pushTVars :: [(Int, Type)] -> Type -> Type
 pushTVars [] t = t
 pushTVars ((varName, varType') : vars') t = pushTVar varName varType' (pushTVars vars' t)
 
+getFuncReturnType :: State Scope (Maybe Type)
+getFuncReturnType = do
+  scope <- get
+  case funcScope scope of
+    Nothing -> return Nothing
+    Just funcScope' -> return . Just $ returnType funcScope'
 
 setFuncReturnType :: Type -> State Scope (Maybe TypeError)
 setFuncReturnType retType = do
@@ -191,6 +214,28 @@ isErrExpr _ = False
 getExprType :: Expr (VarScope, (Either TypeError Type)) -> Maybe Type
 getExprType (Expr body (_, Right t)) = Just t
 getExprType _ = Nothing
+
+
+coerceTypes :: Type -> Type -> State Scope (Maybe Type)
+coerceTypes (TVar x) (TVar y) = do
+  xType <- getTVar x
+  yType <- getTVar y
+  case (xType, yType) of
+    (Nothing, _) -> do setTVar x (TVar y)
+                       return $ Just (TVar y)
+    (_, Nothing) -> do setTVar y (TVar x)
+                       return $ Just (TVar x)
+    (Just xType', Just yType') -> return Nothing -- TODO not implemented: cycle-safe type variable unification
+coerceTypes (TVar x) u = do
+  setTVar x u
+  return $ Just u
+coerceTypes t (TVar y) = do
+  setTVar y t
+  return $ Just t
+coerceTypes t u = return $ if t == u then Just t else Nothing
+  
+
+
 
 inferType :: VarScope -> Expr a -> State Scope (Expr (VarScope, (Either TypeError Type)))
 inferType varScope (Expr body _) = do
@@ -233,16 +278,38 @@ inferType varScope (Expr body _) = do
                  let funcType = JFunc (map snd $ vars argScope) (returnType . fromJust $ funcScope'')
                  return . simply funcType $ LitFunc argNames varNames inferredExprs
                  
-        Return expr -> do
-                  inferredExpr@(Expr _ (_, res)) <- inferType varScope expr
-                  case res of 
-                    Left _ -> return $ makeError (Return inferredExpr) "Error in return expression"
-                    Right retType -> do
-                        setFailed <- setFuncReturnType retType
-                        case setFailed of
-                          Nothing -> return . simply retType $ Return inferredExpr
-                          Just _ -> return $ makeError (Return inferredExpr) "Error in return expression"
+        Return expr -> 
+            do inferredExpr@(Expr _ (_, res)) <- inferType varScope expr
+               let newBody = Return inferredExpr
+               case res of 
+                 Left _ -> return $ makeError newBody "Error in return expression"
+                 Right retType -> 
+                     do curReturnType <- getFuncReturnType
+                        if isJust curReturnType
+                        then case coerceTypes retType $ fromJust curReturnType of
+                               Nothing -> return $ makeError newBody "Function already returns a different type"
+                               Just t -> do
+                                     setFailed <- setFuncReturnType t
+                                     case setFailed of
+                                       Nothing ->  return . simply t $ newBody
+                                       Just _ -> return $ makeError newBody "Error in return expression"
+                        else do setFailed <- setFuncReturnType retType
+                                case setFailed of
+                                  Nothing -> return . simply retType $ newBody
+                                  Just _ -> return $ makeError newBody "Error in return expression"
                   
+        LitObject props -> 
+            do let propNames = map fst props
+               let propExprs = map snd props
+               inferredProps <- mapM (inferType varScope) propExprs
+               let newBody = LitObject $ zip propNames inferredProps
+               if any isErrExpr inferredProps
+               then return $ makeError newBody "object properties are badly typed"
+               else return 
+                        . simply (JObject 
+                                  $ zip propNames 
+                                  $ map (fromJust . getExprType) inferredProps) 
+                        $ newBody
                   
   return inferred
 
@@ -250,7 +317,8 @@ inferType varScope (Expr body _) = do
 
 ex expr = Expr expr ()
 
-e1 = ex $ LitFunc ["arg"] ["vari"] [ex $ Var "vari", ex $ Return (ex $ LitArray [ex $ Var "arg"])]
+e1 = ex $ LitFunc ["arg"] ["vari"] [ex $ Var "vari"
+                                   , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg")]])]
 t1 = inferType Global e1
 s1 = runState t1 emptyScope
 
