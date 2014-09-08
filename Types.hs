@@ -104,6 +104,10 @@ data JSType = JSBoolean | JSNumber | JSString | JSRegex
 
 instance Out JSType
 
+getObjPropertyType :: JSType -> String -> Maybe JSType
+getObjPropertyType (JSObject props) name = lookup name props
+getObjPropertyType _ _ = Nothing
+
 toType :: JSType -> Type JSConsType
 toType (JSTVar name) = TVar name
 toType JSBoolean = TCons JSConsBoolean []

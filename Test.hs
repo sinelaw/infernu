@@ -5,12 +5,13 @@ module Test where
 import Types
 
 -- TODO:
+-- * inferType should always return resolved types (get rid of inferType')
 -- * Blocks, statements, etc.
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
 import Data.List(intersperse)
 import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
-import Data.Either(isLeft, lefts, isRight, rights)
+import Data.Either(isLeft, lefts)
 import Text.PrettyPrint.GenericPretty(Generic, Out(..), pp)
 import Data.Traversable(Traversable(..))
 import Data.Foldable(Foldable(..))
@@ -146,6 +147,9 @@ emptyScope = Scope { typeScope = emptyTypeScope, funcScope = Nothing }
 exprData :: Expr t -> t
 exprData (Expr _ t) = t
 
+exprBody :: Expr t -> Body (Expr t)
+exprBody (Expr b _) = b
+
 
 getFuncReturnType :: State Scope (Maybe JSType)
 getFuncReturnType = do
@@ -194,18 +198,18 @@ resolveType t = do
 
 type InferredExpr = Expr (VarScope, (Either TypeError JSType))
 
-inferType' :: VarScope -> Expr a -> State Scope (Maybe JSType)
-inferType' v e = do
-  inferredExpr <- inferType v e
+inferType :: VarScope -> Expr a -> State Scope InferredExpr
+inferType v e = do
+  inferredExpr <- inferType' v e
   case inferredExpr of
-    Expr _ (_, Left _) -> return Nothing
-    Expr _ (_, Right t) ->
+    Expr _ (_, Left _) -> return inferredExpr
+    Expr a (b, Right t) ->
       do t' <- resolveType t
-         return . Just $ t'
+         return $ Expr a (b, Right t')
   
 
-inferType :: VarScope -> Expr a -> State Scope InferredExpr
-inferType varScope (Expr body _) = do
+inferType' :: VarScope -> Expr a -> State Scope InferredExpr
+inferType' varScope (Expr body _) = do
   case body of
     LitArray exprs -> inferArrayType varScope exprs
     LitBoolean x -> simpleType JSBoolean $ LitBoolean x
@@ -217,7 +221,8 @@ inferType varScope (Expr body _) = do
     Return expr -> inferReturnType varScope expr
     Var name -> inferVarType varScope name
     Call callee args -> inferCallType varScope callee args
-                  
+    Assign dest src -> inferAssignType varScope dest src
+    Property expr name -> inferPropertyType varScope expr name
   where simpleType t body' = return $ simply varScope t body'
 
         
@@ -229,6 +234,39 @@ makeError' varScope b typeError = Expr b (varScope, Left typeError)
 
 makeError :: v -> Body (Expr (v, Either TypeError b)) -> String -> Expr (v, Either TypeError b)
 makeError varScope b str = makeError' varScope b $ TypeError str
+
+inferAssignType :: VarScope -> Expr a -> Expr a -> State Scope InferredExpr
+inferAssignType varScope dest src = do
+  inferredDest <- inferType varScope dest
+  inferredSrc <- inferType varScope src
+  let newBody = Assign inferredDest inferredSrc
+  if any isNothing $ map getExprType [inferredSrc, inferredDest]
+  then return . makeError varScope newBody $ "couldn't infer left or right of assign statement"
+  else do 
+    let destType = fromJust . getExprType $ inferredDest
+        srcType = fromJust . getExprType $ inferredSrc
+        infer' = do
+          varType <- coerceTypes destType srcType
+          case varType of 
+            Left err -> return . makeError' varScope newBody $ err
+            Right varType' -> return $ simply varScope varType' newBody
+    case exprBody inferredDest of
+      Var _ -> infer'
+      Property _ _ -> infer' -- TODO update object type?
+      _ -> return . makeError varScope newBody $ "Left-hand side of assignment is not an lvalue"
+
+inferPropertyType :: VarScope -> Expr a -> String -> State Scope InferredExpr
+inferPropertyType varScope objExpr propName =
+    do inferredObjExpr <- inferType varScope objExpr
+       let newBody = Property inferredObjExpr propName
+           objType = getExprType inferredObjExpr
+       case objType of
+         Nothing -> return . makeError varScope newBody $ "failed inferring object type"
+         Just objType' ->
+           do case getObjPropertyType objType' propName of
+                Nothing -> return . makeError varScope newBody $ ("object type has no property named '" ++ propName ++ "'")
+                Just propType' -> do
+                  return $ simply varScope propType' newBody
 
 inferCallType :: VarScope -> Expr a -> [Expr a] -> State Scope InferredExpr
 inferCallType varScope callee args = do
@@ -328,13 +366,17 @@ inferObjectType varScope props =
 
 ex expr = Expr expr ()
 
-e1 = ex $ LitFunc ["arg"] ["vari"] [ex $ Var "vari"
-                                   , ex $ Return (ex $ LitArray [])
-                                   , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg")]])]
+e1 = ex $ LitFunc ["arg"] ["vari"]
+     $ [ex $ Var "vari"
+       , ex $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
+       , ex $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ Var "arg")
+   --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")
+       , ex $ Return (ex $ LitArray [])
+       , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
 --e1 = ex $ LitFunc ["arg"] ["vari"] []
 
-t1 = inferType' Global e1
-s1 = fst $ runState t1 emptyScope
+t1 = inferType Global e1
+s1 = runState t1 emptyScope
 
 e2 = ex $ Call e1 [(ex $ LitString "abc")]
-s2 = fst $ runState (inferType' Global e2) emptyScope
+s2 = runState (inferType Global e2) emptyScope
