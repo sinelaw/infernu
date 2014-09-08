@@ -5,6 +5,7 @@ module Test where
 import Types
 
 -- TODO:
+-- * check zips for missing errors (zip of lists of different sizes)
 -- * don't allow assigning to function args? (lint issue only)
 -- * Blocks, statements, etc.
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
@@ -384,7 +385,7 @@ inferObjectType varScope props =
 
 ex expr = Expr expr ()
 
-e1 = ex $ LitFunc ["arg", "vari"] []
+e1 = ex $ LitFunc ["arg"] ["vari"]
      $ [ex $ Var "vari"
        , ex $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
        , ex $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0)
