@@ -9,12 +9,12 @@ import Types
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
 --import Data.List(intersperse)
-import Data.Maybe(fromJust, isJust, fromMaybe)
+import Data.Maybe(fromJust, isJust) --, fromMaybe)
 --import Data.Either(isLeft, lefts, isRight)
-import Text.PrettyPrint.GenericPretty(Generic(..), Out(..), pp)
+import Text.PrettyPrint.GenericPretty(Generic, Out(..), pp)
 import Data.Traversable(Traversable(..))
 import Data.Foldable(Foldable(..))
-import Control.Monad.State(State(..), runState, forM, get, put)
+import Control.Monad.State(State, runState, forM, get, put)
 import qualified Data.Map.Lazy as Map
 import Prelude hiding (foldr, mapM)
 import Control.Monad(join)
@@ -80,22 +80,22 @@ data TypeError = TypeError String
 instance Out TypeError
 
 
-data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, Type)] }
+data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
                deriving (Show, Eq, Generic)
 
 instance Out VarScope
 
 instance (Out k, Out v) => Out (Map.Map k v) where
-    doc map = doc $ Map.assocs map
+    doc m = doc $ Map.assocs m
     docPrec _ = doc
 
-data TypeScope = TypeScope { tVars :: Map.Map Name (Maybe TypeSig) }
+data TypeScope = TypeScope { tVars :: TSubst JSConsType }
                deriving (Show, Eq, Generic)
 
 instance Out TypeScope
 
-data FuncScope = FuncScope { funcVars :: [(String, Type)]
-                           , returnType :: Type }
+data FuncScope = FuncScope { funcVars :: [(String, JSType)]
+                           , returnType :: JSType }
                deriving (Show, Eq, Generic)
 
 instance Out FuncScope
@@ -107,7 +107,7 @@ data Scope = Scope { typeScope :: TypeScope
 
 instance Out Scope
 
-getVarType :: VarScope -> String -> Maybe Type
+getVarType :: VarScope -> String -> Maybe JSType
 getVarType Global _ = Nothing
 getVarType scope name = case lookup name (vars scope) of
                        Nothing -> getVarType (parent scope) name
@@ -121,15 +121,16 @@ intrVars names scope = do
 
   return $ VarScope { parent = scope, vars = vs }
 
-allocTVar' :: TypeScope -> (Type, TypeScope)
-allocTVar' tscope = (TVar allocedNum, updatedScope)
-    where updatedScope = TypeScope { tVars = Map.insert allocedNum Nothing oldTVars }
+allocTVar' :: TypeScope -> (JSType, TypeScope)
+allocTVar' tscope = (JSTVar allocedNum, updatedScope)
+    where updatedScope = TypeScope { tVars = tVars' }
           oldTVars = tVars tscope
+          tVars' = fromJust $ extend oldTVars allocedNum (TVar allocedNum)
           maxNum = foldr max 0 $ Map.keys oldTVars
           allocedNum = maxNum + 1
 
 
-allocTVar :: State Scope Type
+allocTVar :: State Scope JSType
 allocTVar = do
   scope <- get
   let typeScope' = typeScope scope
@@ -137,23 +138,6 @@ allocTVar = do
   put $ scope { typeScope = typeScope'' }
   return varType'
 
-getTVar :: Int -> State Scope (Maybe Type)
-getTVar name = do
-  scope <- get
-  return . join . Map.lookup name . tVars $ typeScope scope
-
-setTVar :: Int -> Type -> State Scope Type
-setTVar name newT = do
-  curType <- getTVar name
-  case curType of
-    Nothing -> return $ error ("can't set type variable that is not allocated: " ++ (show name)) -- TODO!
-    Just t -> do 
-      scope <- get
-      let typeScope' = typeScope scope
-      put $ scope {typeScope = typeScope' { 
-                                 tVars = Map.insert name (Just newT) (tVars typeScope') }}
-      return t
-      
 
 emptyTypeScope :: TypeScope
 emptyTypeScope = TypeScope Map.empty
@@ -168,14 +152,14 @@ exprData :: Expr t -> t
 exprData (Expr _ t) = t
 
 
-getFuncReturnType :: State Scope (Maybe Type)
+getFuncReturnType :: State Scope (Maybe JSType)
 getFuncReturnType = do
   scope <- get
   case funcScope scope of
     Nothing -> return Nothing
     Just funcScope' -> return . Just $ returnType funcScope'
 
-setFuncReturnType :: Type -> State Scope (Maybe TypeError)
+setFuncReturnType :: JSType -> State Scope (Maybe TypeError)
 setFuncReturnType retType = do
   scope <- get
   case funcScope scope of
@@ -184,21 +168,34 @@ setFuncReturnType retType = do
       put $ scope { funcScope = Just $ funcScope' { returnType = retType } }
       return Nothing
 
-isErrExpr :: Expr (VarScope, (Either TypeError Type)) -> Bool
-isErrExpr (Expr body (_, Left err)) = True
+isErrExpr :: Expr (VarScope, (Either TypeError JSType)) -> Bool
+isErrExpr (Expr _ (_, Left _)) = True
 isErrExpr _ = False
 
-getExprType :: Expr (VarScope, (Either TypeError Type)) -> Maybe Type
-getExprType (Expr body (_, Right t)) = Just t
+getExprType :: Expr (VarScope, (Either TypeError JSType)) -> Maybe JSType
+getExprType (Expr _ (_, Right t)) = Just t
 getExprType _ = Nothing
 
 
+coerceTypes :: JSType -> JSType -> State Scope (Either TypeError JSType)
+coerceTypes t u = do
+  scope <- get
+  let typeScope' = typeScope scope
+  let tsubst = tVars typeScope'
+  case unify tsubst (toType t) (toType u) of
+    Nothing -> return . Left . TypeError $ "Failed unifying types: " ++ (show t) ++ " and " ++ (show u)
+    Just x -> do
+      let tsubst' = x
+      let scope' = scope { typeScope = typeScope' { tVars = tsubst' } }
+      put scope'
+      return . Right . fromType $ substituteType tsubst' (toType t)
 
 
-inferType :: VarScope -> Expr a -> State Scope (Expr (VarScope, (Either TypeError Type)))
+inferType :: VarScope -> Expr a -> State Scope (Expr (VarScope, (Either TypeError JSType)))
 inferType varScope (Expr body _) = do
   let simply t b = Expr b (varScope, Right t)
-  let makeError b str = Expr b (varScope, Left $ TypeError str)
+  let makeError' b typeError = Expr b (varScope, Left typeError)
+  let makeError b str = makeError' b $ TypeError str
   inferred <- 
       case body of
         LitBoolean x -> return . simply JSBoolean $ LitBoolean x
@@ -227,9 +224,10 @@ inferType varScope (Expr body _) = do
                scope <- get
                returnType' <- allocTVar
                let funcScope' = FuncScope { funcVars = [], returnType = returnType' }
-               let (inferredExprs, Scope _ funcScope'') = 
+               let (inferredExprs, Scope typeScope'' funcScope'') = 
                        flip runState (Scope { typeScope = (typeScope scope), funcScope =  Just funcScope' }) 
                                    $ forM exprs (inferType varScope'')
+               put $ scope { typeScope = typeScope'' }
                if any isErrExpr inferredExprs 
                then return $ makeError (LitFunc argNames varNames inferredExprs) "Error in function body"
                else do
@@ -245,10 +243,10 @@ inferType varScope (Expr body _) = do
                      do curReturnType <- getFuncReturnType
                         if isJust curReturnType
                         then do
-                          coerced <- coerceTypes retType $ fromJust curReturnType
-                          case coerced of
-                               Nothing -> return $ makeError newBody "Function already returns a different type"
-                               Just t -> do
+                          maybeT <- coerceTypes retType $ fromJust curReturnType
+                          case maybeT of
+                            Left e -> return $ makeError' newBody e
+                            Right t -> do
                                      setFailed <- setFuncReturnType t
                                      case setFailed of
                                        Nothing ->  return . simply t $ newBody
@@ -282,151 +280,4 @@ e1 = ex $ LitFunc ["arg"] ["vari"] [ex $ Var "vari"
                                    , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg")]])]
 t1 = inferType Global e1
 s1 = runState t1 emptyScope
-
--- ------------------------------------------------------------------------
-
-
-
--- inferType :: Expr (Either TypeError Context) -> Expr (Either TypeError Context)
--- inferType e@(Expr _ (Left _)) = e
--- inferType (Expr body (Right ctx)) =
---     case curType ctx of
---       Top -> inferred
---       TVar name -> inferred -- TODO deduce that "name" must be the type given by inferred
---       _ -> if (curType ctx) == (fromJust . getType $ inferred)
---            then inferred
---            else Expr body (Left $ TypeError "type mismatch")
---     where inferred = 
---               case body of 
---                 LitBoolean _ -> rightExpr ctx body JBoolean
---                 LitNumber _ -> rightExpr ctx body JNumber
---                 LitString _ -> rightExpr ctx body JString
---                 LitRegex _ -> rightExpr ctx body JRegex
-
---                 LitFunc argNames bodyExpr@(Expr funcBody (Right bodyContext)) -> 
---                     Expr newBody funcType
---                     where argTypes = map TVar argNames -- currently type args get value arg names. TODO fix - genreate names
---                           newFuncBody = inferType 
---                                         . withVars (zip argNames argTypes) 
---                                         $ bodyExpr
---                           funcType = either makeBadBody makeFuncType
---                                      $ exprData newFuncBody
---                           makeBadBody = const . Left $ TypeError "func body is badly typed"
---                           makeFuncType bodyContext = Right . newContext $ JSFunc argTypes (curType bodyContext)
---                           newBody = LitFunc argNames newFuncBody
---                           newContext t = Context ctx (zip argNames argTypes) t
-                                            
---                 LitArray [] -> rightExpr ctx body (JSArray $ TVar "todo") -- TODO: generate unique name
---                 LitArray (x:xs) -> 
---                     if isRight headType
---                     then if areSameType 
---                          then rightExpr ctx newBody 
---                                   $ JSArray . curType . fromRight 
---                                   $ headType
---                          else makeErrorExpr "could not infer array type: elements are of inconsistent type"
---                     else makeErrorExpr "array head is badly typed"
---                     where headType = exprData . inferSubExprType $ x
---                           inferSubExprType = inferType . withVars (vars ctx)
---                           restTypes = map inferSubExprType xs
---                           areSameType = all ((headType ==) . exprData) restTypes
---                           newBody = LitArray $ (inferType x) : restTypes
---                           makeErrorExpr str = Expr newBody . Left $ TypeError str
-                                                
---                 LitObject xs -> 
---                     if any isLeft (map snd propTypes)
---                     then Expr newBody . Left $ TypeError "could not infer object type: properties are badly typed"
---                     else rightExpr ctx newBody 
---                              . JSObject 
---                              . map (\(name, expr) -> (name, curType . fromRight $ expr)) 
---                              $ propTypes
---                     where propNamedTypes = map (\(name, expr) -> (name, inferType . withVars (vars ctx) $ expr)) xs
---                           propTypes = map (\(name, expr) -> (name, exprData expr)) propNamedTypes
---                           newBody = LitObject propNamedTypes
-
---                 Property objExpr propName ->
---                     case inferredObjExpr of
---                       Expr _ (Right (Context _ _ (JSObject props))) -> 
---                           case lookup propName props of
---                             Nothing -> makeError $ "object type has no property '" ++ propName ++ "'"
---                             Just propType -> rightExpr ctx newBody propType
---                       _ -> makeError "property accessor on non-object"
---                     where makeError = Expr newBody . Left . TypeError
---                           inferredObjExpr = inferType . withVars (vars ctx) $ objExpr
---                           newBody = Property inferredObjExpr propName
-
---                 Call callee args ->
---                     case inferredCallee of
---                       Expr _ (Right (Context _ _ (JSFunc reqArgTypes returnType))) -> 
---                           if any isLeft inferredArgTypes
---                           then makeError "some arguments are badly typed"
---                           else if any isLeft inferredArgTypes 
---                                then makeError "argument types do not match callee"
---                                else Expr newBody (Right $ Context ctx [] resolvedReturnType)
---                           where coercedArgTypes = map coerceArgTypes
---                                                   $ zip reqArgTypes argTypes
---                                 coerceArgTypes (reqArgType, argType) = 
---                                     case argType of
---                                       Nothing -> Nothing
---                                       Just t -> coerceTypes reqArgType t
---                                 resolvedArgMap = newContextVars coercedArgTypes
---                                 resolvedReturnType = pushTVars resolvedArgMap returnType
---                                 newBody = Call inferredCallee inferredArgs -- TODO
-
-
---                       _ -> makeError "call target is not a callable type"
-
---                     where inferredCallee = inferType  . withVars (vars ctx) $ callee
---                           makeError = Expr (Call inferredCallee inferredArgs) . Left . TypeError
---                           inferredArgs = map inferType args
---                           inferredArgTypes = map exprData inferredArgs
---                           argTypes = map (either (const Nothing) (Just . curType)) inferredArgTypes
-
---                 Var name -> 
---                     case lookupVar name ctx of
---                       Nothing -> Expr body (Right ctx)
---                       Just t -> Expr body (Right $ Context ctx [] t)
-
---                 x -> Expr body $ Left $ TypeError ("expression not implemented: " ++ show x)
-
-
--- lookupVar :: String -> Context -> Maybe Type
--- lookupVar name Global = Nothing
--- lookupVar name ctx = case lookup name (vars ctx) of
---                        Nothing -> lookupVar name (parent ctx)
---                        Just t -> Just t
-
--- newContextVars :: [Maybe (Maybe String, Type)] -> [(String, Type)]
--- newContextVars = map (\(maybeName, t) -> (fromJust maybeName, t))
---                  . filter (isJust . fst) 
---                  . map fromJust 
---                  . filter isJust
-
--- coerceTypes :: Type -> Type -> Maybe (Maybe String, Type)
--- coerceTypes Top x = Just (Nothing, x)
--- coerceTypes x Top = Just (Nothing, x)
--- coerceTypes (TVar s) x = Just (Just s, x)
--- coerceTypes x (TVar s) = Just (Just s, x)
--- coerceTypes _ _ = Nothing
-
--- fromRight :: (Show a, Show b)=> Either a b -> b
--- fromRight (Right x) = x
--- fromRight e = error $ "Expected Right: " ++ (show e)
-
--- newExpr :: Body (Expr (Either a Context)) -> Expr (Either a Context)
--- newExpr x = Expr x $ Right $ Context Global [] Top
-
--- bla = inferType (newExpr (LitArray [newExpr $ LitString "3", newExpr $ LitNumber 3]))
--- blo = inferType (newExpr (LitObject [("test", newExpr $ LitString "3"), ("mest", newExpr $ LitNumber 3)]))
--- blf = inferType . newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitString "3") "x"]
-
--- -- function (x, y) { return [ { x: "bla" }.x ]; }
--- myFunc = newExpr . LitFunc ["x", "y"] . newExpr $ LitArray [newExpr $ Property (newExpr $ LitObject [("a", newExpr $ LitString "bla")]) "a"]
-
--- blf1 = inferType . newExpr $ Call myFunc [newExpr $ LitString "1", newExpr $ LitString "2"]
-
--- -- function (x) { return x; }
--- polyFunc = newExpr . LitFunc ["x"] . newExpr $ LitObject [("id", newExpr $ Var "x")]
-
--- blf2 = inferType . newExpr $ Call polyFunc [newExpr $ LitString "3"]
-
 

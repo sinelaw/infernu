@@ -1,24 +1,19 @@
+{-# LANGUAGE DeriveGeneric, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Types where
 
 
 import qualified Data.Map.Lazy as Map
 import qualified Data.List as List 
+import Text.PrettyPrint.GenericPretty(Generic, Out(..))
 
 type Name = Int
 
 data Type a = TVar Name
             | TCons a [Type a]
-     --         deriving (Eq, Show)
+               deriving (Show, Eq, Generic)
 
-instance Show a => Show (Type a) where
-    show (TVar name) = "TVar " ++ (show name)
-    show (TCons a targs) = "TCons (" ++ show a ++ ") " ++ (show targs)
-
-instance Eq a => Eq (Type a) where
-    (TVar a) == (TVar b) = a == b
-    (TCons a ts) == (TCons b us) = (a == b) && (ts == us)
-    _ == _ = False
+instance Out a => Out (Type a)
 
 type TSubst a = Map.Map Name (Type a)
 
@@ -95,7 +90,9 @@ data JSConsType = JSConsBoolean | JSConsNumber | JSConsString | JSConsRegex
                 | JSConsFunc
                 | JSConsArray
                 | JSConsObject [String]
-                  deriving (Show, Eq)
+               deriving (Show, Eq, Generic)
+
+instance Out JSConsType
                   
 
 data JSType = JSBoolean | JSNumber | JSString | JSRegex
@@ -103,7 +100,9 @@ data JSType = JSBoolean | JSNumber | JSString | JSRegex
             | JSArray JSType
             | JSObject [(String, JSType)]
             | JSTVar Name
-              deriving (Show, Eq)
+               deriving (Show, Eq, Generic)
+
+instance Out JSType
 
 toType :: JSType -> Type JSConsType
 toType (JSTVar name) = TVar name
