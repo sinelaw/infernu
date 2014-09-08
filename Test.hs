@@ -89,7 +89,7 @@ instance (Out k, Out v) => Out (Map.Map k v) where
     doc m = doc $ Map.assocs m
     docPrec _ = doc
 
-data TypeScope = TypeScope { tVars :: TSubst JSConsType }
+data TypeScope = TypeScope { tVars :: TSubst JSConsType, maxNum :: Int }
                deriving (Show, Eq, Generic)
 
 instance Out TypeScope
@@ -123,11 +123,8 @@ intrVars names scope = do
 
 allocTVar' :: TypeScope -> (JSType, TypeScope)
 allocTVar' tscope = (JSTVar allocedNum, updatedScope)
-    where updatedScope = TypeScope { tVars = tVars' }
-          oldTVars = tVars tscope
-          tVars' = fromJust $ extend oldTVars allocedNum (TVar allocedNum)
-          maxNum = foldr max 0 $ Map.keys oldTVars
-          allocedNum = maxNum + 1
+    where updatedScope = tscope { maxNum = allocedNum }
+          allocedNum = (maxNum tscope) + 1
 
 
 allocTVar :: State Scope JSType
@@ -140,7 +137,7 @@ allocTVar = do
 
 
 emptyTypeScope :: TypeScope
-emptyTypeScope = TypeScope Map.empty
+emptyTypeScope = TypeScope Map.empty 0
 
 emptyScope :: Scope
 emptyScope = Scope { typeScope = emptyTypeScope, funcScope = Nothing }
@@ -220,9 +217,10 @@ inferType varScope (Expr body _) = do
                  
         LitFunc argNames varNames exprs -> 
             do argScope <- intrVars argNames varScope
+               _ <- allocTVar
                varScope'' <- intrVars varNames argScope
-               scope <- get
                returnType' <- allocTVar
+               scope <- get
                let funcScope' = FuncScope { funcVars = [], returnType = returnType' }
                let (inferredExprs, Scope typeScope'' funcScope'') = 
                        flip runState (Scope { typeScope = (typeScope scope), funcScope =  Just funcScope' }) 
@@ -276,8 +274,9 @@ inferType varScope (Expr body _) = do
 ex expr = Expr expr ()
 
 e1 = ex $ LitFunc ["arg"] ["vari"] [ex $ Var "vari"
-                                   , ex $ Return (ex $ LitArray [])
+                                   , ex $ Return (ex $ LitArray [ex $ LitString "a"])
                                    , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg")]])]
+--e1 = ex $ LitFunc ["arg"] ["vari"] []
 t1 = inferType Global e1
 s1 = runState t1 emptyScope
 
