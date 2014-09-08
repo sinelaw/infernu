@@ -5,7 +5,7 @@ module Test where
 import Types
 
 -- TODO:
--- * inferType should always return resolved types (get rid of inferType')
+-- * don't allow assigning to function args? (lint issue only)
 -- * Blocks, statements, etc.
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
@@ -73,6 +73,24 @@ toJs (Expr body _) =
       Var name -> name
 
 
+toJsDoc :: JSType -> String
+toJsDoc JSBoolean = "boolean"
+toJsDoc JSNumber = "number"
+toJsDoc JSString = "string"
+toJsDoc JSRegex = "regex"
+toJsDoc (JSFunc args res) = "function(" ++ (commafy . map toJsDoc $ args) ++ ") : " ++ (toJsDoc res)
+toJsDoc (JSArray elem') = "[" ++ toJsDoc elem' ++ "]"
+toJsDoc (JSObject props) = "{ " ++ (commafy . map showProp $ props) ++ " }"
+    where showProp (name, t) = (show name) ++ ": " ++ (toJsDoc t)
+toJsDoc (JSTVar name) = toStrName name
+    where toStrName x = letters!!(x `mod` numLetters):[] ++ (suffix x)
+          letters = ['a'..'z']
+          numLetters = length letters
+          suffix x = if 0 < x `div` numLetters
+                   then show (x `div` numLetters)
+                   else ""
+                                  
+            
 data TypeError = TypeError String
                deriving (Show, Eq, Generic)
 
@@ -366,10 +384,10 @@ inferObjectType varScope props =
 
 ex expr = Expr expr ()
 
-e1 = ex $ LitFunc ["arg"] ["vari"]
+e1 = ex $ LitFunc ["arg", "vari"] []
      $ [ex $ Var "vari"
        , ex $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
-       , ex $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ Var "arg")
+       , ex $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0)
    --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")
        , ex $ Return (ex $ LitArray [])
        , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
@@ -377,6 +395,7 @@ e1 = ex $ LitFunc ["arg"] ["vari"]
 
 t1 = inferType Global e1
 s1 = runState t1 emptyScope
+s1doc = toJsDoc . fromJust . getExprType $ fst s1
 
 e2 = ex $ Call e1 [(ex $ LitString "abc")]
 s2 = runState (inferType Global e2) emptyScope

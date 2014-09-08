@@ -104,6 +104,7 @@ data JSType = JSBoolean | JSNumber | JSString | JSRegex
 
 instance Out JSType
 
+
 getObjPropertyType :: JSType -> String -> Maybe JSType
 getObjPropertyType (JSObject props) name = lookup name props
 getObjPropertyType _ _ = Nothing
