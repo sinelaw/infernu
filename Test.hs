@@ -8,9 +8,9 @@ import Types
 -- * Blocks, statements, etc.
 -- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
---import Data.List(intersperse)
-import Data.Maybe(fromJust, isJust) --, fromMaybe)
---import Data.Either(isLeft, lefts, isRight)
+import Data.List(intersperse)
+import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
+import Data.Either(isLeft, lefts, isRight, rights)
 import Text.PrettyPrint.GenericPretty(Generic, Out(..), pp)
 import Data.Traversable(Traversable(..))
 import Data.Foldable(Foldable(..))
@@ -53,25 +53,23 @@ commafy (x:xs) = x ++ ", " ++ (commafy xs)
 toJs :: Expr a -> String
 toJs (Expr body _) = 
     case body of
-      LitBoolean x -> if x then "true" else "false"
-      LitNumber x -> show x
-      LitString s -> "'" ++ s ++ "'" -- todo escape
-      LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
+      Assign target src -> (toJs target) ++ " = " ++ (toJs src)
+      Call callee args -> (toJs callee) ++ "(" ++ (commafy $ map toJs args) ++ ")"
+      Index arr idx -> (toJs arr) ++ "[" ++ (toJs idx) ++ "]"
       LitArray xs -> "[ " ++ (commafy $ map toJs xs) ++ " ]"
-      LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ (toJs val)) xs) ++ " }"
-
+      LitBoolean x -> if x then "true" else "false"
       LitFunc args varNames exprs -> "function (" ++ argsJs ++ ") " ++ block
           where argsJs = commafy $ args
                 block =  "{\n" ++ vars' ++ "\n" ++ statements ++ " }\n"
                 statements = (concat $ map (++ ";\n") $ map toJs exprs)
                 vars' = "var " ++ commafy varNames ++ ";"
-
-      Call callee args -> (toJs callee) ++ "(" ++ (commafy $ map toJs args) ++ ")"
-      Assign target src -> (toJs target) ++ " = " ++ (toJs src)
+      LitNumber x -> show x
+      LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ (toJs val)) xs) ++ " }"
+      LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
+      LitString s -> "'" ++ s ++ "'" -- todo escape
       Property obj name -> (toJs obj) ++ "." ++ name
-      Index arr idx -> (toJs arr) ++ "[" ++ (toJs idx) ++ "]"
-      Var name -> name
       Return expr -> "return " ++ toJs expr
+      Var name -> name
 
 
 data TypeError = TypeError String
@@ -187,24 +185,41 @@ coerceTypes t u = do
       put scope'
       return . Right . fromType $ substituteType tsubst' (toType t)
 
+resolveType :: JSType -> State Scope JSType
+resolveType t = do
+  scope <- get
+  let typeScope' = typeScope scope
+  let tsubst = tVars typeScope'
+  return . fromType $ substituteType tsubst (toType t)
+
 type InferredExpr = Expr (VarScope, (Either TypeError JSType))
+
+inferType' :: VarScope -> Expr a -> State Scope (Maybe JSType)
+inferType' v e = do
+  inferredExpr <- inferType v e
+  case inferredExpr of
+    Expr _ (_, Left _) -> return Nothing
+    Expr _ (_, Right t) ->
+      do t' <- resolveType t
+         return . Just $ t'
+  
 
 inferType :: VarScope -> Expr a -> State Scope InferredExpr
 inferType varScope (Expr body _) = do
-  inferred <- 
-      case body of
-        LitBoolean x -> simpleType JSBoolean $ LitBoolean x
-        LitNumber x -> simpleType JSNumber $ LitNumber x
-        LitString x -> simpleType JSString $ LitString x
-        LitRegex x -> simpleType JSRegex $ LitRegex x
-        Var name -> inferVarType varScope name
-        LitArray exprs -> inferArrayType varScope exprs
-        LitFunc argNames varNames exprs -> inferFuncType varScope argNames varNames exprs
-        Return expr -> inferReturnType varScope expr
-        LitObject props -> inferObjectType varScope props
+  case body of
+    LitArray exprs -> inferArrayType varScope exprs
+    LitBoolean x -> simpleType JSBoolean $ LitBoolean x
+    LitFunc argNames varNames exprs -> inferFuncType varScope argNames varNames exprs
+    LitNumber x -> simpleType JSNumber $ LitNumber x
+    LitObject props -> inferObjectType varScope props
+    LitRegex x -> simpleType JSRegex $ LitRegex x
+    LitString x -> simpleType JSString $ LitString x
+    Return expr -> inferReturnType varScope expr
+    Var name -> inferVarType varScope name
+    Call callee args -> inferCallType varScope callee args
                   
-  return inferred
   where simpleType t body' = return $ simply varScope t body'
+
         
 simply ::  v -> t -> Body (Expr (v, Either a t)) -> Expr (v, Either a t)
 simply varScope t b = Expr b (varScope, Right t)
@@ -212,13 +227,33 @@ simply varScope t b = Expr b (varScope, Right t)
 makeError' :: t -> Body (Expr (t, Either a b)) -> a -> Expr (t, Either a b)
 makeError' varScope b typeError = Expr b (varScope, Left typeError)
 
-makeError :: t -> Body (Expr (t, Either TypeError b)) -> String -> Expr (t, Either TypeError b)
+makeError :: v -> Body (Expr (v, Either TypeError b)) -> String -> Expr (v, Either TypeError b)
 makeError varScope b str = makeError' varScope b $ TypeError str
 
+inferCallType :: VarScope -> Expr a -> [Expr a] -> State Scope InferredExpr
+inferCallType varScope callee args = do
+  inferredCallee <- inferType varScope callee
+  inferredArgs <- mapM (inferType varScope) args
+  let newBody = Call inferredCallee inferredArgs
+  case getExprType inferredCallee of
+    Nothing -> return . makeError varScope newBody $ "couldn't infer callee in call expression"
+    Just (JSFunc argsT' res') -> do
+      let maybeArgsT = map getExprType inferredArgs
+      if any isNothing maybeArgsT
+      then return . makeError varScope newBody $ "couldn't infer arg types in call expression"
+      else do
+        let argsT = map fromJust maybeArgsT
+        unifiedArgTypes <- mapM (uncurry coerceTypes) $ zip argsT argsT'
+        if any isLeft unifiedArgTypes
+        then return . makeError varScope newBody $ "actual argument types do not match callee argument types:" 
+                 ++ (concat $ intersperse "\n" (map show $ lefts unifiedArgTypes))
+        else return $ simply varScope res' newBody
+    Just _ -> return . makeError varScope newBody $ "callee is not a function"
+  
 inferVarType :: VarScope -> String -> State Scope InferredExpr
 inferVarType varScope name = do
   case getVarType varScope name of 
-    Nothing -> return . makeError varScope(Var name) $ "undeclared variable: " ++ name
+    Nothing -> return . makeError varScope (Var name) $ "undeclared variable: " ++ name
     Just varType' -> return . simply varScope varType' $ Var name
 
 inferArrayType :: VarScope -> [Expr a] -> State Scope InferredExpr
@@ -294,9 +329,12 @@ inferObjectType varScope props =
 ex expr = Expr expr ()
 
 e1 = ex $ LitFunc ["arg"] ["vari"] [ex $ Var "vari"
-                                   , ex $ Return (ex $ LitArray [ex $ LitString "a"])
+                                   , ex $ Return (ex $ LitArray [])
                                    , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg")]])]
 --e1 = ex $ LitFunc ["arg"] ["vari"] []
-t1 = inferType Global e1
-s1 = runState t1 emptyScope
 
+t1 = inferType' Global e1
+s1 = fst $ runState t1 emptyScope
+
+e2 = ex $ Call e1 [(ex $ LitString "abc")]
+s2 = fst $ runState (inferType' Global e2) emptyScope
