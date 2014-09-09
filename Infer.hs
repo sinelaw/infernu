@@ -5,10 +5,16 @@ module Infer where
 import Types
 
 -- TODO:
+-- 
+-- * support 'this' by assuming equivalences:
+--   - f(..) == f.bind(window, ..)
+--   - o.f(..) == f.bind(o, ..)
+--
+-- * support new (e.g. add body Constructor ... that's like a func
+-- 
 -- * check zips for missing errors (zip of lists of different sizes)
+--
 -- * don't allow assigning to function args? (lint issue only)
--- * Blocks, statements, etc.
--- * Write engine that steps through statements in a program using info to infer types between expressions (e.g. in assignemnts)
 
 import Data.List(intersperse)
 import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
@@ -214,7 +220,19 @@ inferStatement varScope st = do
            case getExprResult inferredExpr of
              Left e -> err newSt e
              Right _ -> ok newSt
-           
+
+    While expr stWhile ->
+        do inferredExpr <- inferType varScope expr
+           inferredStWhile <- inferStatement varScope stWhile
+           let inferredStWhile' = getInferredStatement inferredStWhile
+               newSt = While inferredExpr inferredStWhile'
+           case getExprResult inferredExpr of
+             Left e -> err newSt e
+             Right t -> 
+                 do coercedPredType <- coerceTypes t JSBoolean
+                    case (coercedPredType, inferredStWhile) of 
+                      (Right _, Right _) -> ok newSt
+                      _ -> err newSt $ TypeError "error in while statment"
             
 type InferredResult = (VarScope, (Either TypeError JSType))
 type InferredStatement = Either (TypeError, Statement InferredExpr) (Statement InferredExpr)
@@ -370,7 +388,7 @@ inferFuncType varScope argNames varNames exprs =
 
 inferReturnType :: VarScope -> Expr a -> State Scope InferredExpr
 inferReturnType varScope expr =
-    do inferredExpr@(Expr newBody (_, res)) <- inferType varScope expr
+    do (Expr newBody (_, res)) <- inferType varScope expr
        case res of 
          Left _ -> return $ makeError varScope newBody "Error in return expression"
          Right retType -> 

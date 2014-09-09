@@ -64,10 +64,7 @@ toJs' tabAmount (Expr body _) = let tab = makeTab tabAmount in
                 statements = concat $ map (++ ";" ++ tab') $ map (toJsSt (tabAmount + 1)) exprs
                 vars' = "var " ++ commafy varNames ++ ";"
                 tab' = makeTab $ tabAmount + 1
-      LitNumber x -> if (fromIntegral truncated) == x 
-                     then show $ truncated
-                     else show x
-          where truncated = truncate x :: Integer
+      LitNumber x -> toJsNumberStr x
       LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ (toJs'' val)) xs) ++ " }"
       LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
       LitString s -> "'" ++ s ++ "'" -- todo escape
@@ -76,6 +73,11 @@ toJs' tabAmount (Expr body _) = let tab = makeTab tabAmount in
       Var name -> name
     where toJs'' = toJs' (tabAmount + 1)
 
+toJsNumberStr :: (Show a, RealFrac a) => a -> String
+toJsNumberStr x = if (fromIntegral truncated) == x 
+                  then show $ truncated
+                  else show x
+    where truncated = truncate x :: Integer
 
 toJsDoc :: JSType -> String
 toJsDoc JSBoolean = "boolean"
