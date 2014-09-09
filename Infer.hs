@@ -54,10 +54,6 @@ data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType
                deriving (Show, Eq, Generic)
 
 
-instance (Out k, Out v) => Out (Map.Map k v) where
-    doc m = doc $ Map.assocs m
-    docPrec _ = doc
-
 data TypeScope = TypeScope { tVars :: TSubst JSConsType, maxNum :: Int }
                deriving (Show, Eq, Generic)
 
