@@ -35,10 +35,12 @@ makeTab :: Int -> String
 makeTab tabAmount = "\n" ++ (concat $ replicate tabAmount "  " )
 
 toJsSt :: Int -> Statement (Expr a) -> String
-toJsSt tabAmount st = 
+toJsSt tabAmount st = let tab = makeTab tabAmount in
     case st of 
       Empty -> ""
-      IfThenElse expr stThen stElse -> "if (" ++ (toJs' tabAmount expr) ++ ") {" ++ (toJsSt (tabAmount + 1) stThen) ++ "} else {" ++ (toJsSt (tabAmount + 1) stElse)
+      Expression e -> toJs' tabAmount e
+      Return e -> "return " ++ (toJs' tabAmount e)
+      IfThenElse expr stThen stElse -> concat ["if (" , (toJs' tabAmount expr) , ") {" , tab, (toJsSt (tabAmount + 1) stThen) , tab , "} else {" , tab , (toJsSt (tabAmount + 1) stElse) , tab, "}"]
       _ -> "statement..." -- todo
 
 toJs' :: Int -> Expr a -> String
