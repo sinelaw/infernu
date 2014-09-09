@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
-module Test where
+module Infer where
 
 import Types
 
@@ -39,72 +39,20 @@ data Body expr = LitBoolean Bool
 
 
 
-instance (Out a) => Out (Body a)
 
 data Expr a = Expr (Body (Expr a)) a
           deriving (Show, Eq, Generic)
 
 
-instance (Out a) => Out (Expr a)
-
-commafy :: [String] -> String
-commafy [] = []
-commafy (x:[]) = x
-commafy (x:xs) = x ++ ", " ++ (commafy xs)
-
-toJs :: Expr a -> String
-toJs (Expr body _) = 
-    case body of
-      Assign target src -> (toJs target) ++ " = " ++ (toJs src)
-      Call callee args -> (toJs callee) ++ "(" ++ (commafy $ map toJs args) ++ ")"
-      Index arr idx -> (toJs arr) ++ "[" ++ (toJs idx) ++ "]"
-      LitArray xs -> "[ " ++ (commafy $ map toJs xs) ++ " ]"
-      LitBoolean x -> if x then "true" else "false"
-      LitFunc args varNames exprs -> "function (" ++ argsJs ++ ") " ++ block
-          where argsJs = commafy $ args
-                block =  "{\n" ++ vars' ++ "\n" ++ statements ++ " }\n"
-                statements = (concat $ map (++ ";\n") $ map toJs exprs)
-                vars' = "var " ++ commafy varNames ++ ";"
-      LitNumber x -> if (fromIntegral truncated) == x 
-                     then show $ truncated
-                     else show x
-          where truncated = truncate x :: Integer
-      LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ (toJs val)) xs) ++ " }"
-      LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
-      LitString s -> "'" ++ s ++ "'" -- todo escape
-      Property obj name -> (toJs obj) ++ "." ++ name
-      Return expr -> "return " ++ toJs expr
-      Var name -> name
-
-
-toJsDoc :: JSType -> String
-toJsDoc JSBoolean = "boolean"
-toJsDoc JSNumber = "number"
-toJsDoc JSString = "string"
-toJsDoc JSRegex = "regex"
-toJsDoc (JSFunc args res) = "function(" ++ (commafy . map toJsDoc $ args) ++ ") : " ++ (toJsDoc res)
-toJsDoc (JSArray elem') = "[" ++ toJsDoc elem' ++ "]"
-toJsDoc (JSObject props) = "{ " ++ (commafy . map showProp $ props) ++ " }"
-    where showProp (name, t) = (show name) ++ ": " ++ (toJsDoc t)
-toJsDoc (JSTVar name) = toStrName name
-    where toStrName x = letters!!(x `mod` numLetters):[] ++ (suffix x)
-          letters = ['a'..'z']
-          numLetters = length letters
-          suffix x = if 0 < x `div` numLetters
-                   then show (x `div` numLetters)
-                   else ""
-                                  
             
 data TypeError = TypeError String
                deriving (Show, Eq, Generic)
 
-instance Out TypeError
 
 
 data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
                deriving (Show, Eq, Generic)
 
-instance Out VarScope
 
 instance (Out k, Out v) => Out (Map.Map k v) where
     doc m = doc $ Map.assocs m
@@ -113,20 +61,17 @@ instance (Out k, Out v) => Out (Map.Map k v) where
 data TypeScope = TypeScope { tVars :: TSubst JSConsType, maxNum :: Int }
                deriving (Show, Eq, Generic)
 
-instance Out TypeScope
 
 data FuncScope = FuncScope { funcVars :: [(String, JSType)]
                            , returnType :: JSType }
                deriving (Show, Eq, Generic)
 
-instance Out FuncScope
 
 
 data Scope = Scope { typeScope :: TypeScope
                    , funcScope :: Maybe FuncScope }
                deriving (Show, Eq, Generic)
 
-instance Out Scope
 
 getVarType :: VarScope -> String -> Maybe JSType
 getVarType Global _ = Nothing
@@ -401,22 +346,3 @@ inferObjectType varScope props =
                                   $ map (fromJust . getExprType) inferredProps) 
                       $ newBody
 
--- ------------------------------------------------------------------------
-
-ex expr = Expr expr ()
-
-e1 = ex $ LitFunc ["arg"] ["vari"]
-     $ [ex $ Var "vari"
-       , ex $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
-       , ex $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0)
-   --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")
-       , ex $ Return (ex $ LitArray [])
-       , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
---e1 = ex $ LitFunc ["arg"] ["vari"] []
-
-t1 = inferType Global e1
-s1 = runState t1 emptyScope
-s1doc = toJsDoc . fromJust . getExprType $ fst s1
-
-e2 = ex $ Property (ex $ Index (ex $ Call e1 [(ex $ LitString "abc")]) (ex $ LitNumber 2)) "number"
-s2 = runState (inferType Global e2) emptyScope
