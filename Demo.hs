@@ -1,8 +1,11 @@
-module Test where
+module Demo where
 
 import Text.PrettyPrint.GenericPretty(pp)
 import Control.Monad.State(runState)
 import Data.Maybe(fromJust)
+
+import qualified Language.ECMAScript3.Parser
+import qualified Language.ECMAScript3.Syntax as ES3
 
 import Infer
 import Pretty
@@ -10,6 +13,14 @@ import Types
 
 -- ------------------------------------------------------------------------
 --data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
+
+fromStatement :: ES3.Statement a -> Statement (Expr ())
+fromStatement (ES3.BlockStmt _ stmts) = st $ Call (ex $ LitFunc [] [] $ map fromStatement stmts) []
+fromStatement (ES3.EmptyStmt _) = st $ LitString "empty statement. for real."
+--fromStatement (ES3.ExprStmt e) = fromExpression e
+--fromStatement (
+--fromStatement
+
 
 declVar :: VarScope -> String -> Name -> VarScope
 declVar scop name n = VarScope { parent = scop, vars = [(name, JSTVar n)] }
@@ -20,14 +31,15 @@ printType ex = do
   putStrLn $ toJs . fst $ ex
 
 ex expr = Expr expr ()
+st expr = Expression $ ex expr
 
 e1 = ex $ LitFunc ["arg"] ["vari"]
-     $ [ ex $ Var "vari"
-       , ex $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
-       , ex $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0)
+     $ [ st $ Var "vari"
+       , st $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
+       , st $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0)
    --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")
-       , ex $ Return (ex $ LitArray [])
-       , ex $ Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
+       , Return (ex $ LitArray [])
+       , Return (ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
 --e1 = ex $ LitFunc ["arg"] ["vari"] []
 
 t1 = inferType Global e1

@@ -21,7 +21,7 @@ instance Out VarScope
 instance Out TypeScope
 instance Out FuncScope
 instance Out Scope
-
+instance (Out a) => Out (Statement a)
 
 commafy :: [String] -> String
 commafy [] = []
@@ -34,6 +34,13 @@ toJs = toJs' 0
 makeTab :: Int -> String
 makeTab tabAmount = "\n" ++ (concat $ replicate tabAmount "  " )
 
+toJsSt :: Int -> Statement (Expr a) -> String
+toJsSt tabAmount st = 
+    case st of 
+      Empty -> ""
+      IfThenElse expr stThen stElse -> "if (" ++ (toJs' tabAmount expr) ++ ") {" ++ (toJsSt (tabAmount + 1) stThen) ++ "} else {" ++ (toJsSt (tabAmount + 1) stElse)
+      _ -> "statement..." -- todo
+
 toJs' :: Int -> Expr a -> String
 toJs' tabAmount (Expr body _) = let tab = makeTab tabAmount in
     case body of
@@ -45,7 +52,7 @@ toJs' tabAmount (Expr body _) = let tab = makeTab tabAmount in
       LitFunc args varNames exprs -> "function (" ++ argsJs ++ ") {" ++ block ++ tab ++ "}"
           where argsJs = commafy $ args
                 block = concat $ intersperse tab' ["", vars', "", statements]
-                statements = (concat $ map (++ ";" ++ tab') $ map toJs'' exprs)
+                statements = concat $ map (++ ";" ++ tab') $ map (toJsSt (tabAmount + 1)) exprs
                 vars' = "var " ++ commafy varNames ++ ";"
                 tab' = makeTab $ tabAmount + 1
       LitNumber x -> if (fromIntegral truncated) == x 
@@ -56,7 +63,7 @@ toJs' tabAmount (Expr body _) = let tab = makeTab tabAmount in
       LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
       LitString s -> "'" ++ s ++ "'" -- todo escape
       Property obj name -> (toJs'' obj) ++ "." ++ name
-      Return expr -> "return " ++ toJs'' expr
+      --Return expr -> "return " ++ toJs'' expr
       Var name -> name
     where toJs'' = toJs' (tabAmount + 1)
 
