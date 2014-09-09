@@ -242,6 +242,7 @@ inferType' varScope (Expr body _) = do
     Call callee args -> inferCallType varScope callee args
     Assign dest src -> inferAssignType varScope dest src
     Property expr name -> inferPropertyType varScope expr name
+    Index arrExpr indexExpr -> inferIndexType varScope arrExpr indexExpr
   where simpleType t body' = return $ simply varScope t body'
 
         
@@ -253,6 +254,22 @@ makeError' varScope b typeError = Expr b (varScope, Left typeError)
 
 makeError :: v -> Body (Expr (v, Either TypeError b)) -> String -> Expr (v, Either TypeError b)
 makeError varScope b str = makeError' varScope b $ TypeError str
+
+inferIndexType :: VarScope -> Expr a -> Expr a  -> State Scope InferredExpr
+inferIndexType varScope arrExpr indexExpr = do
+  inferredArrExpr <- inferType varScope arrExpr
+  inferredIndexExpr <- inferType varScope indexExpr
+  let newBody = Index inferredArrExpr inferredIndexExpr
+  if any isNothing $ map getExprType [inferredArrExpr, inferredIndexExpr]
+  then return . makeError varScope newBody $ "couldn't infer index target or value"
+  else do
+    let arrType = getExprType $ inferredArrExpr
+        indexType = getExprType $ inferredIndexExpr
+        
+    case (arrType, indexType) of
+      (Just (JSArray elemType), Just JSNumber) -> return $ simply varScope elemType newBody
+      _ -> return . makeError varScope newBody $ "Left-hand side of index is not an array or right-hand side is not a number"
+    
 
 inferAssignType :: VarScope -> Expr a -> Expr a -> State Scope InferredExpr
 inferAssignType varScope dest src = do
@@ -398,5 +415,5 @@ t1 = inferType Global e1
 s1 = runState t1 emptyScope
 s1doc = toJsDoc . fromJust . getExprType $ fst s1
 
-e2 = ex $ Call e1 [(ex $ LitString "abc")]
+e2 = ex $ Property (ex $ Index (ex $ Call e1 [(ex $ LitString "abc")]) (ex $ LitNumber 2)) "number"
 s2 = runState (inferType Global e2) emptyScope
