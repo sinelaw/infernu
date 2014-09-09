@@ -10,6 +10,8 @@ import Types
 --   - f(..) == f.bind(window, ..)
 --   - o.f(..) == f.bind(o, ..)
 --
+-- * support return; ( == return undefined;)
+-- 
 -- * support new (e.g. add body Constructor ... that's like a func
 -- 
 -- * check zips for missing errors (zip of lists of different sizes)

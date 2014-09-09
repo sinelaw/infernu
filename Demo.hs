@@ -18,7 +18,12 @@ fromStatement :: ES3.Statement a -> Statement (Expr ())
 fromStatement (ES3.BlockStmt _ stmts) = Block $ map fromStatement stmts
 fromStatement (ES3.EmptyStmt _) = Empty
 fromStatement (ES3.ExprStmt _ e) = Expression $ fromExpression e
---fromStatement (
+fromStatement (ES3.IfStmt _ pred thenS elseS) = IfThenElse (fromExpression pred) (fromStatement thenS) (fromStatement elseS)
+fromStatement (ES3.IfSingleStmt _ pred thenS) = IfThenElse (fromExpression pred) (fromStatement thenS) Empty
+fromStatement (ES3.WhileStmt _ pred stmt) = While (fromExpression pred) (fromStatement stmt)
+--fromStatement (ES3.ReturnStmt _ x) = maybe
+--fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
+
 --fromStatement
 
 fromExpression :: ES3.Expression a -> Expr ()
