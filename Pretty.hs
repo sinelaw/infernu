@@ -40,7 +40,14 @@ toJsSt tabAmount st = let tab = makeTab tabAmount in
       Empty -> ""
       Expression e -> toJs' tabAmount e
       Return e -> "return " ++ (toJs' tabAmount e)
-      IfThenElse expr stThen stElse -> concat ["if (" , (toJs' tabAmount expr) , ") {" , tab, (toJsSt (tabAmount + 1) stThen) , tab , "} else {" , tab , (toJsSt (tabAmount + 1) stElse) , tab, "}"]
+      IfThenElse expr stThen stElse -> 
+          concat [ "if (" 
+                 , toJs' tabAmount expr
+                 , ") {" , tab
+                 , (toJsSt (tabAmount + 1) stThen), tab 
+                 , "} else {" , tab 
+                 , (toJsSt (tabAmount + 1) stElse) , tab
+                 , "}"]
       _ -> "statement..." -- todo
 
 toJs' :: Int -> Expr a -> String
