@@ -65,7 +65,9 @@ toJs (Expr body _) =
                 block =  "{\n" ++ vars' ++ "\n" ++ statements ++ " }\n"
                 statements = (concat $ map (++ ";\n") $ map toJs exprs)
                 vars' = "var " ++ commafy varNames ++ ";"
-      LitNumber x -> show x
+      LitNumber x -> if (fromIntegral $ truncate x) == x 
+                     then show $ truncate x 
+                     else show x
       LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ (toJs val)) xs) ++ " }"
       LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
       LitString s -> "'" ++ s ++ "'" -- todo escape
