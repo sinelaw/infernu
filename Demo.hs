@@ -18,13 +18,29 @@ fromStatement :: ES3.Statement a -> Statement (Expr ())
 fromStatement (ES3.BlockStmt _ stmts) = Block $ map fromStatement stmts
 fromStatement (ES3.EmptyStmt _) = Empty
 fromStatement (ES3.ExprStmt _ e) = Expression $ fromExpression e
-fromStatement (ES3.IfStmt _ pred thenS elseS) = IfThenElse (fromExpression pred) (fromStatement thenS) (fromStatement elseS)
-fromStatement (ES3.IfSingleStmt _ pred thenS) = IfThenElse (fromExpression pred) (fromStatement thenS) Empty
-fromStatement (ES3.WhileStmt _ pred stmt) = While (fromExpression pred) (fromStatement stmt)
---fromStatement (ES3.ReturnStmt _ x) = maybe
---fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
+fromStatement (ES3.IfStmt _ pred' thenS elseS) = IfThenElse (fromExpression pred') (fromStatement thenS) (fromStatement elseS)
+fromStatement (ES3.IfSingleStmt _ pred' thenS) = IfThenElse (fromExpression pred') (fromStatement thenS) Empty
+fromStatement (ES3.WhileStmt _ pred' stmt) = While (fromExpression pred') (fromStatement stmt)
+fromStatement (ES3.ReturnStmt _ x) = Return . fmap fromExpression $ x
+--fromStatement (ES3.LabelledStmt _ _ s) =
+--fromStatement (ES3.ForInStmt _ x) = 
+fromStatement (ES3.ForStmt _ forInit pred' incr stmt) = 
+    Block [ fromForInit forInit
+          , While (maybe (ex $ LitBoolean True) (\p -> fromExpression p) pred') 
+                      (Block $ [fromStatement stmt] ++ incr'')
+          ]
+    where incr'' = maybe [] (\x -> [Expression $ fromExpression x]) incr
 
+fromForInit :: ES3.ForInit a -> Statement (Expr ())
+fromForInit ES3.NoInit = Empty
+--fromForInit (ES3.VarInit varDecls) = Block $ map fromVarDecl varDecls
+fromForInit (ES3.ExprInit expr) = Expression $ fromExpression expr
 --fromStatement
+
+-- fromVarDecl :: ES3.VarDecl a -> Statement (Expr ())
+-- fromVarDecl (VarDecl _ (Id _ name) expr) = 
+--     case expr of
+--       Nothing -> 
 
 fromExpression :: ES3.Expression a -> Expr ()
 fromExpression es3x = 
@@ -53,7 +69,7 @@ printType ex = do
 ex expr = Expr expr ()
 st expr = Expression $ ex expr
 
-e1 = ex $ LitFunc ["arg"] ["vari"]
+e1 = ex $ LitFunc ["arg"]
      $ [ st $ Var "vari"
        , st $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
        , While (ex $ LitBoolean False) (st $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0))
@@ -61,14 +77,14 @@ e1 = ex $ LitFunc ["arg"] ["vari"]
        , IfThenElse (ex $ LitBoolean False) (Return $ Just . ex $ LitArray []) (Return $ Just . ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
 --e1 = ex $ LitFunc ["arg"] ["vari"] []
 
-t1 = inferType Global e1
+t1 = inferType e1
 s1 = runState t1 emptyScope
 s1doc = toJsDoc . fromJust . getExprType $ fst s1
 
 e2 = ex $ Property (ex $ Index (ex $ Call e1 [(ex $ LitString "abc")]) (ex $ LitNumber 2)) "number"
-s2 = runState (inferType Global e2) emptyScope
+s2 = runState (inferType e2) emptyScope
 
 
 e3 = ex $ Assign (ex $ Var "f") e1
-s3 = runState (inferType (declVar Global "f" 0) e3) emptyScope
+s3 = runState (inferType e3) emptyScope
 
