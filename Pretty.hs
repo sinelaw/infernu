@@ -39,7 +39,7 @@ toJsSt tabAmount st = let tab = makeTab tabAmount in
     case st of 
       Empty -> ""
       Expression e -> toJs' tabAmount e
-      Return e -> "return " ++ (toJs' tabAmount e)
+      Return e -> "return" ++ (maybe "" (\x -> " " ++ (toJs' tabAmount x)) e)
       IfThenElse expr stThen stElse -> 
           concat [ "if (" 
                  , toJs' tabAmount expr

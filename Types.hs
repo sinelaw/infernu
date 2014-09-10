@@ -90,6 +90,7 @@ data JSConsType = JSConsBoolean | JSConsNumber | JSConsString | JSConsRegex
                 | JSConsFunc
                 | JSConsArray
                 | JSConsObject [String]
+                | JSConsUndefined
                deriving (Show, Eq, Generic)
 
 instance Out JSConsType
@@ -100,6 +101,7 @@ data JSType = JSBoolean | JSNumber | JSString | JSRegex
             | JSArray JSType
             | JSObject [(String, JSType)]
             | JSTVar Name
+            | JSUndefined
                deriving (Show, Eq, Generic)
 
 instance Out JSType
@@ -119,6 +121,7 @@ toType (JSFunc argsT resT) = TCons JSConsFunc $ (toType resT) : (map toType args
 toType (JSArray elemT) = TCons JSConsArray [toType elemT]
 toType (JSObject propsT) = TCons (JSConsObject $ map fst propsT) 
                            $ map (toType . snd) propsT
+toType JSUndefined = TCons JSConsUndefined []
 
 
 fromType :: Type JSConsType -> JSType
@@ -129,6 +132,7 @@ fromType (TCons consName types) =
       JSConsNumber -> JSNumber
       JSConsString -> JSString
       JSConsRegex -> JSRegex
+      JSConsUndefined -> JSUndefined
       JSConsFunc -> JSFunc (map fromType . tail $ types) (fromType . head $ types)
       JSConsArray -> JSArray (fromType . head $ types) -- TODO ensure single
       JSConsObject names -> JSObject $ zip names (map fromType types)

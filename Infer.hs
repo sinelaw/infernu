@@ -2,6 +2,7 @@
 
 module Infer where
 
+
 import Types
 
 -- TODO:
@@ -33,6 +34,7 @@ fromRight :: Either a b -> b
 fromRight (Right x) = x
 fromRight _ = error "expected: Right"
 
+
 --data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
 data Body expr = LitBoolean Bool 
                | LitNumber Double 
@@ -54,7 +56,7 @@ data Statement expr = Empty
                  | Block [Statement expr] 
                  | IfThenElse expr (Statement expr) (Statement expr)
                  | While expr (Statement expr)
-                 | Return expr
+                 | Return (Maybe expr)
           deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 
@@ -216,9 +218,23 @@ inferStatement varScope st = do
                       (Right _, Right _, Right _) -> ok newSt
                       _ -> err newSt $ TypeError "error in if-then-else"
 
-    Return expr -> 
+    Return Nothing -> 
+        do returnT <- getFuncReturnType
+           let newSt = Return Nothing
+           case returnT of
+             Nothing -> do 
+               setFuncReturnType JSUndefined
+               ok newSt
+             Just returnT' -> 
+                 do t <- coerceTypes returnT' JSUndefined
+                    case t of
+                      Left e -> err newSt e
+                      Right t' -> do setFuncReturnType t'
+                                     ok newSt
+
+    Return (Just expr) -> 
         do inferredExpr <- inferReturnType varScope expr
-           let newSt = Return inferredExpr
+           let newSt = Return $ Just inferredExpr
            case getExprResult inferredExpr of
              Left e -> err newSt e
              Right _ -> ok newSt

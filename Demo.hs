@@ -58,7 +58,7 @@ e1 = ex $ LitFunc ["arg"] ["vari"]
        , st $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
        , While (ex $ LitBoolean False) (st $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0))
    --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")
-       , IfThenElse (ex $ LitBoolean False) (Return (ex $ LitArray [])) (Return $ ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
+       , IfThenElse (ex $ LitBoolean False) (Return $ Just . ex $ LitArray []) (Return $ Just . ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
 --e1 = ex $ LitFunc ["arg"] ["vari"] []
 
 t1 = inferType Global e1
