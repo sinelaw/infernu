@@ -97,7 +97,7 @@ getVarType scope name = case lookup name (vars scope) of
                        Nothing -> getVarType (parent scope) name
                        Just t -> Just t
 
---intrVars :: [String] -> State Scope ()
+intrVars :: [String] -> State Scope VarScope
 intrVars names = do
   scope <- get
   let varScope' = varScope scope
@@ -230,17 +230,21 @@ inferStatement st = do
 
     Return Nothing -> 
         do returnT <- getFuncReturnType
-           let newSt = Return Nothing
            case returnT of
-             Nothing -> do 
-               setFuncReturnType JSUndefined
-               ok newSt
+             Nothing -> trySetReturnType JSUndefined
              Just returnT' -> 
                  do t <- coerceTypes returnT' JSUndefined
                     case t of
                       Left e -> err newSt e
-                      Right t' -> do setFuncReturnType t'
-                                     ok newSt
+                      Right t' -> trySetReturnType t'
+
+        where newSt = Return Nothing
+              trySetReturnType t = do
+               returnT' <- setFuncReturnType t
+               case returnT' of
+                 Nothing -> ok newSt
+                 Just e -> err newSt e
+
 
     Return (Just expr) -> 
         do inferredExpr <- inferReturnType expr
@@ -266,7 +270,7 @@ inferStatement st = do
         do updatedVarScope <- intrVars [name]
            scope <- get
            put $ scope { varScope = updatedVarScope }
-           return $ VarDecl name
+           ok $ VarDecl name
 
 type InferredResult = Either TypeError JSType
 type InferredStatement = Either (TypeError, Statement InferredExpr) (Statement InferredExpr)
@@ -409,7 +413,7 @@ inferFuncType argNames exprs =
        scope <- get
        let funcScope' = FuncScope { funcVars = [], returnType = returnType' }
        argScope <- intrVars argNames
-       let (inferredStatments', Scope typeScope'' varScope'' funcScope'') = 
+       let (inferredStatments', Scope typeScope'' _ funcScope'') = 
                flip runState (Scope { typeScope = (typeScope scope), funcScope =  Just funcScope', varScope = argScope }) 
                     $ forM exprs inferStatement
            inferredStatments = (map getInferredStatement inferredStatments')

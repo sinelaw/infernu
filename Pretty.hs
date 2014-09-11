@@ -80,6 +80,7 @@ toJsNumberStr x = if (fromIntegral truncated) == x
     where truncated = truncate x :: Integer
 
 toJsDoc :: JSType -> String
+toJsDoc JSUndefined = "undefined"
 toJsDoc JSBoolean = "boolean"
 toJsDoc JSNumber = "number"
 toJsDoc JSString = "string"
