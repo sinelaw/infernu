@@ -50,6 +50,7 @@ toJsSt tabAmount st = let tab = makeTab tabAmount in
                                 , ") {"
                                 , toJsSt (tabAmount + 1) stmt
                                 , tab, "}" ]
+      Block stmts -> "{" ++ (concat . map (toJsSt (tabAmount + 1)) $ stmts) ++ tab ++ "}"
       _ -> "statement..." -- todo
 
 toJs' :: Int -> Expr a -> String

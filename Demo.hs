@@ -1,10 +1,11 @@
-module Demo where
+module Main where
 
+import System.Environment(getArgs)
 import Text.PrettyPrint.GenericPretty(pp)
 import Control.Monad.State(runState)
 import Data.Maybe(fromJust)
 
---import qualified Language.ECMAScript3.Parser
+import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 
 import Infer
@@ -13,6 +14,8 @@ import Types
 
 -- ------------------------------------------------------------------------
 --data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
+ex expr = Expr expr ()
+st expr = Expression $ ex expr
 
 fromStatement :: ES3.Statement a -> Statement (Expr ())
 fromStatement (ES3.BlockStmt _ stmts) = Block $ map fromStatement stmts
@@ -52,14 +55,14 @@ fromExpression es3x =
       ES3.BoolLit _ x -> LitBoolean x
       ES3.ArrayLit _ xs -> LitArray $ map fromExpression xs
       ES3.ObjectLit _ props -> LitObject $ map (\(p, x) -> (fromProp p, fromExpression x)) props
+      ES3.FuncExpr _ name argNames stmts -> LitFunc (map ES3.unId argNames) (map fromStatement stmts) 
+      ES3.VarRef _ name -> Var $ ES3.unId name
+      _ -> error $ "not implemented"
 
 fromProp :: ES3.Prop a -> String
 fromProp (ES3.PropId _ (ES3.Id _ x)) = x
 fromProp (ES3.PropString _ x) = x
 fromProp (ES3.PropNum _ x) = show x
-
-declVar :: VarScope -> String -> Name -> VarScope
-declVar scop name n = VarScope { parent = scop, vars = [(name, JSTVar n)] }
 
 printType :: (InferredExpr, a) -> IO ()
 printType ex' = do
@@ -69,29 +72,35 @@ printType ex' = do
                Just t -> "// " ++ (toJsDoc t)
   putStrLn . toJs . fst $ ex'
 
-ex expr = Expr expr ()
-st expr = Expression $ ex expr
+
+main = do
+  args <- getArgs
+  let arg = head args
+  js <- ES3Parser.parseFromFile arg 
+  let stmts = map fromStatement $ ES3.unJavaScript js
+  let inf = runState (inferStatement $ Block stmts) emptyScope
+  pp inf
 
 
-idE = ex $ LitFunc ["arg"] [ Return . Just . ex $ Var "arg", VarDecl "var1", st $ Assign (ex $ Var "var1") (ex $ LitNumber 1), Return . Just . ex $ Var "arg" ]
-idT = runState (inferType idE) emptyScope
+-- idE = ex $ LitFunc ["arg"] [ Return . Just . ex $ Var "arg", VarDecl "var1", st $ Assign (ex $ Var "var1") (ex $ LitNumber 1), Return . Just . ex $ Var "arg" ]
+-- idT = runState (inferType idE) emptyScope
 
-e1 = ex $ LitFunc ["arg"]
-     $ [ VarDecl "vari"
-       , st $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
-       , While (ex $ LitBoolean False) (st $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0))
-   --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")
-       , IfThenElse (ex $ LitBoolean False) (Return $ Just . ex $ LitArray []) (Return $ Just . ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
---e1 = ex $ LitFunc ["arg"] ["vari"] []
+-- e1 = ex $ LitFunc ["arg"]
+--      $ [ VarDecl "vari"
+--        , st $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
+--        , While (ex $ LitBoolean False) (st $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0))
+--    --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")
+--        , IfThenElse (ex $ LitBoolean False) (Return $ Just . ex $ LitArray []) (Return $ Just . ex $ LitArray [ex $ LitObject [("bazooka", ex $ Var "arg"), ("number", ex $ Var "vari")]])]
+-- --e1 = ex $ LitFunc ["arg"] ["vari"] []
 
-t1 = inferType e1
-s1 = runState t1 emptyScope
-s1doc = toJsDoc . fromJust . getExprType $ fst s1
+-- t1 = inferType e1
+-- s1 = runState t1 emptyScope
+-- s1doc = toJsDoc . fromJust . getExprType $ fst s1
 
-e2 = ex $ Property (ex $ Index (ex $ Call e1 [(ex $ LitString "abc")]) (ex $ LitNumber 2)) "number"
-s2 = runState (inferType e2) emptyScope
+-- e2 = ex $ Property (ex $ Index (ex $ Call e1 [(ex $ LitString "abc")]) (ex $ LitNumber 2)) "number"
+-- s2 = runState (inferType e2) emptyScope
 
 
-e3 = ex $ Assign (ex $ Var "f") e1
-s3 = runState (inferType e3) emptyScope
+-- e3 = ex $ Assign (ex $ Var "f") e1
+-- s3 = runState (inferType e3) emptyScope
 
