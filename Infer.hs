@@ -7,6 +7,8 @@ import Types
 
 -- TODO:
 -- 
+-- * type inference of function args is broken!
+-- 
 -- * support 'this' by assuming equivalences:
 --   - f(..) == f.bind(window, ..)
 --   - o.f(..) == f.bind(o, ..)

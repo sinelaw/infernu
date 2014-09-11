@@ -72,6 +72,10 @@ printType ex' = do
 ex expr = Expr expr ()
 st expr = Expression $ ex expr
 
+
+idE = ex $ LitFunc ["arg"] [ Return . Just . ex $ Var "arg", VarDecl "var1", st $ Assign (ex $ Var "var1") (ex $ LitNumber 1), Return . Just . ex $ Var "arg" ]
+idT = runState (inferType idE) emptyScope
+
 e1 = ex $ LitFunc ["arg"]
      $ [ VarDecl "vari"
        , st $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
