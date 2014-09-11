@@ -73,7 +73,7 @@ ex expr = Expr expr ()
 st expr = Expression $ ex expr
 
 e1 = ex $ LitFunc ["arg"]
-     $ [ st $ Var "vari"
+     $ [ VarDecl "vari"
        , st $ Assign (ex $ Var "vari") (ex $ LitObject [("amount", ex $ LitNumber 123)])
        , While (ex $ LitBoolean False) (st $ Assign (ex $ Property (ex $ Var "vari") "amount") (ex $ LitNumber 0))
    --    , ex $ Assign (ex $ Var "vari") (ex $ LitString "ma?")

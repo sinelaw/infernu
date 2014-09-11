@@ -49,6 +49,11 @@ toJsSt tabAmount st = let tab = makeTab tabAmount in
                  , (toJsSt (tabAmount + 1) stElse)
                  , tab, "}"]
       VarDecl name -> "var " ++ name
+      While expr stmt -> concat [ "while ("
+                                , toJs' tabAmount expr
+                                , ") {"
+                                , toJsSt (tabAmount + 1) stmt
+                                , tab, "}" ]
       _ -> "statement..." -- todo
 
 toJs' :: Int -> Expr a -> String
@@ -62,14 +67,11 @@ toJs' tabAmount (Expr body _) = let tab = makeTab tabAmount in
       LitFunc args exprs -> "function (" ++ argsJs ++ ") {" ++ statements ++ tab ++ "}"
           where argsJs = commafy $ args
                 statements = concat $ map (toJsSt (tabAmount + 1)) exprs
-                --vars' = "var " ++ commafy varNames ++ ";"
-                tab' = makeTab $ tabAmount + 1
       LitNumber x -> toJsNumberStr x
       LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ (toJs'' val)) xs) ++ " }"
       LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
       LitString s -> "'" ++ s ++ "'" -- todo escape
       Property obj name -> (toJs'' obj) ++ "." ++ name
-      --Return expr -> "return " ++ toJs'' expr
       Var name -> name
     where toJs'' = toJs' (tabAmount + 1)
 
