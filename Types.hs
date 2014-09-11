@@ -5,7 +5,10 @@ module Types where
 
 import qualified Data.Map.Lazy as Map
 import qualified Data.List as List 
+import Data.Traversable(Traversable(..))
+import Data.Foldable(Foldable(..))
 import Text.PrettyPrint.GenericPretty(Generic, Out(..))
+import Prelude hiding (foldr, mapM)
 
 type Name = Int
 
@@ -136,4 +139,61 @@ fromType (TCons consName types) =
       JSConsFunc -> JSFunc (map fromType . tail $ types) (fromType . head $ types)
       JSConsArray -> JSArray (fromType . head $ types) -- TODO ensure single
       JSConsObject names -> JSObject $ zip names (map fromType types)
+
+
+
+
+
+--data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
+data Body expr = LitBoolean Bool 
+               | LitNumber Double 
+               | LitString String 
+               | LitRegex String 
+               | Var String
+               | LitFunc [String] [Statement expr]
+               | LitArray [expr] 
+               | LitObject [(String, expr)]
+               | Call expr [expr]
+               | Assign expr expr -- lvalue must be a property (could represent a variable)
+               | Property expr String  -- lvalue must be a JSObject
+               | Index expr expr  -- lvalue must be a JArray
+--               | Return expr
+          deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+
+data Statement expr = Empty
+                    | Expression expr
+                    | Block [Statement expr] 
+                    | IfThenElse expr (Statement expr) (Statement expr)
+                    | While expr (Statement expr)
+                    | Return (Maybe expr)
+                    | VarDecl String
+          deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+
+
+data Expr a = Expr (Body (Expr a)) a
+          deriving (Show, Eq, Generic)
+
+
+            
+data TypeError = TypeError String 
+                 deriving (Show, Eq, Generic)
+
+
+data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
+               deriving (Show, Eq, Generic)
+
+
+data TypeScope = TypeScope { tVars :: TSubst JSConsType, maxNum :: Int }
+               deriving (Show, Eq, Generic)
+
+
+data FuncScope = FuncScope { returnType :: JSType }
+               deriving (Show, Eq, Generic)
+
+
+
+data Scope = Scope { typeScope :: TypeScope
+                   , varScope :: VarScope
+                   , funcScope :: Maybe FuncScope }
+               deriving (Show, Eq, Generic)
 

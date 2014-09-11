@@ -2,12 +2,10 @@
 
 module Infer where
 
-
 import Types
+--import Pretty
 
 -- TODO:
--- 
--- * type inference of function args is broken!
 -- 
 -- * support 'this' by assuming equivalences:
 --   - f(..) == f.bind(window, ..)
@@ -25,9 +23,9 @@ import Data.List(intersperse)
 import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
 import Data.Either(isLeft, lefts)
 import Text.PrettyPrint.GenericPretty(Generic)
+import Control.Monad.State(State, runState, forM, get, put)
 import Data.Traversable(Traversable(..))
 import Data.Foldable(Foldable(..))
-import Control.Monad.State(State, runState, forM, get, put)
 import qualified Data.Map.Lazy as Map
 import Prelude hiding (foldr, mapM)
 import Control.Monad()
@@ -35,62 +33,6 @@ import Control.Monad()
 fromRight :: Either a b -> b
 fromRight (Right x) = x
 fromRight _ = error "expected: Right"
-
-
---data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
-data Body expr = LitBoolean Bool 
-               | LitNumber Double 
-               | LitString String 
-               | LitRegex String 
-               | Var String
-               | LitFunc [String] [Statement expr]
-               | LitArray [expr] 
-               | LitObject [(String, expr)]
-               | Call expr [expr]
-               | Assign expr expr -- lvalue must be a property (could represent a variable)
-               | Property expr String  -- lvalue must be a JSObject
-               | Index expr expr  -- lvalue must be a JArray
---               | Return expr
-          deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
-
-data Statement expr = Empty
-                    | Expression expr
-                    | Block [Statement expr] 
-                    | IfThenElse expr (Statement expr) (Statement expr)
-                    | While expr (Statement expr)
-                    | Return (Maybe expr)
-                    | VarDecl String
-          deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
-
-
-data Expr a = Expr (Body (Expr a)) a
-          deriving (Show, Eq, Generic)
-
-
-            
-data TypeError = TypeError String 
-                 deriving (Show, Eq, Generic)
-
-
-
-data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
-               deriving (Show, Eq, Generic)
-
-
-data TypeScope = TypeScope { tVars :: TSubst JSConsType, maxNum :: Int }
-               deriving (Show, Eq, Generic)
-
-
-data FuncScope = FuncScope { funcVars :: [(String, JSType)]
-                           , returnType :: JSType }
-               deriving (Show, Eq, Generic)
-
-
-
-data Scope = Scope { typeScope :: TypeScope
-                   , varScope :: VarScope
-                   , funcScope :: Maybe FuncScope }
-               deriving (Show, Eq, Generic)
 
 
 getVarType :: VarScope -> String -> Maybe JSType
@@ -104,10 +46,10 @@ intrVars names = do
   scope <- get
   let varScope' = varScope scope
   vs <- forM names $ \name -> do
-          varType' <- allocTVar
+          varType' <-  allocTVar
           return (name, varType')
 
-  return $ VarScope { parent = varScope', vars = vs }
+  return VarScope { parent = varScope', vars = vs }
 
 allocTVar' :: TypeScope -> (JSType, TypeScope)
 allocTVar' tscope = (JSTVar allocedNum, updatedScope)
@@ -177,12 +119,15 @@ getExprError :: InferredExpr -> Maybe TypeError
 getExprError (Expr _ (Left e)) = Just e
 getExprError _ = Nothing
 
+-- coerceTypes :: JSType -> JSType -> State Scope (Either TypeError JSType)
+-- coerceTypes t u = coerceTypes' (trace ("bla:" ++ (concat $ intersperse " -- " $ map show [t, u])) t) u 
+
 coerceTypes :: JSType -> JSType -> State Scope (Either TypeError JSType)
 coerceTypes t u = do
   scope <- get
   let typeScope' = typeScope scope
   let tsubst = tVars typeScope'
-  case unify tsubst (toType t) (toType u) of
+  case unify tsubst (toType $ t) (toType $ u) of
     Nothing -> return . Left . TypeError $ "Failed unifying types: " ++ (show t) ++ " and " ++ (show u)
     Just x -> do
       let tsubst' = x
@@ -197,7 +142,7 @@ resolveType t = do
   let tsubst = tVars typeScope'
   return . fromType $ substituteType tsubst (toType t)
 
-inferStatement :: Statement (Expr a) -> State Scope InferredStatement
+inferStatement ::  Statement (Expr a) -> State Scope InferredStatement
 inferStatement st = do
   let ok st' = return $ Right st'
       err st' e = return $ Left (e, st')
@@ -285,7 +230,7 @@ getInferredStatement :: Either (a, b) b -> b
 getInferredStatement (Left (_, x)) = x
 getInferredStatement (Right x) = x
 
-inferType :: Expr a -> State Scope InferredExpr
+inferType ::  Expr a -> State Scope InferredExpr
 inferType e = do
   inferredExpr <- inferType' e
   case inferredExpr of
@@ -295,7 +240,7 @@ inferType e = do
          return $ Expr a (Right t')
   
 
-inferType' :: Expr a -> State Scope InferredExpr
+inferType' ::   Expr a -> State Scope InferredExpr
 inferType' (Expr body _) = do
   case body of
     LitArray exprs -> inferArrayType exprs
@@ -412,14 +357,14 @@ inferArrayType exprs =
                         then return $ makeError (LitArray inferredExprs) "inconsistent array element types"
                         else return . simply (JSArray x) $ LitArray inferredExprs
 
-inferFuncType :: [String] -> [Statement (Expr a)] -> State Scope InferredExpr
+inferFuncType ::  [String] -> [Statement (Expr a)] -> State Scope InferredExpr
 inferFuncType argNames exprs =
     do returnType' <- allocTVar
-       scope <- get
-       let funcScope' = FuncScope { funcVars = [], returnType = returnType' }
+       let funcScope' = FuncScope { returnType = returnType' }
        argScope <- intrVars argNames
+       scope <- get
        let (inferredStatments', Scope typeScope'' _ funcScope'') = 
-               flip runState (Scope { typeScope = (typeScope scope), funcScope =  Just funcScope', varScope = argScope }) 
+               flip runState (scope { funcScope = Just funcScope', varScope = argScope }) 
                     $ forM exprs inferStatement
            inferredStatments = (map getInferredStatement inferredStatments')
        put $ scope { typeScope = typeScope'' }
@@ -429,7 +374,7 @@ inferFuncType argNames exprs =
          let funcType = JSFunc (map snd $ vars argScope) (returnType . fromJust $ funcScope'')
          return . simply funcType $ LitFunc argNames inferredStatments
 
-inferReturnType :: Expr a -> State Scope InferredExpr
+inferReturnType ::  Expr a -> State Scope InferredExpr
 inferReturnType expr =
     do (Expr newBody res) <- inferType expr
        case res of 
@@ -441,15 +386,13 @@ inferReturnType expr =
                   maybeT <- coerceTypes retType $ fromJust curReturnType
                   case maybeT of
                     Left e -> return $ makeError' newBody e
-                    Right t -> do
-                                setFailed <- setFuncReturnType t
-                                case setFailed of
-                                  Nothing ->  return . simply t $ newBody
-                                  Just _ -> return $ makeError newBody "Error in return expression"
-                else do setFailed <- setFuncReturnType retType
-                        case setFailed of
-                          Nothing -> return . simply retType $ newBody
-                          Just _ -> return $ makeError newBody "Error in return expression"
+                    Right t -> setRetType t
+                else setRetType retType
+             where setRetType retType' = 
+                       do setFailed <- setFuncReturnType retType'
+                          case setFailed of
+                            Nothing -> return . simply retType' $ newBody
+                            Just _ -> return $ makeError newBody "Error in return expression"
  
 inferObjectType :: [(String, Expr a)] -> State Scope InferredExpr
 inferObjectType props =
@@ -464,4 +407,5 @@ inferObjectType props =
                                   $ zip propNames 
                                   $ map (fromJust . getExprType) inferredProps) 
                       $ newBody
+
 

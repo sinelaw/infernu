@@ -4,11 +4,7 @@ import qualified Data.Map.Lazy as Map
 import Data.List(intersperse)
 import Text.PrettyPrint.GenericPretty(Generic, Out(..), pp)
 
-
 import Types
-import Infer
-
-
 
 instance (Out k, Out v) => Out (Map.Map k v) where
     doc m = doc $ Map.assocs m
