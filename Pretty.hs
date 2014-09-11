@@ -36,18 +36,19 @@ makeTab tabAmount = "\n" ++ (concat $ replicate tabAmount "  " )
 
 toJsSt :: Int -> Statement (Expr a) -> String
 toJsSt tabAmount st = let tab = makeTab tabAmount in
-    case st of 
+    (tab ++) . (++ ";") $ case st of 
       Empty -> ""
       Expression e -> toJs' tabAmount e
       Return e -> "return" ++ (maybe "" (\x -> " " ++ (toJs' tabAmount x)) e)
       IfThenElse expr stThen stElse -> 
           concat [ "if (" 
                  , toJs' tabAmount expr
-                 , ") {" , tab
-                 , (toJsSt (tabAmount + 1) stThen), tab 
-                 , "} else {" , tab 
-                 , (toJsSt (tabAmount + 1) stElse) , tab
-                 , "}"]
+                 , ") {"
+                 , (toJsSt (tabAmount + 1) stThen)
+                 , tab, "} else {"
+                 , (toJsSt (tabAmount + 1) stElse)
+                 , tab, "}"]
+      VarDecl name -> "var " ++ name
       _ -> "statement..." -- todo
 
 toJs' :: Int -> Expr a -> String
@@ -58,10 +59,9 @@ toJs' tabAmount (Expr body _) = let tab = makeTab tabAmount in
       Index arr idx -> (toJs'' arr) ++ "[" ++ (toJs'' idx) ++ "]"
       LitArray xs -> "[" ++ (commafy $ map toJs'' xs) ++ "]"
       LitBoolean x -> if x then "true" else "false"
-      LitFunc args exprs -> "function (" ++ argsJs ++ ") {" ++ block ++ tab ++ "}"
+      LitFunc args exprs -> "function (" ++ argsJs ++ ") {" ++ statements ++ tab ++ "}"
           where argsJs = commafy $ args
-                block = statements -- concat $ intersperse tab' ["", vars', "", statements]
-                statements = concat $ map (++ ";" ++ tab') $ map (toJsSt (tabAmount + 1)) exprs
+                statements = concat $ map (toJsSt (tabAmount + 1)) exprs
                 --vars' = "var " ++ commafy varNames ++ ";"
                 tab' = makeTab $ tabAmount + 1
       LitNumber x -> toJsNumberStr x
