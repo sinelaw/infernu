@@ -171,6 +171,9 @@ getExprType :: InferredExpr -> Maybe JSType
 getExprType (Expr _ (Right t)) = Just t
 getExprType _ = Nothing
 
+getExprError :: InferredExpr -> Maybe TypeError
+getExprError (Expr _ (Left e)) = Just e
+getExprError _ = Nothing
 
 coerceTypes :: JSType -> JSType -> State Scope (Either TypeError JSType)
 coerceTypes t u = do

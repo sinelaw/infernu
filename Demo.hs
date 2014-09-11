@@ -4,7 +4,7 @@ import Text.PrettyPrint.GenericPretty(pp)
 import Control.Monad.State(runState)
 import Data.Maybe(fromJust)
 
-import qualified Language.ECMAScript3.Parser
+--import qualified Language.ECMAScript3.Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 
 import Infer
@@ -61,10 +61,13 @@ fromProp (ES3.PropNum _ x) = show x
 declVar :: VarScope -> String -> Name -> VarScope
 declVar scop name n = VarScope { parent = scop, vars = [(name, JSTVar n)] }
 
---printType :: InferredExpr -> IO ()
-printType ex = do
-  putStrLn $ "// " ++ (toJsDoc . fromJust . getExprType $ fst ex)
-  putStrLn $ toJs . fst $ ex
+printType :: (InferredExpr, a) -> IO ()
+printType ex' = do
+  let exprType = getExprType $ fst ex'
+  putStrLn $ case exprType of
+               Nothing -> "// Type Inference Error: " ++ (show . fromJust . getExprError $ fst ex')
+               Just t -> "// " ++ (toJsDoc t)
+  putStrLn . toJs . fst $ ex'
 
 ex expr = Expr expr ()
 st expr = Expression $ ex expr
