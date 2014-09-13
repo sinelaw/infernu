@@ -230,6 +230,8 @@ getInferredStatement :: Either (a, b) b -> b
 getInferredStatement (Left (_, x)) = x
 getInferredStatement (Right x) = x
 
+
+
 inferType ::  Expr a -> State Scope InferredExpr
 inferType e = do
   inferredExpr <- inferType' e

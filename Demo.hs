@@ -34,6 +34,15 @@ fromStatement (ES3.ForStmt _ forInit pred' incr stmt) =
                       (Block $ [fromStatement stmt] ++ incr'')
           ]
     where incr'' = maybe [] (\x -> [Expression $ fromExpression x]) incr
+fromStatement (ES3.VarDeclStmt _ decls) = Block $ concat . map fromVarDecl $ decls
+fromStatement s = error $ "Not implemented statment: " ++ (show $ ES3PP.prettyPrint s)
+
+
+
+fromVarDecl :: ES3.VarDecl a -> [Statement (Expr ())]
+fromVarDecl (ES3.VarDecl _ id' assignRValue) = declS : assignS
+    where declS = VarDecl . ES3.unId $ id'
+          assignS = maybe [] (\x -> [Expression . fromExpression $ x]) assignRValue
 
 fromForInit :: ES3.ForInit a -> Statement (Expr ())
 fromForInit ES3.NoInit = Empty
@@ -73,22 +82,24 @@ fromProp (ES3.PropId _ (ES3.Id _ x)) = x
 fromProp (ES3.PropString _ x) = x
 fromProp (ES3.PropNum _ x) = show x
 
-printType :: (InferredExpr, a) -> IO ()
-printType ex' = do
-  let exprType = getExprType $ fst ex'
-  putStrLn $ case exprType of
-               Nothing -> "// Type Inference Error: " ++ (show . fromJust . getExprError $ fst ex')
-               Just t -> "// " ++ (toJsDoc t)
-  putStrLn . toJs . fst $ ex'
 
+printInferredExprType :: InferredResult -> String
+printInferredExprType ((Right t)) = incomment $ toJsDoc t
+printInferredExprType ((Left x)) = incomment $ show x
+
+printType :: (InferredStatement, a) -> IO ()
+printType ex' = do
+  putStrLn $ toJsSt printInferredExprType 0 . getInferredStatement . fst $ ex'
 
 main = do
   args <- getArgs
   let arg = head args
   js <- ES3Parser.parseFromFile arg 
   let stmts = map fromStatement $ ES3.unJavaScript js
-  let inf = runState (inferStatement $ Block stmts) emptyScope
+  let inf = runState (inferStatement . flattenBlocks . Block $ stmts) emptyScope
   pp inf
+  printType inf
+--  toJsSt $ fst inf
 
 
 -- idE = ex $ LitFunc ["arg"] [ Return . Just . ex $ Var "arg", VarDecl "var1", st $ Assign (ex $ Var "var1") (ex $ LitNumber 1), Return . Just . ex $ Var "arg" ]
