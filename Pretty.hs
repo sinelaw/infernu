@@ -69,7 +69,7 @@ toJs' aToJs tabAmount (Expr body a) = let tab = makeTab tabAmount in
       Index arr idx -> (toJs'' arr) ++ "[" ++ (toJs'' idx) ++ "]"
       LitArray xs -> "[" ++ (commafy $ map toJs'' xs) ++ "]"
       LitBoolean x -> if x then "true" else "false"
-      LitFunc name args exprs -> "function " ++ maybe "" show name ++ "(" ++ argsJs ++ ") {" ++ statements ++ tab ++ "}"
+      LitFunc name args exprs -> "function " ++ maybe "" id name ++ "(" ++ argsJs ++ ") {" ++ statements ++ tab ++ "}"
           where argsJs = commafy $ args
                 statements = concat $ map (toJsSt aToJs (tabAmount + 1)) exprs
       LitNumber x -> toJsNumberStr x

@@ -73,6 +73,7 @@ fromExpression es3x =
       ES3.VarRef _ name -> Var $ ES3.unId name
       ES3.DotRef _ expr name -> Property (fromExpression expr) (ES3.unId name)
       ES3.AssignExpr _ ES3.OpAssign lvalue expr -> Assign (fromLValue lvalue) (fromExpression expr)
+      ES3.CallExpr _ expr argExprs -> Call (fromExpression expr) $ map fromExpression argExprs
       _ -> error $ "not implemented: " ++ (show $ ES3PP.prettyPrint es3x)
 
 fromLValue :: ES3.LValue a -> Expr ()
