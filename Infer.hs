@@ -19,6 +19,7 @@ import Types
 --
 -- * don't allow assigning to function args? (lint issue only)
 
+import Debug.Trace
 import Data.List(intersperse)
 import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
 import Data.Either(isLeft, lefts)
@@ -41,6 +42,10 @@ getVarType scope name = case lookup name (vars scope) of
                        Nothing -> getVarType (parent scope) name
                        Just t -> Just t
 
+getVars :: VarScope -> [(String, JSType)]
+getVars Global = []
+getVars scope = vars scope
+
 intrVars :: [String] -> State Scope VarScope
 intrVars names = do
   scope <- get
@@ -50,6 +55,13 @@ intrVars names = do
           return (name, varType')
 
   return VarScope { parent = varScope', vars = vs }
+
+intrVarWithType :: String -> JSType -> State Scope VarScope
+intrVarWithType name t = do
+  scope <- get
+  let varScope' = varScope scope
+  return VarScope { parent = varScope', vars = (name, t) : (getVars varScope') }
+
 
 updateVarScope :: VarScope -> State Scope ()
 updateVarScope v = do
@@ -328,20 +340,20 @@ inferCallType callee args = do
   inferredCallee <- inferType callee
   inferredArgs <- mapM inferType args
   let newBody = Call inferredCallee inferredArgs
-  case getExprType inferredCallee of
+  inferredCallee'' <- maybe (return Nothing) (resolveType >> return . Just) $ getExprType inferredCallee
+  case inferredCallee'' of
     Nothing -> return . makeError newBody $ "couldn't infer callee in call expression"
-    Just (JSFunc argsT' res') -> do
-      let maybeArgsT = map getExprType inferredArgs
-      if any isNothing maybeArgsT
-      then return . makeError newBody $ "couldn't infer arg types in call expression"
-      else do
-        let argsT = map fromJust maybeArgsT
-        unifiedArgTypes <- mapM (uncurry coerceTypes) $ zip argsT argsT'
-        if any isLeft unifiedArgTypes
-        then return . makeError newBody $ "actual argument types do not match callee argument types:" 
-                 ++ (concat $ intersperse "\n" (map show $ lefts unifiedArgTypes))
-        else return $ simply res' newBody
-    Just _ -> return . makeError newBody $ "callee is not a function"
+    Just (JSFunc argsT' res') -> 
+        do let maybeArgsT = map getExprType inferredArgs
+           if any isNothing maybeArgsT
+           then return . makeError newBody $ "couldn't infer arg types in call expression"
+           else do
+             let argsT = map fromJust maybeArgsT
+             unifiedArgTypes <- mapM (uncurry coerceTypes) $ zip argsT argsT'
+             if any isLeft unifiedArgTypes
+             then return . makeError newBody $ "actual argument types do not match callee argument types:" 
+                      ++ (concat $ intersperse "\n" (map show $ lefts unifiedArgTypes))
+             else return $ simply res' newBody
   
 inferVarType :: String -> State Scope InferredExpr
 inferVarType name = do
@@ -367,37 +379,43 @@ inferArrayType exprs =
 inferFuncType :: Maybe String -> [String] -> [Statement (Expr a)] -> State Scope InferredExpr
 inferFuncType name argNames exprs =
     do returnType' <- allocTVar
-       let funcScope' = FuncScope { returnType = returnType' }
-       funcVarType <- case name of -- TODO de-uglify
-         Just x -> do 
-           funcNameScope <- intrVars [x]
-           updateVarScope funcNameScope
-           return . Just . snd . head $ vars funcNameScope
+       funcType <- case name of
+         Just x -> do
+           varScope' <- intrVars [x]
+           updateVarScope varScope'
+           return . Just . snd . head . getVars $ varScope'
          Nothing -> return Nothing
        argScope <- intrVars argNames
+       let funcScope' = FuncScope { returnType = returnType' }
+           argTypes = map snd $ getVars argScope
+       case funcType of
+         Just funcType' -> coerceTypes funcType' (JSFunc argTypes returnType') >> return ()
+         Nothing -> return ()
        scope <- get
        let (inferredStatments', Scope typeScope'' _ funcScope'') = 
-               flip runState (scope { funcScope = Just funcScope', varScope = argScope }) 
+               flip runState (scope { funcScope = Just funcScope', varScope = traceShowId argScope }) 
                     $ forM exprs inferStatement
            inferredStatments = (map getInferredStatement inferredStatments')
        put $ scope { typeScope = typeScope'' }
        let newBody = LitFunc name argNames inferredStatments
        if any isLeft inferredStatments'
        then return $ makeError newBody "Error in function body"
-       else do
-         let funcType = JSFunc (map snd $ vars argScope) (returnType . fromJust $ funcScope'')
-         unifiedFuncType' <- case funcVarType of
-           Nothing -> return $ Right funcType
-           Just x -> coerceTypes x funcType
-         case unifiedFuncType' of
-           Left e -> return $ makeError newBody "Error inferring function type"
-           Right t -> return $ simply t newBody
+       else case funcScope'' of
+              Just updatedFuncScope ->
+                  do let inferredReturnType = returnType updatedFuncScope
+                     unifiedFuncType' <- case funcType of
+                                           Nothing -> return . Right $ JSFunc argTypes inferredReturnType
+                                           Just funcType'' -> coerceTypes funcType'' . JSFunc argTypes $ inferredReturnType
+                     case unifiedFuncType' of
+                       Left _ -> return $ makeError newBody "Error inferring function type"
+                       Right t -> return $ simply t newBody
+              Nothing -> return $ makeError newBody "Error inferring update function scope"
 
 inferReturnType ::  Expr a -> State Scope InferredExpr
 inferReturnType expr =
     do (Expr newBody res) <- inferType expr
        case res of 
-         Left _ -> return $ makeError newBody "Error in return expression"
+         Left (TypeError e) -> return $ makeError newBody e
          Right retType -> 
              do curReturnType <- getFuncReturnType
                 if isJust curReturnType
