@@ -41,8 +41,11 @@ fromStatement s = error $ "Not implemented statment: " ++ (show $ ES3PP.prettyPr
 
 fromVarDecl :: ES3.VarDecl a -> [Statement (Expr ())]
 fromVarDecl (ES3.VarDecl _ id' assignRValue) = declS : assignS
-    where declS = VarDecl . ES3.unId $ id'
-          assignS = maybe [] (\x -> [Expression . fromExpression $ x]) assignRValue
+    where declS = VarDecl varName
+          varName = ES3.unId $ id'
+          assignS = case assignRValue of
+                      Nothing -> []
+                      Just ex' -> [Expression . ex $ Assign (ex $ Var varName) (fromExpression ex')]
 
 fromForInit :: ES3.ForInit a -> Statement (Expr ())
 fromForInit ES3.NoInit = Empty
