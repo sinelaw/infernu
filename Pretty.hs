@@ -1,8 +1,10 @@
 module Pretty where
 
 import qualified Data.Map.Lazy as Map
+import Data.Traversable(traverse)
 import Data.List(intersperse)
 import Text.PrettyPrint.GenericPretty(Generic, Out(..), pp)
+import Control.Monad.State.Lazy(State(..))
 
 import Types
 import Infer
@@ -106,9 +108,10 @@ toJsDoc (JSTVar name) = toStrName name
                                   
 
 flattenBlocks :: Statement a -> Statement a
-flattenBlocks (Block xs) = case map flattenBlocks xs of
+flattenBlocks (Block stmts) = case stmts of
                              [] -> Empty
-                             [x] -> x
-                             xs' -> Block xs'
+                             (Block x):xs -> Block $ (map flattenBlocks x) ++ (map flattenBlocks xs)
+                             x:xs -> Block $ x:(map flattenBlocks xs)
 flattenBlocks x = x
       
+
