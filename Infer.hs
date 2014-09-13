@@ -158,7 +158,7 @@ inferStatement st = do
             
     Block xs -> 
         do results <- mapM inferStatement xs
-           let newSt = Block $ map fromRight results
+           let newSt = Block $ map getInferredStatement results
            case lefts results of 
              [] -> ok newSt
              _ -> err newSt $ TypeError "error in statement block"
