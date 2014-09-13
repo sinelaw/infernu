@@ -35,6 +35,7 @@ fromStatement (ES3.ForStmt _ forInit pred' incr stmt) =
           ]
     where incr'' = maybe [] (\x -> [Expression $ fromExpression x]) incr
 fromStatement (ES3.VarDeclStmt _ decls) = Block $ concat . map fromVarDecl $ decls
+fromStatement (ES3.FunctionStmt _ name args stmts) = Expression . ex $ LitFunc (Just . ES3.unId $ name) (map ES3.unId args) (map fromStatement stmts)
 fromStatement s = error $ "Not implemented statment: " ++ (show $ ES3PP.prettyPrint s)
 
 
