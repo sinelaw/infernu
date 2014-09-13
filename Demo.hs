@@ -5,6 +5,7 @@ import Text.PrettyPrint.GenericPretty(pp)
 import Control.Monad.State(runState)
 import Data.Maybe(fromJust)
 
+import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 
@@ -57,7 +58,15 @@ fromExpression es3x =
       ES3.ObjectLit _ props -> LitObject $ map (\(p, x) -> (fromProp p, fromExpression x)) props
       ES3.FuncExpr _ name argNames stmts -> LitFunc (map ES3.unId argNames) (map fromStatement stmts) 
       ES3.VarRef _ name -> Var $ ES3.unId name
-      _ -> error $ "not implemented"
+      ES3.DotRef _ expr name -> Property (fromExpression expr) (ES3.unId name)
+      ES3.AssignExpr _ ES3.OpAssign lvalue expr -> Assign (fromLValue lvalue) (fromExpression expr)
+      _ -> error $ "not implemented: " ++ (show $ ES3PP.prettyPrint es3x)
+
+fromLValue :: ES3.LValue a -> Expr ()
+fromLValue (ES3.LVar _ name) = ex $ Var name
+fromLValue (ES3.LDot _ expr str) = ex $ Property (fromExpression expr) str
+fromLValue (ES3.LBracket _ x y) = ex $ Index (fromExpression x) (fromExpression y)
+
 
 fromProp :: ES3.Prop a -> String
 fromProp (ES3.PropId _ (ES3.Id _ x)) = x

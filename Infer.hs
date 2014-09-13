@@ -30,9 +30,9 @@ import qualified Data.Map.Lazy as Map
 import Prelude hiding (foldr, mapM)
 import Control.Monad()
 
-fromRight :: Either a b -> b
+fromRight :: Show a => Either a b -> b
 fromRight (Right x) = x
-fromRight _ = error "expected: Right"
+fromRight (Left x) = error $ "expected: Right _, got: Left " ++ (show x)
 
 
 getVarType :: VarScope -> String -> Maybe JSType
