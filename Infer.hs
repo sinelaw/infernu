@@ -51,6 +51,11 @@ intrVars names = do
 
   return VarScope { parent = varScope', vars = vs }
 
+updateVarScope :: VarScope -> State Scope ()
+updateVarScope v = do
+  scope <- get
+  put $ scope { varScope = v }
+
 allocTVar' :: TypeScope -> (JSType, TypeScope)
 allocTVar' tscope = (JSTVar allocedNum, updatedScope)
     where updatedScope = tscope { maxNum = allocedNum }
@@ -247,7 +252,7 @@ inferType' (Expr body _) = do
   case body of
     LitArray exprs -> inferArrayType exprs
     LitBoolean x -> simpleType JSBoolean $ LitBoolean x
-    LitFunc argNames exprs -> inferFuncType argNames exprs
+    LitFunc name argNames exprs -> inferFuncType name argNames exprs
     LitNumber x -> simpleType JSNumber $ LitNumber x
     LitObject props -> inferObjectType props
     LitRegex x -> simpleType JSRegex $ LitRegex x
@@ -359,10 +364,16 @@ inferArrayType exprs =
                         then return $ makeError (LitArray inferredExprs) "inconsistent array element types"
                         else return . simply (JSArray x) $ LitArray inferredExprs
 
-inferFuncType ::  [String] -> [Statement (Expr a)] -> State Scope InferredExpr
-inferFuncType argNames exprs =
+inferFuncType :: Maybe String -> [String] -> [Statement (Expr a)] -> State Scope InferredExpr
+inferFuncType name argNames exprs =
     do returnType' <- allocTVar
        let funcScope' = FuncScope { returnType = returnType' }
+       funcVarType <- case name of -- TODO de-uglify
+         Just x -> do 
+           funcNameScope <- intrVars [x]
+           updateVarScope funcNameScope
+           return . Just . snd . head $ vars funcNameScope
+         Nothing -> return Nothing
        argScope <- intrVars argNames
        scope <- get
        let (inferredStatments', Scope typeScope'' _ funcScope'') = 
@@ -370,11 +381,17 @@ inferFuncType argNames exprs =
                     $ forM exprs inferStatement
            inferredStatments = (map getInferredStatement inferredStatments')
        put $ scope { typeScope = typeScope'' }
+       let newBody = LitFunc name argNames inferredStatments
        if any isLeft inferredStatments'
-       then return $ makeError (LitFunc argNames inferredStatments) "Error in function body"
+       then return $ makeError newBody "Error in function body"
        else do
          let funcType = JSFunc (map snd $ vars argScope) (returnType . fromJust $ funcScope'')
-         return . simply funcType $ LitFunc argNames inferredStatments
+         unifiedFuncType' <- case funcVarType of
+           Nothing -> return $ Right funcType
+           Just x -> coerceTypes x funcType
+         case unifiedFuncType' of
+           Left e -> return $ makeError newBody "Error inferring function type"
+           Right t -> return $ simply t newBody
 
 inferReturnType ::  Expr a -> State Scope InferredExpr
 inferReturnType expr =

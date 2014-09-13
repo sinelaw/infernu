@@ -68,7 +68,7 @@ fromExpression es3x =
       ES3.BoolLit _ x -> LitBoolean x
       ES3.ArrayLit _ xs -> LitArray $ map fromExpression xs
       ES3.ObjectLit _ props -> LitObject $ map (\(p, x) -> (fromProp p, fromExpression x)) props
-      ES3.FuncExpr _ name argNames stmts -> LitFunc (map ES3.unId argNames) (map fromStatement stmts) 
+      ES3.FuncExpr _ name argNames stmts -> LitFunc (fmap ES3.unId name) (map ES3.unId argNames) (map fromStatement stmts) 
       ES3.VarRef _ name -> Var $ ES3.unId name
       ES3.DotRef _ expr name -> Property (fromExpression expr) (ES3.unId name)
       ES3.AssignExpr _ ES3.OpAssign lvalue expr -> Assign (fromLValue lvalue) (fromExpression expr)
