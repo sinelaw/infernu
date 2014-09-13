@@ -339,21 +339,30 @@ inferCallType :: Expr a -> [Expr a] -> State Scope InferredExpr
 inferCallType callee args = do
   inferredCallee <- inferType callee
   inferredArgs <- mapM inferType args
+  callResultType <- allocTVar
   let newBody = Call inferredCallee inferredArgs
-  inferredCallee'' <- maybe (return Nothing) (resolveType >> return . Just) $ getExprType inferredCallee
-  case inferredCallee'' of
-    Nothing -> return . makeError newBody $ "couldn't infer callee in call expression"
-    Just (JSFunc argsT' res') -> 
-        do let maybeArgsT = map getExprType inferredArgs
-           if any isNothing maybeArgsT
+      inferredCalleeType = getExprType inferredCallee
+  case inferredCalleeType of
+    Just t -> 
+        do let argTypes = map getExprType inferredArgs
+           if any isNothing argTypes
            then return . makeError newBody $ "couldn't infer arg types in call expression"
-           else do
-             let argsT = map fromJust maybeArgsT
-             unifiedArgTypes <- mapM (uncurry coerceTypes) $ zip argsT argsT'
-             if any isLeft unifiedArgTypes
-             then return . makeError newBody $ "actual argument types do not match callee argument types:" 
-                      ++ (concat $ intersperse "\n" (map show $ lefts unifiedArgTypes))
-             else return $ simply res' newBody
+           else do funcType' <- coerceTypes t (JSFunc (map fromJust argTypes) callResultType)
+                   case funcType' of
+                     Left (TypeError e) -> return $ makeError newBody e
+                     Right (JSFunc _ returnType') -> return $ simply returnType' newBody
+-- (JSFunc argsT' res') -> 
+--         do let maybeArgsT = map getExprType inferredArgs
+--            if any isNothing maybeArgsT
+--            then return . makeError newBody $ "couldn't infer arg types in call expression"
+--            else do
+--              let argsT = map fromJust maybeArgsT
+--              unifiedArgTypes <- mapM (uncurry coerceTypes) $ zip argsT argsT'
+--              if any isLeft unifiedArgTypes
+--              then return . makeError newBody $ "actual argument types do not match callee argument types:" 
+--                       ++ (concat $ intersperse "\n" (map show $ lefts unifiedArgTypes))
+--              else return $ simply res' newBody
+    _ -> return . makeError newBody $ "couldn't infer callee in call expression, or isn't a function"
   
 inferVarType :: String -> State Scope InferredExpr
 inferVarType name = do
