@@ -4,7 +4,8 @@ module Types where
 
 
 import qualified Data.Map.Lazy as Map
-import qualified Data.List as List 
+import Data.Maybe(fromMaybe)
+import Data.List((\\))
 import Data.Traversable(Traversable(..))
 import Data.Foldable(Foldable(..))
 import Text.PrettyPrint.GenericPretty(Generic, Out(..))
@@ -27,9 +28,7 @@ tvarsIn t = tvarsIn' t []
           tvarsIn' (TCons _ ts) names = foldr tvarsIn' names ts
 
 safeLookup :: Name -> TSubst a -> Type a
-safeLookup name m = case Map.lookup name m of
-                      Nothing -> TVar name
-                      Just t -> t
+safeLookup name m = fromMaybe (TVar name) (Map.lookup name m)
 
 -- page 166
 substituteType :: TSubst a -> Type a -> Type a
@@ -46,13 +45,14 @@ compose m2 m1 = Map.union merged m2
 type Error = String
 
 extend :: Eq a => TSubst a -> Name -> Type a -> Either Error (TSubst a)
-extend m name t = if (TVar name) == t then Right m
-                  else if name `elem` tvarsIn t then Left "occurs check failed"
-                       else Right $ Map.insert name t m
+extend m name t
+    | TVar name == t = Right m
+    | name `elem` tvarsIn t = Left "occurs check failed"
+    | otherwise = Right $ Map.insert name t m
 
 unify :: Eq a => TSubst a -> Type a -> Type a -> Either Error (TSubst a)
 unify m (TVar name) t = 
-    if lookedUpType == (TVar name)
+    if lookedUpType == TVar name
     then extend m name substType
     else unify m lookedUpType substType
     where lookedUpType = safeLookup name m
@@ -75,7 +75,7 @@ unifyl m types = foldr unify' (Right m) types
 data TypeSig a = TypeSig [Name] (Type a)
 
 freeVariables :: TypeSig a -> [Name]
-freeVariables (TypeSig names t) = (List.\\) boundVars names
+freeVariables (TypeSig names t) = boundVars \\ names
     where boundVars = tvarsIn t
 
 substitueTypeSig :: TSubst a -> TypeSig a -> TypeSig a
@@ -117,7 +117,7 @@ toType JSBoolean = TCons JSConsBoolean []
 toType JSNumber = TCons JSConsNumber []
 toType JSString = TCons JSConsString []
 toType JSRegex = TCons JSConsRegex []
-toType (JSFunc argsT resT) = TCons JSConsFunc $ (toType resT) : (map toType argsT)
+toType (JSFunc argsT resT) = TCons JSConsFunc $ toType resT : map toType argsT
 toType (JSArray elemT) = TCons JSConsArray [toType elemT]
 toType (JSObject propsT) = TCons (JSConsObject $ map fst propsT) 
                            $ map (toType . snd) propsT
@@ -168,7 +168,7 @@ data Statement expr = Empty
 
 
 data Expr a = Expr (Body (Expr a)) a
-          deriving (Show, Eq, Generic)
+          deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 
             

@@ -4,6 +4,7 @@ import System.Environment(getArgs)
 import Text.PrettyPrint.GenericPretty(pp)
 import Control.Monad.State(runState)
 import Data.Maybe(fromJust)
+import Control.Arrow((***))
 
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Parser as ES3Parser
@@ -30,20 +31,20 @@ fromStatement (ES3.ReturnStmt _ x) = Return . fmap fromExpression $ x
 --fromStatement (ES3.ForInStmt _ x) = 
 fromStatement (ES3.ForStmt _ forInit pred' incr stmt) = 
     Block [ fromForInit forInit
-          , While (maybe (ex $ LitBoolean True) (\p -> fromExpression p) pred') 
-                      (Block $ [fromStatement stmt] ++ incr'')
+          , While (maybe (ex $ LitBoolean True) fromExpression pred') 
+                      (Block $ fromStatement stmt : incr'')
           ]
     where incr'' = maybe [] (\x -> [Expression $ fromExpression x]) incr
-fromStatement (ES3.VarDeclStmt _ decls) = Block $ concat . map fromVarDecl $ decls
+fromStatement (ES3.VarDeclStmt _ decls) = Block $ concatMap fromVarDecl decls
 fromStatement (ES3.FunctionStmt _ name args stmts) = Expression . ex $ LitFunc (Just . ES3.unId $ name) (map ES3.unId args) (map fromStatement stmts)
-fromStatement s = error $ "Not implemented statment: " ++ (show $ ES3PP.prettyPrint s)
+fromStatement s = error $ "Not implemented statment: " ++ show (ES3PP.prettyPrint s)
 
 
 
 fromVarDecl :: ES3.VarDecl a -> [Statement (Expr ())]
 fromVarDecl (ES3.VarDecl _ id' assignRValue) = declS : assignS
     where declS = VarDecl varName
-          varName = ES3.unId $ id'
+          varName = ES3.unId id'
           assignS = case assignRValue of
                       Nothing -> []
                       Just ex' -> [Expression . ex $ Assign (ex $ Var varName) (fromExpression ex')]
@@ -68,13 +69,13 @@ fromExpression es3x =
       ES3.IntLit _ x -> LitNumber $ fromIntegral x
       ES3.BoolLit _ x -> LitBoolean x
       ES3.ArrayLit _ xs -> LitArray $ map fromExpression xs
-      ES3.ObjectLit _ props -> LitObject $ map (\(p, x) -> (fromProp p, fromExpression x)) props
+      ES3.ObjectLit _ props -> LitObject $ map (fromProp *** fromExpression) props
       ES3.FuncExpr _ name argNames stmts -> LitFunc (fmap ES3.unId name) (map ES3.unId argNames) (map fromStatement stmts) 
       ES3.VarRef _ name -> Var $ ES3.unId name
       ES3.DotRef _ expr name -> Property (fromExpression expr) (ES3.unId name)
       ES3.AssignExpr _ ES3.OpAssign lvalue expr -> Assign (fromLValue lvalue) (fromExpression expr)
       ES3.CallExpr _ expr argExprs -> Call (fromExpression expr) $ map fromExpression argExprs
-      _ -> error $ "not implemented: " ++ (show $ ES3PP.prettyPrint es3x)
+      _ -> error $ "not implemented: " ++ show (ES3PP.prettyPrint es3x)
 
 fromLValue :: ES3.LValue a -> Expr ()
 fromLValue (ES3.LVar _ name) = ex $ Var name
@@ -89,12 +90,11 @@ fromProp (ES3.PropNum _ x) = show x
 
 
 printInferredExprType :: InferredResult -> String
-printInferredExprType ((Right t)) = incomment $ toJsDoc t
-printInferredExprType ((Left x)) = incomment $ show x
+printInferredExprType (Right t) = incomment $ toJsDoc t
+printInferredExprType (Left x) = incomment $ show x
 
 printType :: (InferredStatement, a) -> IO ()
-printType ex' = do
-  putStrLn $ toJsSt printInferredExprType 0 . getInferredStatement . fst $ ex'
+printType ex' = putStrLn $ toJsSt printInferredExprType 0 . getInferredStatement . fst $ ex'
 
 main = do
   args <- getArgs

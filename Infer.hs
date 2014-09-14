@@ -35,9 +35,9 @@ import Control.Monad()
 
 fromRight :: Show a => Either a b -> b
 fromRight (Right x) = x
-fromRight (Left x) = error $ "expected: Right _, got: Left " ++ (show x)
+fromRight (Left x) = error $ "expected: Right _, got: Left " ++ show x
 
-
+-- getVarType = bad name, because it isn't = lookup name . getVars
 getVarType :: VarScope -> String -> Maybe JSType
 getVarType Global _ = Nothing
 getVarType scope name = case lookup name (vars scope) of
@@ -62,7 +62,7 @@ intrVarWithType :: String -> JSType -> State Scope VarScope
 intrVarWithType name t = do
   scope <- get
   let varScope' = varScope scope
-  return VarScope { parent = varScope', vars = (name, t) : (getVars varScope') }
+  return VarScope { parent = varScope', vars = (name, t) : getVars varScope' }
 
 
 updateVarScope :: VarScope -> State Scope ()
@@ -73,7 +73,7 @@ updateVarScope v = do
 allocTVar' :: TypeScope -> (JSType, TypeScope)
 allocTVar' tscope = (JSTVar allocedNum, updatedScope)
     where updatedScope = tscope { maxNum = allocedNum }
-          allocedNum = (maxNum tscope) + 1
+          allocedNum = maxNum tscope + 1
 
 
 allocTVar :: State Scope JSType
@@ -90,9 +90,6 @@ emptyTypeScope = TypeScope Map.empty 0
 
 emptyScope :: Scope
 emptyScope = Scope { typeScope = emptyTypeScope, funcScope = Nothing, varScope = Global }
-
--- rightExpr :: Scope -> Body (Expr (Scope, (Either a b))) -> b -> Expr (Scope, (Either a b))
--- rightExpr scope body x = Expr body (scope, Right x)
 
 exprData :: Expr t -> t
 exprData (Expr _ t) = t
@@ -117,12 +114,6 @@ setFuncReturnType retType = do
       put $ scope { funcScope = Just $ funcScope' { returnType = retType } }
       return Nothing
 
--- declVar :: String -> State Scope (Maybe JSType)
--- declVar name = do
---   scope <- get
---   case funcScope scope of
---     Nothing -> return . Just $ TypeError "
-
 isErrExpr :: InferredExpr -> Bool
 isErrExpr (Expr _ (Left _)) = True
 isErrExpr _ = False
@@ -138,16 +129,13 @@ getExprError :: InferredExpr -> Maybe TypeError
 getExprError (Expr _ (Left e)) = Just e
 getExprError _ = Nothing
 
--- coerceTypes :: JSType -> JSType -> State Scope (Either TypeError JSType)
--- coerceTypes t u = coerceTypes' (trace ("bla:" ++ (concat $ intersperse " -- " $ map show [t, u])) t) u 
-
 coerceTypes :: JSType -> JSType -> State Scope (Either TypeError JSType)
 coerceTypes t u = do
   scope <- get
   let typeScope' = typeScope scope
   let tsubst = tVars typeScope'
-  case unify tsubst (toType $ t) (toType $ u) of
-    Left e -> return . Left . TypeError $ "Failed unifying types: " ++ (show t) ++ " and " ++ (show u) ++ " - error: " ++ e
+  case unify tsubst (toType t) (toType u) of
+    Left e -> return . Left . TypeError $ "Failed unifying types: " ++ show t ++ " and " ++ show u ++ " - error: " ++ e
     Right x -> do
       let tsubst' = x
       let scope' = scope { typeScope = typeScope' { tVars = tsubst' } }
@@ -259,21 +247,24 @@ getInferredStatement (Left (_, x)) = x
 getInferredStatement (Right x) = x
 
 
+resolve :: InferredExpr -> State Scope InferredExpr
+resolve ie = 
+    case ie of
+      Expr _ (Left _) -> return ie
+      Expr a (Right t) ->
+          do t' <- resolveType t
+             case t' of
+               Nothing -> return $ Expr a (Left . TypeError $ "recursive type")
+               Just t'' -> return $ Expr a (Right t'')
 
 inferType ::  Expr a -> State Scope InferredExpr
 inferType e = do
   inferredExpr <- inferType' e
-  case inferredExpr of
-    Expr _ (Left _) -> return inferredExpr
-    Expr a (Right t) ->
-      do t' <- resolveType t
-         case t' of
-           Nothing -> return $ Expr a (Left . TypeError $ "recursive type")
-           Just t'' -> return $ Expr a (Right t'')
-  
+  --traverse resolve inferredExpr
+  resolve inferredExpr
 
 inferType' ::   Expr a -> State Scope InferredExpr
-inferType' (Expr body _) = do
+inferType' (Expr body _) =
   case body of
     LitArray exprs -> inferArrayType exprs
     LitBoolean x -> simpleType JSBoolean $ LitBoolean x
@@ -307,8 +298,8 @@ inferIndexType arrExpr indexExpr = do
   if any isNothing $ map getExprType [inferredArrExpr, inferredIndexExpr]
   then return . makeError newBody $ "couldn't infer index target or value"
   else do
-    let arrType = getExprType $ inferredArrExpr
-        indexType = getExprType $ inferredIndexExpr
+    let arrType = getExprType inferredArrExpr
+        indexType = getExprType inferredIndexExpr
         
     case (arrType, indexType) of
       (Just (JSArray elemType), Just JSNumber) -> return $ simply elemType newBody
@@ -343,10 +334,9 @@ inferPropertyType objExpr propName =
        case objType of
          Nothing -> return . makeError newBody $ "failed inferring object type"
          Just objType' ->
-           do case getObjPropertyType objType' propName of
+           case getObjPropertyType objType' propName of
                 Nothing -> return . makeError newBody $ ("object type has no property named '" ++ propName ++ "'")
-                Just propType' -> do
-                  return $ simply propType' newBody
+                Just propType' -> return $ simply propType' newBody
 
 inferCallType :: Expr a -> [Expr a] -> State Scope InferredExpr
 inferCallType callee args = do
