@@ -145,9 +145,8 @@ coerceTypes t u = do
 resolveType :: JSType -> State Scope (Maybe JSType)
 resolveType t = do
   scope <- get
-  let typeScope' = typeScope scope
-  let tsubst = tVars typeScope'
-  let subst' t' = case substituteType tsubst t' of
+  let tsubst = tVars $ typeScope scope
+      subst' t' = case substituteType tsubst t' of
                     t''@(TVar _) -> if t' == t'' then Just t'
                                     else subst' t''
                     TCons consName ts -> 
@@ -155,8 +154,7 @@ resolveType t = do
                         if any isNothing substTS
                         then Nothing
                         else Just $ TCons consName (map fromJust substTS)
-      result = fmap fromType . subst' $ toType t
-  return (traceShow (result, t) result)
+  return . fmap fromType . subst' $ toType t
 
 inferStatement ::  Statement (Expr a) -> State Scope InferredStatement
 inferStatement st = do
@@ -247,21 +245,21 @@ getInferredStatement (Left (_, x)) = x
 getInferredStatement (Right x) = x
 
 
-resolve :: InferredExpr -> State Scope InferredExpr
+resolve :: InferredResult -> State Scope InferredResult
 resolve ie = 
     case ie of
-      Expr _ (Left _) -> return ie
-      Expr a (Right t) ->
+      (Left _) -> return ie
+      (Right t) ->
           do t' <- resolveType t
              case t' of
-               Nothing -> return $ Expr a (Left . TypeError $ "recursive type")
-               Just t'' -> return $ Expr a (Right t'')
+               Nothing -> return $ Left . TypeError $ "recursive type"
+               Just t'' -> return $ Right t''
 
 inferType ::  Expr a -> State Scope InferredExpr
 inferType e = do
   inferredExpr <- inferType' e
-  --traverse resolve inferredExpr
-  resolve inferredExpr
+  traverse resolve inferredExpr
+  --resolve inferredExpr
 
 inferType' ::   Expr a -> State Scope InferredExpr
 inferType' (Expr body _) =
@@ -394,7 +392,7 @@ inferFuncType name argNames exprs =
        scope <- get
        -- infer the statements that make up this function
        let (inferredStatments', Scope typeScope'' _ funcScope'') = 
-               flip runState (scope { funcScope = Just funcScope', varScope = traceShowId argScope }) 
+               flip runState (scope { funcScope = Just funcScope', varScope = argScope }) 
                     $ forM exprs inferStatement
            inferredStatments = (map getInferredStatement inferredStatments')
        -- update scope with type/unification changes from the statements' processing
@@ -403,7 +401,7 @@ inferFuncType name argNames exprs =
        case (any isLeft inferredStatments', funcScope'') of
          (False, Just updatedFuncScope) -> 
              do let inferredReturnType = returnType updatedFuncScope
-                unifiedReturnType <- coerceTypes (traceShowId returnType') (traceShowId inferredReturnType)
+                unifiedReturnType <- coerceTypes returnType' inferredReturnType
                 unifiedFuncType' <- 
                     case unifiedReturnType of
                       Left _ -> return unifiedReturnType
