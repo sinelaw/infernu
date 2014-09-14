@@ -7,12 +7,14 @@ import Types
 
 -- TODO:
 -- 
+-- * improve pretty print by resolving all types deeply before printing (avoid type vars)
+-- 
+-- * infer record types by their usage in a function
+-- 
 -- * support 'this' by assuming equivalences:
 --   - f(..) == f.bind(window, ..)
 --   - o.f(..) == f.bind(o, ..)
 --
--- * support return; ( == return undefined;)
--- 
 -- * support new (e.g. add body Constructor ... that's like a func
 -- 
 -- * check zips for missing errors (zip of lists of different sizes)
