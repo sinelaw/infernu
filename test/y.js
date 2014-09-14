@@ -1,1 +1,6 @@
-function Y(g) { return g(Y(g)); }
+function (f) {
+	 var g = function(x) {
+	 	f(x(x));
+         };
+	 return g(g);
+}

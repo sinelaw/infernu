@@ -43,17 +43,14 @@ compose m2 m1 = Map.union merged m2
           f _ (TVar name') = safeLookup name' m2
           f _ t = t
 
+type Error = String
 
--- deltaSubst :: Name -> Type -> TSubst
--- deltaSubst name t
+extend :: Eq a => TSubst a -> Name -> Type a -> Either Error (TSubst a)
+extend m name t = if (TVar name) == t then Right m
+                  else if name `elem` tvarsIn t then Left "occurs check failed"
+                       else Right $ Map.insert name t m
 
-extend :: Eq a => TSubst a -> Name -> Type a -> Maybe (TSubst a)
-extend m name t = if (TVar name) == t then Just m
-                  else if name `elem` tvarsIn t then Nothing
-                       else Just $ Map.insert name t m
-
-
-unify :: Eq a => TSubst a -> Type a -> Type a -> Maybe (TSubst a)
+unify :: Eq a => TSubst a -> Type a -> Type a -> Either Error (TSubst a)
 unify m (TVar name) t = 
     if lookedUpType == (TVar name)
     then extend m name substType
@@ -65,12 +62,12 @@ unify m t1@(TCons _ _) t2@(TVar _) = unify m t2 t1
 unify m (TCons consName1 ts1) (TCons consName2 ts2) =
     if consName1 == consName2
     then unifyl m (zip ts1 ts2)
-    else Nothing
+    else Left "type mismatch"
 
-unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Maybe (TSubst a)
-unifyl m types = foldr unify' (Just m) types
-    where unify' (t1, t2) (Just m') = unify m' t1 t2
-          unify' _ Nothing = Nothing
+unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either Error (TSubst a)
+unifyl m types = foldr unify' (Right m) types
+    where unify' (t1, t2) (Right m') = unify m' t1 t2
+          unify' _ (Left e) = Left e
 
 
 -- type signature = type scheme
