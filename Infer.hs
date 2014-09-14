@@ -394,14 +394,11 @@ inferFuncType name argNames exprs =
          Just x -> do
            varScope' <- intrVars [x]
            updateVarScope varScope'
-           return . Just . snd . head . getVars $ varScope'
-         Nothing -> return Nothing
+           return . snd . head . getVars $ varScope'
+         Nothing -> allocTVar
        argScope <- intrVars argNames
        let funcScope' = FuncScope { returnType = returnType' }
            argTypes = map snd $ getVars argScope
-       case funcType of
-         Just funcType' -> coerceTypes funcType' (JSFunc argTypes returnType') >> return ()
-         Nothing -> return ()
        scope <- get
        let (inferredStatments', Scope typeScope'' _ funcScope'') = 
                flip runState (scope { funcScope = Just funcScope', varScope = traceShowId argScope }) 
@@ -411,16 +408,18 @@ inferFuncType name argNames exprs =
        let newBody = LitFunc name argNames inferredStatments
        if any isLeft inferredStatments'
        then return $ makeError newBody "Error in function body"
-       else case funcScope'' of
-              Just updatedFuncScope ->
-                  do let inferredReturnType = returnType updatedFuncScope
-                     unifiedFuncType' <- case funcType of
-                                           Nothing -> return . Right $ JSFunc argTypes inferredReturnType
-                                           Just funcType'' -> coerceTypes funcType'' . JSFunc argTypes $ inferredReturnType
-                     case unifiedFuncType' of
-                       Left _ -> return $ makeError newBody "Error inferring function type"
-                       Right t -> return $ simply t newBody
-              Nothing -> return $ makeError newBody "Error inferring update function scope"
+       else 
+           do uniFuncType <- coerceTypes funcType (JSFunc argTypes returnType')
+              case funcScope'' of
+                Just updatedFuncScope ->
+                    do let inferredReturnType = returnType updatedFuncScope
+                       unifiedFuncType' <- case uniFuncType of
+                                             Left err -> return $ Left err
+                                             Right funcType'' -> coerceTypes funcType'' . JSFunc argTypes $ inferredReturnType
+                       case unifiedFuncType' of
+                         Left _ -> return $ makeError newBody "Error inferring function type"
+                         Right t -> return $ simply t newBody
+                Nothing -> return $ makeError newBody "Error inferring update function scope"
 
 inferReturnType ::  Expr a -> State Scope InferredExpr
 inferReturnType expr =
