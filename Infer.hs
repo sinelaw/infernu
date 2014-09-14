@@ -7,8 +7,6 @@ import Types
 
 -- TODO:
 -- 
--- * improve pretty print by resolving all types deeply before printing (avoid type vars)
--- 
 -- * infer record types by their usage in a function
 -- 
 -- * support 'this' by assuming equivalences:
@@ -21,6 +19,7 @@ import Types
 --
 -- * don't allow assigning to function args? (lint issue only)
 
+--import Control.Error
 import Debug.Trace
 import Data.List(intersperse)
 import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
@@ -114,6 +113,15 @@ setFuncReturnType retType = do
       put $ scope { funcScope = Just $ funcScope' { returnType = retType } }
       return Nothing
 
+
+type InferredResult = Either TypeError JSType
+type InferredStatement = Either (TypeError, Statement InferredExpr) (Statement InferredExpr)
+type InferredExpr = Expr InferredResult
+
+getInferredStatement :: Either (a, b) b -> b
+getInferredStatement (Left (_, x)) = x
+getInferredStatement (Right x) = x
+
 isErrExpr :: InferredExpr -> Bool
 isErrExpr (Expr _ (Left _)) = True
 isErrExpr _ = False
@@ -156,26 +164,18 @@ resolveType t = do
                         else Just $ TCons consName (map fromJust substTS)
   return . fmap fromType . subst' $ toType t
 
+ok st' = return $ Right st'
+err st' e = return $ Left (e, st')
+
+
 inferStatement ::  Statement (Expr a) -> State Scope InferredStatement
 inferStatement st = do
-  let ok st' = return $ Right st'
-      err st' e = return $ Left (e, st')
   case st of
     Empty -> ok Empty
 
-    Expression expr ->
-        do inferredExpr <- inferType expr
-           let newSt = Expression inferredExpr
-           case getExprResult inferredExpr of
-             Left e -> err newSt e
-             Right _ -> ok newSt 
+    Expression expr -> inferExprStatement expr
             
-    Block xs -> 
-        do results <- mapM inferStatement xs
-           let newSt = Block $ map getInferredStatement results
-           case lefts results of 
-             [] -> ok newSt
-             _ -> err newSt $ TypeError "error in statement block"
+    Block xs -> inferBlockStatement xs
 
     IfThenElse expr stThen stElse ->
         do inferredExpr <- inferType expr
@@ -236,14 +236,21 @@ inferStatement st = do
            put $ scope { varScope = updatedVarScope }
            ok $ VarDecl name
 
-type InferredResult = Either TypeError JSType
-type InferredStatement = Either (TypeError, Statement InferredExpr) (Statement InferredExpr)
-type InferredExpr = Expr InferredResult
+inferExprStatement :: Expr a -> State Scope InferredStatement
+inferExprStatement expr = 
+    do inferredExpr <- inferType expr
+       let newSt = Expression inferredExpr
+       case getExprResult inferredExpr of
+         Left e -> err newSt e
+         Right _ -> ok newSt 
 
-getInferredStatement :: Either (a, b) b -> b
-getInferredStatement (Left (_, x)) = x
-getInferredStatement (Right x) = x
-
+inferBlockStatement :: [Statement (Expr a)] -> State Scope InferredStatement
+inferBlockStatement xs =
+        do results <- mapM inferStatement xs
+           let newSt = Block $ map getInferredStatement results
+           case lefts results of 
+             [] -> ok newSt
+             _ -> err newSt $ TypeError "error in statement block"
 
 resolve :: InferredResult -> State Scope InferredResult
 resolve ie = 
@@ -287,6 +294,7 @@ makeError' b typeError = Expr b (Left typeError)
 
 makeError :: Body (Expr (Either TypeError b)) -> String -> Expr (Either TypeError b)
 makeError b str = makeError' b $ TypeError str
+
 
 inferIndexType :: Expr a -> Expr a  -> State Scope InferredExpr
 inferIndexType arrExpr indexExpr = do
