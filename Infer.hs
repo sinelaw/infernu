@@ -22,11 +22,11 @@ import Types
 --import Control.Error
 import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
 import Data.Either(isLeft, lefts)
+import Control.Monad(join)
 import Control.Monad.State(State, runState, forM, get, put)
 import Data.Traversable(Traversable(..))
 import qualified Data.Map.Lazy as Map
 import Prelude hiding (foldr, mapM)
-import Control.Monad()
 
 fromRight :: Show a => Either a b -> b
 fromRight (Right x) = x
@@ -343,13 +343,10 @@ inferPropertyType :: Expr a -> String -> State Scope InferredExpr
 inferPropertyType objExpr propName =
     do inferredObjExpr <- inferType objExpr
        let newBody = Property inferredObjExpr propName
-           objType = getExprType inferredObjExpr
+           objType = join . fmap (`getObjPropertyType` propName) . getExprType $ inferredObjExpr
        case objType of
-         Nothing -> return . makeError newBody $ "failed inferring object type"
-         Just objType' ->
-           case getObjPropertyType objType' propName of
-                Nothing -> return . makeError newBody $ ("object type has no property named '" ++ propName ++ "'")
-                Just propType' -> return $ simply propType' newBody
+         Nothing -> return . makeError newBody $ ("object type has no property named '" ++ propName ++ "'")
+         Just propType' -> return $ simply propType' newBody
 
 inferCallType :: Expr a -> [Expr a] -> State Scope InferredExpr
 inferCallType callee args = do
