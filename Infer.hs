@@ -20,14 +20,10 @@ import Types
 -- * don't allow assigning to function args? (lint issue only)
 
 --import Control.Error
-import Debug.Trace
-import Data.List(intersperse)
 import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
 import Data.Either(isLeft, lefts)
-import Text.PrettyPrint.GenericPretty(Generic)
 import Control.Monad.State(State, runState, forM, get, put)
 import Data.Traversable(Traversable(..))
-import Data.Foldable(Foldable(..))
 import qualified Data.Map.Lazy as Map
 import Prelude hiding (foldr, mapM)
 import Control.Monad()
@@ -164,7 +160,10 @@ resolveType t = do
                         else Just $ TCons consName (map fromJust substTS)
   return . fmap fromType . subst' $ toType t
 
+ok :: Monad m => b -> m (Either a b)
 ok st' = return $ Right st'
+
+err :: Monad m => b -> a -> m (Either (a, b) c)
 err st' e = return $ Left (e, st')
 
 
@@ -333,7 +332,7 @@ inferAssignType dest src = do
         infer' = do
           varType <- coerceTypes destType srcType
           case varType of 
-            Left err -> return . makeError' newBody $ err
+            Left err' -> return . makeError' newBody $ err'
             Right varType' -> return $ simply varType' newBody
     case exprBody inferredDest of
       Var _ -> infer'
@@ -367,8 +366,9 @@ inferCallType callee args = do
            then return . makeError newBody $ "couldn't infer arg types in call expression"
            else do funcType' <- coerceTypes t (JSFunc (map fromJust argTypes) callResultType)
                    case funcType' of
-                     Left (TypeError e) -> return $ makeError newBody e
                      Right (JSFunc _ returnType') -> return $ simply returnType' newBody
+                     Left (TypeError e) -> return $ makeError newBody e
+                     _ -> return . makeError newBody $ "couldn't infer arg types in call expression"
   
 inferVarType :: String -> State Scope InferredExpr
 inferVarType name = do
