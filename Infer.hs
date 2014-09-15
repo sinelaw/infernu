@@ -169,72 +169,80 @@ err st' e = return $ Left (e, st')
 
 
 inferStatement ::  Statement (Expr a) -> State Scope InferredStatement
-inferStatement st = do
+inferStatement st =
   case st of
     Empty -> ok Empty
-
     Expression expr -> inferExprStatement expr
-            
     Block xs -> inferBlockStatement xs
+    IfThenElse expr stThen stElse -> inferIfThenElse  expr stThen stElse 
+    Return Nothing -> inferReturnNothing
+    Return (Just expr) -> inferReturnExpr expr
+    While expr stWhile -> inferWhile expr stWhile
+    VarDecl name -> inferVarDecl name
 
-    IfThenElse expr stThen stElse ->
-        do inferredExpr <- inferType expr
-           stThen' <- inferStatement stThen
-           stElse' <- inferStatement stElse
-           let stThen'' = getInferredStatement stThen'
-               stElse'' = getInferredStatement stElse'
-               newSt = IfThenElse inferredExpr stThen'' stElse''
-           case getExprResult inferredExpr of
-             Left e -> err newSt e
-             Right t -> 
-                 do coercedPredType <- coerceTypes t JSBoolean
-                    case (coercedPredType, stThen' , stElse') of
-                      (Right _, Right _, Right _) -> ok newSt
-                      _ -> err newSt $ TypeError "error in if-then-else"
+inferVarDecl :: String -> State Scope InferredStatement
+inferVarDecl name =         
+    do updatedVarScope <- intrVars [name]
+       scope <- get
+       put $ scope { varScope = updatedVarScope }
+       ok $ VarDecl name
 
-    Return Nothing -> 
-        do returnT <- getFuncReturnType
-           case returnT of
-             Nothing -> trySetReturnType JSUndefined
-             Just returnT' -> 
-                 do t <- coerceTypes returnT' JSUndefined
-                    case t of
-                      Left e -> err newSt e
-                      Right t' -> trySetReturnType t'
+inferWhile :: Expr a -> Statement (Expr a) -> State Scope InferredStatement
+inferWhile expr stWhile =
+    do inferredExpr <- inferType expr
+       inferredStWhile <- inferStatement stWhile
+       let inferredStWhile' = getInferredStatement inferredStWhile
+           newSt = While inferredExpr inferredStWhile'
+       case getExprResult inferredExpr of
+         Left e -> err newSt e
+         Right t -> 
+             do coercedPredType <- coerceTypes t JSBoolean
+                case (coercedPredType, inferredStWhile) of 
+                  (Right _, Right _) -> ok newSt
+                  _ -> err newSt $ TypeError "error in while statment"
 
-        where newSt = Return Nothing
-              trySetReturnType t = do
-               returnT' <- setFuncReturnType t
-               case returnT' of
-                 Nothing -> ok newSt
-                 Just e -> err newSt e
+inferReturnExpr :: Expr a -> State Scope InferredStatement
+inferReturnExpr expr =
+    do inferredExpr <- inferReturnType expr
+       let newSt = Return $ Just inferredExpr
+       case getExprResult inferredExpr of
+         Left e -> err newSt e
+         Right _ -> ok newSt
 
 
-    Return (Just expr) -> 
-        do inferredExpr <- inferReturnType expr
-           let newSt = Return $ Just inferredExpr
-           case getExprResult inferredExpr of
-             Left e -> err newSt e
-             Right _ -> ok newSt
+inferReturnNothing :: State Scope InferredStatement
+inferReturnNothing = 
+    do returnT <- getFuncReturnType
+       case returnT of
+         Nothing -> trySetReturnType JSUndefined
+         Just returnT' -> 
+             do t <- coerceTypes returnT' JSUndefined
+                case t of
+                  Left e -> err newSt e
+                  Right t' -> trySetReturnType t'
 
-    While expr stWhile ->
-        do inferredExpr <- inferType expr
-           inferredStWhile <- inferStatement stWhile
-           let inferredStWhile' = getInferredStatement inferredStWhile
-               newSt = While inferredExpr inferredStWhile'
-           case getExprResult inferredExpr of
-             Left e -> err newSt e
-             Right t -> 
-                 do coercedPredType <- coerceTypes t JSBoolean
-                    case (coercedPredType, inferredStWhile) of 
-                      (Right _, Right _) -> ok newSt
-                      _ -> err newSt $ TypeError "error in while statment"
+    where newSt = Return Nothing
+          trySetReturnType t = do
+           returnT' <- setFuncReturnType t
+           case returnT' of
+             Nothing -> ok newSt
+             Just e -> err newSt e
 
-    VarDecl name ->
-        do updatedVarScope <- intrVars [name]
-           scope <- get
-           put $ scope { varScope = updatedVarScope }
-           ok $ VarDecl name
+inferIfThenElse :: Expr a -> Statement (Expr a) -> Statement (Expr a) -> State Scope InferredStatement
+inferIfThenElse expr stThen stElse = 
+    do inferredExpr <- inferType expr
+       stThen' <- inferStatement stThen
+       stElse' <- inferStatement stElse
+       let stThen'' = getInferredStatement stThen'
+           stElse'' = getInferredStatement stElse'
+           newSt = IfThenElse inferredExpr stThen'' stElse''
+       case getExprResult inferredExpr of
+         Left e -> err newSt e
+         Right t -> 
+             do coercedPredType <- coerceTypes t JSBoolean
+                case (coercedPredType, stThen' , stElse') of
+                  (Right _, Right _, Right _) -> ok newSt
+                  _ -> err newSt $ TypeError "error in if-then-else"
 
 inferExprStatement :: Expr a -> State Scope InferredStatement
 inferExprStatement expr = 
@@ -400,9 +408,9 @@ inferFuncType name argNames exprs =
        scope <- get
        -- infer the statements that make up this function
        let (inferredStatments', Scope typeScope'' _ funcScope'') = 
-               flip runState (scope { funcScope = Just funcScope', varScope = argScope }) 
+               flip runState scope { funcScope = Just funcScope', varScope = argScope }
                     $ forM exprs inferStatement
-           inferredStatments = (map getInferredStatement inferredStatments')
+           inferredStatments = map getInferredStatement inferredStatments'
        -- update scope with type/unification changes from the statements' processing
        put $ scope { typeScope = typeScope'' }
        let newBody = LitFunc name argNames inferredStatments
