@@ -3,6 +3,7 @@ module Main where
 import System.Environment(getArgs)
 import Text.PrettyPrint.GenericPretty(pp)
 import Control.Monad.State(runState)
+import Control.Monad.Trans.Either(runEitherT)
 import Data.Maybe(fromJust)
 import Control.Arrow((***))
 
@@ -89,21 +90,23 @@ fromProp (ES3.PropString _ x) = x
 fromProp (ES3.PropNum _ x) = show x
 
 
-printInferredExprType :: InferredResult -> String
-printInferredExprType (Right t) = incomment $ toJsDoc t
-printInferredExprType (Left x) = incomment $ show x
+-- printInferredExprType :: Either TypeError InferredExpr -> String
+-- printInferredExprType (Right t) = incomment . toJsDoc . exprData $ t
+-- printInferredExprType (Left x) = incomment . show $ x
 
-printType :: (InferredStatement, a) -> IO ()
-printType ex' = putStrLn $ toJsSt printInferredExprType 0 . getInferredStatement . fst $ ex'
+printType :: InferredStatement -> IO ()
+printType stmt = putStrLn $ toJsSt (incomment . toJsDoc) 0 stmt
 
 main = do
   args <- getArgs
   let arg = head args
   js <- ES3Parser.parseFromFile arg 
   let stmts = map fromStatement $ ES3.unJavaScript js
-  let inf = runState (inferStatement . flattenBlocks . Block $ stmts) emptyScope
+  let (inf, state) = runState (runEitherT . inferStatement . flattenBlocks . Block $ stmts) emptyScope
   pp inf
-  printType inf
+  case inf of
+    Left err -> putStrLn $ show err
+    Right inf' -> printType inf'
 --  toJsSt $ fst inf
 
 

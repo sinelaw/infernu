@@ -42,15 +42,13 @@ compose m2 m1 = Map.union merged m2
           f _ (TVar name') = safeLookup name' m2
           f _ t = t
 
-type Error = String
-
-extend :: Eq a => TSubst a -> Name -> Type a -> Either Error (TSubst a)
+extend :: Eq a => TSubst a -> Name -> Type a -> Either TypeError (TSubst a)
 extend m name t
     | TVar name == t = Right m
-    | name `elem` tvarsIn t = Left "occurs check failed"
+    | name `elem` tvarsIn t = Left $ TypeError "occurs check failed"
     | otherwise = Right $ Map.insert name t m
 
-unify :: Eq a => TSubst a -> Type a -> Type a -> Either Error (TSubst a)
+unify :: Eq a => TSubst a -> Type a -> Type a -> Either TypeError (TSubst a)
 unify m (TVar name) t = 
     if lookedUpType == TVar name
     then extend m name substType
@@ -62,9 +60,9 @@ unify m t1@(TCons _ _) t2@(TVar _) = unify m t2 t1
 unify m (TCons consName1 ts1) (TCons consName2 ts2) =
     if consName1 == consName2
     then unifyl m (zip ts1 ts2)
-    else Left "type mismatch"
+    else Left  $ TypeError "type mismatch"
 
-unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either Error (TSubst a)
+unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either TypeError (TSubst a)
 unifyl m types = foldr unify' (Right m) types
     where unify' (t1, t2) (Right m') = unify m' t1 t2
           unify' _ (Left e) = Left e
