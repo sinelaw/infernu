@@ -28,7 +28,7 @@ toJsSt aToJs tabAmount st = let tab = makeTab tabAmount in
     (tab ++) . (++ ";") $ case st of 
       Empty -> ""
       Expression e -> toJs' aToJs tabAmount e
-      Return e -> "return" ++ maybe "" (\x -> " " ++ toJs' aToJs tabAmount x) e
+      Return e -> maybe "" exprAToJs e ++ "return" ++ maybe "" (\x -> " " ++ toJs' aToJs tabAmount x) e
       IfThenElse expr stThen stElse -> 
           concat [ "if (" 
                  , toJs' aToJs tabAmount expr
@@ -45,7 +45,7 @@ toJsSt aToJs tabAmount st = let tab = makeTab tabAmount in
                                 , tab, "}" ]
       Block stmts -> "{" ++ concatMap toJsSt' stmts ++ tab ++ "}"
     where toJsSt' = toJsSt aToJs (tabAmount + 1)  
---      _ -> "statement..." -- todo
+          exprAToJs (Expr _ a) = aToJs a ++ makeTab tabAmount
 
 toJs' :: (a -> String) -> Int -> Expr a -> String
 toJs' aToJs tabAmount (Expr body a) = let tab = makeTab tabAmount in

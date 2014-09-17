@@ -2,7 +2,7 @@ module Main where
 
 import System.Environment(getArgs)
 import Text.PrettyPrint.GenericPretty(pp, Out(..))
-import Control.Monad.State(runState)
+import Control.Monad.State(evalState)
 import Control.Monad.Trans.Either(runEitherT)
 import Control.Arrow((***))
 
