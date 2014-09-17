@@ -25,13 +25,15 @@ import Types
 
 --import Control.Error
 import Data.Functor((<$>))
+import Data.Functor.Identity(Identity(..))
 import Data.Maybe(fromJust) --, fromMaybe)
-import Control.Monad.State(State, runState, forM, get, put)
+import Control.Monad.State(State, runState, get, put)
 import Control.Monad.Trans(lift)
 import Control.Monad.Trans.Either(EitherT(..), left)
-import Data.Traversable(Traversable(..))
+import Data.Traversable(Traversable(..), forM, mapM)
+import Data.Foldable(toList)
 import qualified Data.Map.Lazy as Map
-import Prelude hiding (foldr, mapM)
+import Prelude hiding (foldr, mapM, sequence)
 
 type InferredStatement = Statement InferredExpr
 type InferredExpr = Expr JSType
@@ -44,11 +46,7 @@ getVarType scope name = case lookup name (vars scope) of
                        Nothing -> getVarType (parent scope) name
                        Just t -> Just t
 
-getVars :: VarScope -> [(String, JSType)]
-getVars Global = []
-getVars scope = vars scope
-
-intrVars :: [String] -> State Scope VarScope
+intrVars :: Traversable t => t String -> State Scope (VarScope, t JSType)
 intrVars names = do
   scope <- get
   let varScope' = varScope scope
@@ -56,12 +54,13 @@ intrVars names = do
           varType' <-  allocTVar
           return (name, varType')
 
-  return VarScope { parent = varScope', vars = vs }
+  return (VarScope { parent = varScope', vars = toList vs }, fmap snd vs)
 
-updateVarScope :: VarScope -> State Scope ()
+updateVarScope :: VarScope -> State Scope [JSType]
 updateVarScope v = do
   scope <- get
   put $ scope { varScope = v }
+  return . map snd $ vars v
 
 allocTVar :: State Scope JSType
 allocTVar = do
@@ -127,9 +126,8 @@ inferStatement st =
 
 inferVarDecl :: String -> State Scope InferredStatement
 inferVarDecl name =         
-    do updatedVarScope <- intrVars [name]
-       scope <- get
-       put $ scope { varScope = updatedVarScope }
+    do (updatedVarScope, _) <- intrVars [name]
+       _ <- updateVarScope updatedVarScope
        return $ VarDecl name
 
 inferWhile :: Expr a -> Statement (Expr a) -> Inference InferredStatement
@@ -157,9 +155,7 @@ inferIfThenElse expr stThen stElse =
     do inferredExpr <- inferType expr
        stThen' <- inferStatement stThen
        stElse' <- inferStatement stElse
-       let stThen'' = stThen'
-           stElse'' = stElse'
-           newSt = IfThenElse inferredExpr stThen'' stElse''
+       let newSt = IfThenElse inferredExpr stThen' stElse'
        _ <- coerceTypes (exprData inferredExpr) JSBoolean
        return newSt
 
@@ -266,14 +262,14 @@ inferFuncType name argNames exprs =
        -- if the function has a name, introduce it as a variable to the var context before the argument names
        funcType <- 
            case name of
-             Just x -> do varScope' <- lift $ intrVars [x]
-                          lift $ updateVarScope varScope'
-                          return . snd . head . getVars $ varScope'
+             Just x -> 
+                 do (varScope', Identity varType) <- lift . intrVars $ Identity x
+                    _ <- lift $ updateVarScope varScope'
+                    return varType
              Nothing -> lift allocTVar
        -- allocate variables for the arguments
-       argScope <- lift $ intrVars argNames
+       (argScope, argTypes) <- lift $ intrVars argNames
        let funcScope' = FuncScope { returnType = returnType' }
-           argTypes = map snd $ getVars argScope
        scope <- get
        -- infer the statements that make up this function
        let (inferredStatments, Scope typeScope'' _ updatedFuncScope) = 
