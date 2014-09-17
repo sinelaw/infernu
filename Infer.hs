@@ -10,6 +10,10 @@ import Types
 --import Pretty
 
 -- TODO:
+--
+-- * generalize funcs/variables (without allowing incompatible assignments!)
+-- 
+-- * change pretty printer to annotate original source instead of printing AST from scratch
 -- 
 -- * infer record types by their usage in a function
 -- 
