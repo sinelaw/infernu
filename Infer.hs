@@ -1,6 +1,10 @@
-{-# LANGUAGE DeriveGeneric, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-
-module Infer where
+module Infer(
+InferredStatement,
+InferredExpr,
+inferStatement,
+inferType,
+emptyScope
+) where
 
 import Types
 --import Pretty
@@ -20,12 +24,9 @@ import Types
 -- * don't allow assigning to function args? (lint issue only)
 
 --import Control.Error
-import Data.Maybe(fromJust, isJust, isNothing) --, fromMaybe)
-import Data.Either(isLeft, lefts)
-import Control.Monad(join)
+import Data.Maybe(fromJust) --, fromMaybe)
 import Control.Monad.State(State, runState, forM, get, put)
 import Control.Monad.Trans(lift)
-import Control.Monad.Trans.Maybe(MaybeT(..))
 import Control.Monad.Trans.Either(EitherT(..), left)
 import Data.Traversable(Traversable(..))
 import qualified Data.Map.Lazy as Map
@@ -33,11 +34,6 @@ import Prelude hiding (foldr, mapM)
 
 type InferredStatement = Statement InferredExpr
 type InferredExpr = Expr JSType
-
-
-fromRight :: Show a => Either a b -> b
-fromRight (Right x) = x
-fromRight (Left x) = error $ "expected: Right _, got: Left " ++ show x
 
 -- getVarType = bad name, because it isn't = lookup name . getVars
 getVarType :: VarScope -> String -> Maybe JSType
@@ -60,32 +56,21 @@ intrVars names = do
 
   return VarScope { parent = varScope', vars = vs }
 
-intrVarWithType :: String -> JSType -> State Scope VarScope
-intrVarWithType name t = do
-  scope <- get
-  let varScope' = varScope scope
-  return VarScope { parent = varScope', vars = (name, t) : getVars varScope' }
-
 
 updateVarScope :: VarScope -> State Scope ()
 updateVarScope v = do
   scope <- get
   put $ scope { varScope = v }
 
-allocTVar' :: TypeScope -> (JSType, TypeScope)
-allocTVar' tscope = (JSTVar allocedNum, updatedScope)
-    where updatedScope = tscope { maxNum = allocedNum }
-          allocedNum = maxNum tscope + 1
-
 
 allocTVar :: State Scope JSType
 allocTVar = do
   scope <- get
   let typeScope' = typeScope scope
-      (varType', typeScope'') = allocTVar' typeScope'
-  put $ scope { typeScope = typeScope'' }
-  return varType'
-
+      updatedScope = typeScope' { maxNum = allocedNum }
+      allocedNum = maxNum typeScope' + 1
+  put $ scope { typeScope = updatedScope }
+  return $ JSTVar allocedNum
 
 emptyTypeScope :: TypeScope
 emptyTypeScope = TypeScope Map.empty 0
@@ -100,7 +85,7 @@ exprBody :: Expr t -> Body (Expr t)
 exprBody (Expr b _) = b
 
 toEither :: err -> Maybe a -> Either err a
-toEither err Nothing = Left err
+toEither e Nothing = Left e
 toEither _ (Just x) = Right x
 
 getFuncScope :: Scope -> Either TypeError FuncScope
@@ -132,15 +117,10 @@ resolveType ts t = fromType . subst' $ toType t
         subst' t' = case substituteType tsubst t' of
                       t''@(TVar _) -> if t' == t'' then t'
                                       else subst' t''
-                      TCons consName ts -> 
-                          let substTS = map subst' ts in
+                      TCons consName ts' -> 
+                          let substTS = map subst' ts' in
                           TCons consName substTS
 
-
---ok = return
-
-err :: Monad m => b -> a -> m (Either (a, b) c)
-err st' e = return $ Left (e, st')
 
 
 inferStatement ::  Statement (Expr a) -> EitherT TypeError (State Scope) InferredStatement
@@ -167,7 +147,7 @@ inferWhile expr stWhile =
     do inferredExpr <- inferType expr
        inferredStWhile <- inferStatement stWhile
        let newSt = While inferredExpr inferredStWhile
-       coerceTypes (exprData inferredExpr) JSBoolean
+       _ <- coerceTypes (exprData inferredExpr) JSBoolean
        return newSt
 
 inferReturnExpr :: Expr a -> EitherT TypeError (State Scope) InferredStatement
@@ -190,7 +170,7 @@ inferIfThenElse expr stThen stElse =
        let stThen'' = stThen'
            stElse'' = stElse'
            newSt = IfThenElse inferredExpr stThen'' stElse''
-       coercedPredType <- coerceTypes (exprData inferredExpr) JSBoolean
+       _ <- coerceTypes (exprData inferredExpr) JSBoolean
        return newSt
 
 inferExprStatement :: Expr a -> EitherT TypeError (State Scope) InferredStatement
@@ -228,23 +208,12 @@ inferType' (Expr body _) =
   where simpleType t body' = return $ Expr body' t
 
         
-simply :: t -> Body (Expr (Either a t)) -> Expr (Either a t)
-simply t b = Expr b (Right t)
-
-makeError' :: Body (Expr (Either a b)) -> a -> Expr (Either a b)
-makeError' b typeError = Expr b (Left typeError)
-
-makeError :: Body (Expr (Either TypeError b)) -> String -> Expr (Either TypeError b)
-makeError b str = makeError' b $ TypeError str
-
-
 inferIndexType :: Expr a -> Expr a  -> EitherT TypeError (State Scope) InferredExpr
 inferIndexType arrExpr indexExpr = do
   inferredArrExpr <- inferType arrExpr
   inferredIndexExpr <- inferType indexExpr
   let newBody = Index inferredArrExpr inferredIndexExpr
       Expr _ (JSArray elemType) = inferredArrExpr
-      indexType = inferredIndexExpr
   return $ Expr newBody elemType
 
 inferAssignType :: Expr a -> Expr a -> EitherT TypeError (State Scope) InferredExpr
@@ -295,11 +264,11 @@ inferArrayType exprs =
        let newBody = LitArray inferredExprs
        case inferredExprs of
          [] -> do elemType <- lift allocTVar
-                  return $ Expr (LitArray inferredExprs) (JSArray elemType)
+                  return $ Expr newBody (JSArray elemType)
          (x:xs) -> do
            let headElemType = exprData x
-           forM (map exprData inferredExprs) (coerceTypes headElemType)
-           return $ Expr (LitArray inferredExprs) (JSArray headElemType)
+           _ <- forM (map exprData xs) (coerceTypes headElemType)
+           return $ Expr newBody (JSArray headElemType)
 
 inferFuncType :: Maybe String -> [String] -> [Statement (Expr a)] -> EitherT TypeError (State Scope) InferredExpr
 inferFuncType name argNames exprs =
@@ -332,9 +301,9 @@ inferFuncType name argNames exprs =
 
 inferReturnType ::  Expr a -> EitherT TypeError (State Scope) InferredExpr
 inferReturnType expr =
-    do e'@(Expr newBody retType) <- inferType expr
+    do e'@(Expr _ retType) <- inferType expr
        curReturnType <- getFuncReturnType
-       t <- coerceTypes retType curReturnType
+       _ <- coerceTypes retType curReturnType
        return e'
  
 inferObjectType :: [(String, Expr a)] -> EitherT TypeError (State Scope) InferredExpr

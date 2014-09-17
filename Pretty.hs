@@ -1,28 +1,10 @@
 module Pretty where
 
-import qualified Data.Map.Lazy as Map
-import Data.Traversable(traverse)
-import Data.List(intersperse)
-import Text.PrettyPrint.GenericPretty(Generic, Out(..), pp)
-import Control.Monad.State.Lazy(State(..))
 import Data.Maybe(fromMaybe)
 import Control.Arrow(second)
 
 import Types
-import Infer
 
-instance (Out k, Out v) => Out (Map.Map k v) where
-    doc m = doc $ Map.assocs m
-    docPrec _ = doc
-
-instance (Out a) => Out (Body a)
-instance (Out a) => Out (Expr a)
-instance Out TypeError
-instance Out VarScope
-instance Out TypeScope
-instance Out FuncScope
-instance Out Scope
-instance (Out a) => Out (Statement a)
 
 commafy :: [String] -> String
 commafy [] = []
@@ -69,15 +51,15 @@ toJs' :: (a -> String) -> Int -> Expr a -> String
 toJs' aToJs tabAmount (Expr body a) = let tab = makeTab tabAmount in
     aToJs a ++ case body of
       Assign target src -> toJs'' target ++ " = " ++ toJs'' src
-      Call callee args -> toJs'' callee ++ "(" ++ (commafy $ map toJs'' args) ++ ")"
+      Call callee args -> toJs'' callee ++ "(" ++ commafy (map toJs'' args) ++ ")"
       Index arr idx -> toJs'' arr ++ "[" ++ toJs'' idx ++ "]"
-      LitArray xs -> "[" ++ (commafy $ map toJs'' xs) ++ "]"
+      LitArray xs -> "[" ++ commafy (map toJs'' xs) ++ "]"
       LitBoolean x -> if x then "true" else "false"
       LitFunc name args exprs -> "function " ++ fromMaybe "" name ++ "(" ++ argsJs ++ ") {" ++ statements ++ tab ++ "}"
           where argsJs = commafy args
                 statements = concatMap (toJsSt aToJs (tabAmount + 1)) exprs
       LitNumber x -> toJsNumberStr x
-      LitObject xs -> "{ " ++ (commafy $ map (\(name, val) -> name ++ ": " ++ toJs'' val) xs) ++ " }"
+      LitObject xs -> "{ " ++ commafy (map (\(name, val) -> name ++ ": " ++ toJs'' val) xs) ++ " }"
       LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
       LitString s -> "'" ++ s ++ "'" -- todo escape
       Property obj name -> toJs'' obj ++ "." ++ name
@@ -85,9 +67,9 @@ toJs' aToJs tabAmount (Expr body a) = let tab = makeTab tabAmount in
     where toJs'' = toJs' aToJs (tabAmount + 1)
 
 toJsNumberStr :: (Show a, RealFrac a) => a -> String
-toJsNumberStr x = if (fromIntegral truncated) == x 
-                  then show truncated
-                  else show x
+toJsNumberStr x = show $ if fromIntegral truncated == x 
+                  then truncated
+                  else x
     where truncated = truncate x :: Integer
 
 toJsDoc :: JSType -> String
@@ -120,13 +102,13 @@ flattenBlocks' (Expr body x) = Expr b x
                 Assign e1 e2 -> Assign (flattenBlocks' e1) (flattenBlocks' e2)
                 Property e1 name -> Property (flattenBlocks' e1) name
                 Index e1 e2 -> Index (flattenBlocks' e1) (flattenBlocks' e2)
-                x -> x
+                body' -> body'
 
 flattenBlocks :: Statement (Expr a) -> Statement (Expr a)
 flattenBlocks (Block xs) = case map flattenBlocks xs of
                              [] -> Empty
                              [x] -> x
-                             xs -> Block xs
+                             xs' -> Block xs'
 flattenBlocks (While expr stmt) = While (flattenBlocks' expr) (flattenBlocks stmt)
 flattenBlocks (IfThenElse expr s1 s2) = IfThenElse (flattenBlocks' expr) (flattenBlocks s1) (flattenBlocks s2)
 flattenBlocks x = x

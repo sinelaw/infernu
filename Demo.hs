@@ -1,10 +1,9 @@
 module Main where
 
 import System.Environment(getArgs)
-import Text.PrettyPrint.GenericPretty(pp)
+import Text.PrettyPrint.GenericPretty(pp, Out(..))
 import Control.Monad.State(runState)
 import Control.Monad.Trans.Either(runEitherT)
-import Data.Maybe(fromJust)
 import Control.Arrow((***))
 
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
@@ -16,9 +15,14 @@ import Pretty
 import Types
 
 -- ------------------------------------------------------------------------
---data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
+
+ex :: Body (Expr ()) -> Expr ()
 ex expr = Expr expr ()
+
+
+st :: Body (Expr ()) -> Statement (Expr ())
 st expr = Expression $ ex expr
+
 
 fromStatement :: ES3.Statement a -> Statement (Expr ())
 fromStatement (ES3.BlockStmt _ stmts) = Block $ map fromStatement stmts
@@ -97,6 +101,12 @@ fromProp (ES3.PropNum _ x) = show x
 printType :: InferredStatement -> IO ()
 printType stmt = putStrLn $ toJsSt (incomment . toJsDoc) 0 stmt
 
+instance (Out a) => Out (Body a)
+instance (Out a) => Out (Expr a)
+instance (Out a) => Out (Statement a)
+instance Out TypeError
+
+main :: IO ()
 main = do
   args <- getArgs
   let arg = head args
@@ -104,10 +114,10 @@ main = do
 --  putStrLn . show $ js
   let stmts = map fromStatement $ ES3.unJavaScript js
 --  pp $ Block . flattenBlocks $ stmts
-  let (inf, state) = runState (runEitherT . inferStatement . flattenBlocks . Block $ stmts) emptyScope
+  let inf = evalState (runEitherT . inferStatement . flattenBlocks . Block $ stmts) emptyScope
   pp inf
   case inf of
-    Left err -> putStrLn $ show err
+    Left err' -> print err'
     Right inf' -> printType inf'
 --  toJsSt $ fst inf
 

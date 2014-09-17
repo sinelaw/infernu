@@ -63,7 +63,7 @@ unify m (TCons consName1 ts1) (TCons consName2 ts2) =
     else Left  $ TypeError "type mismatch"
 
 unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either TypeError (TSubst a)
-unifyl m types = foldr unify' (Right m) types
+unifyl m = foldr unify' (Right m)
     where unify' (t1, t2) (Right m') = unify m' t1 t2
           unify' _ (Left e) = Left e
 
