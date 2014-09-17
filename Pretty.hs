@@ -67,9 +67,9 @@ toJs' aToJs tabAmount (Expr body a) = let tab = makeTab tabAmount in
     where toJs'' = toJs' aToJs (tabAmount + 1)
 
 toJsNumberStr :: (Show a, RealFrac a) => a -> String
-toJsNumberStr x = show $ if fromIntegral truncated == x 
-                  then truncated
-                  else x
+toJsNumberStr x = if fromIntegral truncated == x 
+                  then show $ truncated
+                  else show $ x
     where truncated = truncate x :: Integer
 
 toJsDoc :: JSType -> String
