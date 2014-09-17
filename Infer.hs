@@ -24,6 +24,7 @@ import Types
 -- * don't allow assigning to function args? (lint issue only)
 
 --import Control.Error
+import Data.Functor((<$>))
 import Data.Maybe(fromJust) --, fromMaybe)
 import Control.Monad.State(State, runState, forM, get, put)
 import Control.Monad.Trans(lift)
@@ -34,6 +35,7 @@ import Prelude hiding (foldr, mapM)
 
 type InferredStatement = Statement InferredExpr
 type InferredExpr = Expr JSType
+type Inference a = EitherT TypeError (State Scope) a
 
 -- getVarType = bad name, because it isn't = lookup name . getVars
 getVarType :: VarScope -> String -> Maybe JSType
@@ -56,12 +58,10 @@ intrVars names = do
 
   return VarScope { parent = varScope', vars = vs }
 
-
 updateVarScope :: VarScope -> State Scope ()
 updateVarScope v = do
   scope <- get
   put $ scope { varScope = v }
-
 
 allocTVar :: State Scope JSType
 allocTVar = do
@@ -78,31 +78,21 @@ emptyTypeScope = TypeScope Map.empty 0
 emptyScope :: Scope
 emptyScope = Scope { typeScope = emptyTypeScope, funcScope = Nothing, varScope = Global }
 
-exprData :: Expr t -> t
-exprData (Expr _ t) = t
-
-exprBody :: Expr t -> Body (Expr t)
-exprBody (Expr b _) = b
-
-toEither :: err -> Maybe a -> Either err a
-toEither e Nothing = Left e
-toEither _ (Just x) = Right x
-
 getFuncScope :: Scope -> Either TypeError FuncScope
-getFuncScope = toEither (TypeError "Not in a function scope") . funcScope
+getFuncScope = maybe (Left $ TypeError "Not in a function scope") Right . funcScope
 
-getFuncReturnType :: EitherT TypeError (State Scope) JSType
+getFuncReturnType :: Inference JSType
 getFuncReturnType = do
-  funcScope' <- EitherT $ fmap getFuncScope get
+  funcScope' <- EitherT $ getFuncScope <$> get
   return $ returnType funcScope'
 
-setFuncReturnType :: JSType -> EitherT TypeError (State Scope) ()
+setFuncReturnType :: JSType -> Inference ()
 setFuncReturnType retType = do
   scope <- get
   funcScope' <- EitherT . return $ getFuncScope scope
   put $ scope { funcScope = Just $ funcScope' { returnType = retType } }
 
-coerceTypes :: JSType -> JSType -> EitherT TypeError (State Scope) JSType
+coerceTypes :: JSType -> JSType -> Inference JSType
 coerceTypes t u = do
   scope <- get
   let typeScope' = typeScope scope
@@ -123,7 +113,7 @@ resolveType ts t = fromType . subst' $ toType t
 
 
 
-inferStatement ::  Statement (Expr a) -> EitherT TypeError (State Scope) InferredStatement
+inferStatement ::  Statement (Expr a) -> Inference InferredStatement
 inferStatement st =
   case st of
     Empty -> return Empty
@@ -142,7 +132,7 @@ inferVarDecl name =
        put $ scope { varScope = updatedVarScope }
        return $ VarDecl name
 
-inferWhile :: Expr a -> Statement (Expr a) -> EitherT TypeError (State Scope) InferredStatement
+inferWhile :: Expr a -> Statement (Expr a) -> Inference InferredStatement
 inferWhile expr stWhile =
     do inferredExpr <- inferType expr
        inferredStWhile <- inferStatement stWhile
@@ -150,19 +140,19 @@ inferWhile expr stWhile =
        _ <- coerceTypes (exprData inferredExpr) JSBoolean
        return newSt
 
-inferReturnExpr :: Expr a -> EitherT TypeError (State Scope) InferredStatement
+inferReturnExpr :: Expr a -> Inference InferredStatement
 inferReturnExpr expr =
     do inferredExpr <- inferReturnType expr
        return . Return $ Just inferredExpr
 
-inferReturnNothing :: EitherT TypeError (State Scope) InferredStatement
+inferReturnNothing :: Inference InferredStatement
 inferReturnNothing = 
     do returnT <- getFuncReturnType
        t <- coerceTypes returnT JSUndefined
        setFuncReturnType t
        return $ Return Nothing
 
-inferIfThenElse :: Expr a -> Statement (Expr a) -> Statement (Expr a) -> EitherT TypeError (State Scope) InferredStatement
+inferIfThenElse :: Expr a -> Statement (Expr a) -> Statement (Expr a) -> Inference InferredStatement
 inferIfThenElse expr stThen stElse = 
     do inferredExpr <- inferType expr
        stThen' <- inferStatement stThen
@@ -173,24 +163,24 @@ inferIfThenElse expr stThen stElse =
        _ <- coerceTypes (exprData inferredExpr) JSBoolean
        return newSt
 
-inferExprStatement :: Expr a -> EitherT TypeError (State Scope) InferredStatement
+inferExprStatement :: Expr a -> Inference InferredStatement
 inferExprStatement expr = 
     do inferredExpr <- inferType expr
        return $ Expression inferredExpr 
 
-inferBlockStatement :: [Statement (Expr a)] -> EitherT TypeError (State Scope) InferredStatement
+inferBlockStatement :: [Statement (Expr a)] -> Inference InferredStatement
 inferBlockStatement xs =
     do results <- mapM inferStatement xs
        return $ Block results
 
-inferType :: Expr a -> EitherT TypeError (State Scope) InferredExpr
+inferType :: Expr a -> Inference InferredExpr
 inferType e = do
   inferredExpr <- inferType' e
   scope <- lift get
   return $ fmap (resolveType $ typeScope scope) inferredExpr
   --resolve inferredExpr
 
-inferType' ::   Expr a -> EitherT TypeError (State Scope) InferredExpr
+inferType' ::   Expr a -> Inference InferredExpr
 inferType' (Expr body _) =
   case body of
     LitArray exprs -> inferArrayType exprs
@@ -208,7 +198,7 @@ inferType' (Expr body _) =
   where simpleType t body' = return $ Expr body' t
 
         
-inferIndexType :: Expr a -> Expr a  -> EitherT TypeError (State Scope) InferredExpr
+inferIndexType :: Expr a -> Expr a  -> Inference InferredExpr
 inferIndexType arrExpr indexExpr = do
   inferredArrExpr <- inferType arrExpr
   inferredIndexExpr <- inferType indexExpr
@@ -216,7 +206,7 @@ inferIndexType arrExpr indexExpr = do
       Expr _ (JSArray elemType) = inferredArrExpr
   return $ Expr newBody elemType
 
-inferAssignType :: Expr a -> Expr a -> EitherT TypeError (State Scope) InferredExpr
+inferAssignType :: Expr a -> Expr a -> Inference InferredExpr
 inferAssignType dest src = do
   inferredDest <- inferType dest
   inferredSrc <- inferType src
@@ -231,7 +221,7 @@ inferAssignType dest src = do
     Property _ _ -> infer' -- TODO update object type?
     _ -> left $ TypeError "Left-hand side of assignment is not an lvalue"
 
-inferPropertyType :: Expr a -> String -> EitherT TypeError (State Scope) InferredExpr
+inferPropertyType :: Expr a -> String -> Inference InferredExpr
 inferPropertyType objExpr propName =
     do inferredObjExpr <- inferType objExpr
        let newBody = Property inferredObjExpr propName
@@ -240,7 +230,7 @@ inferPropertyType objExpr propName =
          Nothing -> left $ TypeError ("object type has no property named '" ++ propName ++ "'")
          Just propType' -> return $ Expr newBody propType'
 
-inferCallType :: Expr a -> [Expr a] -> EitherT TypeError (State Scope) InferredExpr
+inferCallType :: Expr a -> [Expr a] -> Inference InferredExpr
 inferCallType callee args = do
   inferredCallee <- inferType callee
   inferredArgs <- mapM inferType args
@@ -250,7 +240,7 @@ inferCallType callee args = do
   JSFunc _ returnType' <- coerceTypes (exprData inferredCallee) (JSFunc argTypes callResultType)
   return $ Expr newBody returnType'
   
-inferVarType :: String -> EitherT TypeError (State Scope) InferredExpr
+inferVarType :: String -> Inference InferredExpr
 inferVarType name = do
   scope <- get
   let varType = getVarType (varScope scope) name
@@ -258,7 +248,7 @@ inferVarType name = do
     Nothing -> left . TypeError $ "undeclared variable: " ++ name
     Just varType' -> return $ Expr (Var name) varType'
 
-inferArrayType :: [Expr a] -> EitherT TypeError (State Scope) InferredExpr
+inferArrayType :: [Expr a] -> Inference InferredExpr
 inferArrayType exprs = 
     do inferredExprs <- forM exprs inferType
        let newBody = LitArray inferredExprs
@@ -270,7 +260,7 @@ inferArrayType exprs =
            _ <- forM (map exprData xs) (coerceTypes headElemType)
            return $ Expr newBody (JSArray headElemType)
 
-inferFuncType :: Maybe String -> [String] -> [Statement (Expr a)] -> EitherT TypeError (State Scope) InferredExpr
+inferFuncType :: Maybe String -> [String] -> [Statement (Expr a)] -> Inference InferredExpr
 inferFuncType name argNames exprs =
     do returnType' <- lift allocTVar
        -- if the function has a name, introduce it as a variable to the var context before the argument names
@@ -299,14 +289,14 @@ inferFuncType name argNames exprs =
        unifiedFuncType <- coerceTypes funcType . JSFunc argTypes $ unifiedReturnType
        return $ Expr newBody unifiedFuncType 
 
-inferReturnType ::  Expr a -> EitherT TypeError (State Scope) InferredExpr
+inferReturnType ::  Expr a -> Inference InferredExpr
 inferReturnType expr =
     do e'@(Expr _ retType) <- inferType expr
        curReturnType <- getFuncReturnType
        _ <- coerceTypes retType curReturnType
        return e'
  
-inferObjectType :: [(String, Expr a)] -> EitherT TypeError (State Scope) InferredExpr
+inferObjectType :: [(String, Expr a)] -> Inference InferredExpr
 inferObjectType props =
     do let propNames = map fst props
        let propExprs = map snd props

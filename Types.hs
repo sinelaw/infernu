@@ -165,7 +165,7 @@ data Statement expr = Empty
           deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 
-data Expr a = Expr (Body (Expr a)) a
+data Expr a = Expr { exprBody :: (Body (Expr a)), exprData :: a }
           deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 
