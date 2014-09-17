@@ -101,7 +101,9 @@ main = do
   args <- getArgs
   let arg = head args
   js <- ES3Parser.parseFromFile arg 
+--  putStrLn . show $ js
   let stmts = map fromStatement $ ES3.unJavaScript js
+--  pp $ Block . flattenBlocks $ stmts
   let (inf, state) = runState (runEitherT . inferStatement . flattenBlocks . Block $ stmts) emptyScope
   pp inf
   case inf of

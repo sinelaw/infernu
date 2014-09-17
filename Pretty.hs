@@ -6,6 +6,7 @@ import Data.List(intersperse)
 import Text.PrettyPrint.GenericPretty(Generic, Out(..), pp)
 import Control.Monad.State.Lazy(State(..))
 import Data.Maybe(fromMaybe)
+import Control.Arrow(second)
 
 import Types
 import Infer
@@ -108,11 +109,25 @@ toJsDoc (JSTVar name) = toStrName name
                    else ""
                                   
 
-flattenBlocks :: Statement a -> Statement a
-flattenBlocks (Block stmts) = case stmts of
+
+flattenBlocks' :: Expr a -> Expr a
+flattenBlocks' (Expr body x) = Expr b x 
+    where b = case body of
+                LitFunc name args stmts -> LitFunc name args $ map flattenBlocks stmts
+                LitArray exprs -> LitArray $ map flattenBlocks' exprs
+                LitObject props -> LitObject $ map (second flattenBlocks') props
+                Call expr exprs -> Call (flattenBlocks' expr) (map flattenBlocks' exprs)
+                Assign e1 e2 -> Assign (flattenBlocks' e1) (flattenBlocks' e2)
+                Property e1 name -> Property (flattenBlocks' e1) name
+                Index e1 e2 -> Index (flattenBlocks' e1) (flattenBlocks' e2)
+                x -> x
+
+flattenBlocks :: Statement (Expr a) -> Statement (Expr a)
+flattenBlocks (Block xs) = case map flattenBlocks xs of
                              [] -> Empty
-                             Block x : xs -> Block $ map flattenBlocks x ++ map flattenBlocks xs
-                             x:xs -> Block $ x : map flattenBlocks xs
+                             [x] -> x
+                             xs -> Block xs
+flattenBlocks (While expr stmt) = While (flattenBlocks' expr) (flattenBlocks stmt)
+flattenBlocks (IfThenElse expr s1 s2) = IfThenElse (flattenBlocks' expr) (flattenBlocks s1) (flattenBlocks s2)
 flattenBlocks x = x
-      
 
