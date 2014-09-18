@@ -19,7 +19,21 @@ data Type a = TVar Name
 
 instance Out a => Out (Type a)
 
-type TSubst a = Map.Map Name (Type a)
+-- type signature = type scheme
+-- page 172
+data TypeSig a = TypeSig [Name] (Type a)
+                 deriving (Show, Eq, Generic)
+                        
+
+type Subst a = Map.Map Name a
+
+type TSubst a = Subst (Type a)
+
+type TypeEnv a = Subst (TypeSig a)
+
+
+substFromList :: [(Name, a)] -> Subst a
+substFromList = Map.fromList
 
 -- page 164
 tvarsIn :: Type a -> [Name]
@@ -68,10 +82,6 @@ unifyl m = foldr unify' (Right m)
           unify' _ (Left e) = Left e
 
 
--- type signature = type scheme
--- page 172
-data TypeSig a = TypeSig [Name] (Type a)
-
 freeVariables :: TypeSig a -> [Name]
 freeVariables (TypeSig names t) = boundVars \\ names
     where boundVars = tvarsIn t
@@ -81,6 +91,16 @@ substitueTypeSig m (TypeSig names t) =
     TypeSig names $ substituteType (m `Map.difference` boundNames) t
     where boundNames = Map.fromList . zip names $ repeat ()
 
+freeVariablesTE :: TypeEnv a -> [Name]
+freeVariablesTE env = concat . map freeVariables . Map.elems $ env
+
+substituteTE :: TSubst a -> TypeEnv a -> TypeEnv a
+substituteTE tsubst env = Map.map (substitueTypeSig tsubst) env
+
+-- page 178
+newInstance :: [Name] -> TypeSig JSConsType -> Type JSConsType
+newInstance nameSupply (TypeSig varNames t) = substituteType subst t
+    where subst = substFromList . zip varNames $ map TVar nameSupply
 
 --------------------------------------------------------------------
 
@@ -178,7 +198,9 @@ data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType
                deriving (Show, Eq, Generic)
 
 
-data TypeScope = TypeScope { tVars :: TSubst JSConsType, maxNum :: Int }
+data TypeScope = TypeScope { tVars :: TSubst JSConsType
+                           , maxNum :: Int
+                           , tEnv :: TypeEnv JSConsType }
                deriving (Show, Eq, Generic)
 
 

@@ -76,10 +76,12 @@ allocTVar = do
   return $ JSTVar allocedNum
 
 emptyTypeScope :: TypeScope
-emptyTypeScope = TypeScope Map.empty 0
+emptyTypeScope = TypeScope { tVars = Map.empty, maxNum = 0, tEnv = Map.empty }
 
 emptyScope :: Scope
 emptyScope = Scope { typeScope = emptyTypeScope, funcScope = Nothing, varScope = Global }
+
+ 
 
 getFuncScope :: Scope -> Either TypeError FuncScope
 getFuncScope = maybe (Left $ TypeError "Not in a function scope") Right . funcScope
