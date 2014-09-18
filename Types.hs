@@ -29,7 +29,7 @@ type Subst a = Map.Map Name a
 
 type TSubst a = Subst (Type a)
 
-type TypeEnv a = Subst (TypeSig a)
+type TypeEnv a = Map.Map String (TypeSig a)
 
 
 substFromList :: [(Name, a)] -> Subst a
@@ -97,10 +97,6 @@ freeVariablesTE env = concat . map freeVariables . Map.elems $ env
 substituteTE :: TSubst a -> TypeEnv a -> TypeEnv a
 substituteTE tsubst env = Map.map (substitueTypeSig tsubst) env
 
--- page 178
-newInstance :: [Name] -> TypeSig JSConsType -> Type JSConsType
-newInstance nameSupply (TypeSig varNames t) = substituteType subst t
-    where subst = substFromList . zip varNames $ map TVar nameSupply
 
 --------------------------------------------------------------------
 
