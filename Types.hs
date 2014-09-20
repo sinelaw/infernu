@@ -20,6 +20,7 @@ data Type a = TVar Name
 instance Out a => Out (Type a)
 
 -- type signature = type scheme
+-- = forall (vars) . type
 -- page 172
 data TypeSig a = TypeSig [Name] (Type a)
                  deriving (Show, Eq, Generic)
@@ -27,10 +28,16 @@ data TypeSig a = TypeSig [Name] (Type a)
 
 type Subst a = Map.Map Name a
 
+-- TSubst = map tvarname -> type
+-- e.g. "a" = Bool -> Int
 type TSubst a = Subst (Type a)
 
+-- TypeEnv = map (value variable name) -> type sig
+-- e.g. "x" :: forall "a" "b". "a" -> "b" -> Bool
 type TypeEnv a = Map.Map String (TypeSig a)
 
+idSubst :: Subst a 
+idSubst = Map.empty
 
 substFromList :: [(Name, a)] -> Subst a
 substFromList = Map.fromList
@@ -81,11 +88,12 @@ unifyl m = foldr unify' (Right m)
     where unify' (t1, t2) (Right m') = unify m' t1 t2
           unify' _ (Left e) = Left e
 
-
+-- | Finds the free vars in a type signature, i.e. var names used in the type but not mentioned in the sig's bound names
 freeVariables :: TypeSig a -> [Name]
 freeVariables (TypeSig names t) = boundVars \\ names
     where boundVars = tvarsIn t
 
+-- | Performs substitution on a type signature, but ignoring the bound var names
 substitueTypeSig :: TSubst a -> TypeSig a -> TypeSig a
 substitueTypeSig m (TypeSig names t) =
     TypeSig names $ substituteType (m `Map.difference` boundNames) t
@@ -94,9 +102,12 @@ substitueTypeSig m (TypeSig names t) =
 freeVariablesTE :: TypeEnv a -> [Name]
 freeVariablesTE env = concat . map freeVariables . Map.elems $ env
 
+-- | Updates a type environment's type signatures using the given type substitution
 substituteTE :: TSubst a -> TypeEnv a -> TypeEnv a
 substituteTE tsubst env = Map.map (substitueTypeSig tsubst) env
 
+setTypeSig :: String -> TypeSig a -> TypeEnv a -> TypeEnv a
+setTypeSig = Map.insert
 
 --------------------------------------------------------------------
 
