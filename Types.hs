@@ -39,6 +39,9 @@ type TypeEnv a = Map.Map String (TypeSig a)
 idSubst :: Subst a 
 idSubst = Map.empty
 
+emptyTEnv :: TypeEnv a
+emptyTEnv = Map.empty
+
 substFromList :: [(Name, a)] -> Subst a
 substFromList = Map.fromList
 
@@ -63,13 +66,13 @@ compose m2 m1 = Map.union merged m2
           f _ (TVar name') = safeLookup name' m2
           f _ t = t
 
-extend :: Eq a => TSubst a -> Name -> Type a -> Either TypeError (TSubst a)
+extend :: Eq a => TSubst a -> Name -> Type a -> Either (TypeError a) (TSubst a)
 extend m name t
     | TVar name == t = Right m
-    | name `elem` tvarsIn t = Left $ TypeError "occurs check failed"
+    | name `elem` tvarsIn t = Left $ GenericTypeError "occurs check failed"
     | otherwise = Right $ Map.insert name t m
 
-unify :: Eq a => TSubst a -> Type a -> Type a -> Either TypeError (TSubst a)
+unify :: Eq a => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
 unify m (TVar name) t = 
     if lookedUpType == TVar name
     then extend m name substType
@@ -78,12 +81,12 @@ unify m (TVar name) t =
           substType = substituteType m t
 
 unify m t1@(TCons _ _) t2@(TVar _) = unify m t2 t1
-unify m (TCons consName1 ts1) (TCons consName2 ts2) =
+unify m t1@(TCons consName1 ts1) t2@(TCons consName2 ts2) =
     if consName1 == consName2
     then unifyl m (zip ts1 ts2)
-    else Left  $ TypeError "type mismatch"
+    else Left  $ TypeMismatch t1 t2
 
-unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either TypeError (TSubst a)
+unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either (TypeError a) (TSubst a)
 unifyl m = foldr unify' (Right m)
     where unify' (t1, t2) (Right m') = unify m' t1 t2
           unify' _ (Left e) = Left e
@@ -197,7 +200,7 @@ data Expr a = Expr { exprBody :: Body (Expr a), exprData :: a }
 
 
             
-data TypeError = TypeError String 
+data TypeError a = GenericTypeError String | TypeMismatch (Type a) (Type a)
                  deriving (Show, Eq, Generic)
 
 
