@@ -92,7 +92,8 @@ inferProperty expr propName = do
   propTypeName <- fresh
   let propType = JSTVar propTypeName
   (objType, subst) <- listenTSubst $ inferExpr expr
-  finalSubst <- runEither $ unify subst (toType objType) (toType $ JSObject [(propName, propType)])
+  subst' <- runEither $ unify subst (toType objType) (toType $ JSObject [(propName, propType)])
+  let finalSubst = subst' `compose` subst
   tellTSubst finalSubst
   return $ fromType . substituteType finalSubst . toType $ propType
 
@@ -104,15 +105,17 @@ inferIndex expr indexExpr = do
   s1 <- runEither $ unify rs (toType rt) (toType $ JSArray elemType)
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE s1) $ inferExpr indexExpr
   s2 <- runEither $ unify ls (toType lt) (toType JSNumber)
-  tellTSubst $ s2 `compose` ls `compose` s1 `compose` rs
-  return $ fromType . substituteType ls . toType $ elemType
+  let finalSubst = s2 `compose` ls `compose` s1 `compose` rs
+  tellTSubst finalSubst
+  return $ fromType . substituteType finalSubst . toType $ elemType
 
 inferAssign :: Expr a -> Expr a -> Infer JSType
 inferAssign lval rval = do
   (rt, rs) <- listenTSubst $ inferExpr lval
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE rs) $ inferExpr rval
-  finalSubst <- runEither $ unify ls (toType rt) (toType lt)
-  tellTSubst $ finalSubst `compose` ls `compose` rs
+  subst' <- runEither $ unify ls (toType rt) (toType lt)
+  let finalSubst = subst' `compose` ls `compose` rs
+  tellTSubst finalSubst
   return $ fromType . substituteType finalSubst . toType $ rt
 
 
@@ -165,3 +168,13 @@ inferArray exprs = do
   finalSubst <- foldM (unifyExprs' elemType) subst types
   tellTSubst finalSubst
   return $ JSArray (fromType . substituteType finalSubst $ toType elemType)
+
+
+
+----------------
+
+ex b = Expr b ()
+
+arrayTest = ex $ Index (ex $ LitArray [ex $ LitBoolean False, ex $ LitBoolean True]) (ex $ LitNumber 32)
+
+infArrayTest = runInfer $ inferExpr arrayTest
