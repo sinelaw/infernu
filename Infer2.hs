@@ -75,18 +75,18 @@ inferExprs' (ts, lastSub) argExpr = do
 inferExpr :: Expr a -> Infer JSType
 inferExpr (Expr body _) =
     case body of
+      -- todo other builtin types
+      --LitFunc name argNames stmts -> inferFunc name argNames stmts
+      Assign lval rval -> inferAssign lval rval
+      Call callee args -> inferCall callee args
+      Index expr indexExpr -> inferIndex expr indexExpr
+      LitArray exprs -> inferArray exprs
       LitBoolean _ -> return JSBoolean
+      LitNumber _ -> return JSNumber
       LitRegex _ -> return JSRegex
       LitString _ -> return JSString
-      LitNumber _ -> return JSNumber
-      -- todo other builtin types
-      Var name -> inferVar name
-      Call callee args -> inferCall callee args
-      --LitFunc name argNames stmts -> inferFunc name argNames stmts
-      LitArray exprs -> inferArray exprs
-      Assign lval rval -> inferAssign lval rval
       Property expr propName -> inferProperty expr propName
-      Index expr indexExpr -> inferIndex expr indexExpr
+      Var name -> inferVar name
 
 inferProperty :: Expr a -> String -> Infer JSType
 inferProperty expr propName = do
@@ -148,15 +148,15 @@ inferCall callee args = do
   return . fromType $ substituteType finalSubst (toType returnTVar)
 
 
--- inferFunc :: Maybe String -> [String] -> [Statement a] -> Infer JSType
--- inferFunc name argName stmts = do
---   funcTypeName <- fresh
---   tenv <- askTypeEnv  
---   let tenv' = case name of
---                 Nothing -> tenv -- anonymous function - doesn't introduce a new local name
---                 Just name' -> setTypeSig name' (TypeSig [] (TVar funcTypeName))
---   --(funcType, subst) <- inferExpr tenv' ....stmts....
---   return $ JSFunc 
+inferFunc :: Maybe String -> [String] -> [Statement a] -> Infer JSType
+inferFunc name argName stmts = do
+  funcTypeName <- fresh
+  tenv <- askTypeEnv  
+  let tenv' = case name of
+                Nothing -> tenv -- anonymous function - doesn't introduce a new local name
+                Just name' -> setTypeSig name' (TypeSig [] (TVar funcTypeName)) tenv
+  _ <- withTypeEnv (const tenv') $ forM stmts inferStatement
+  return $ JSFunc  
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
 unifyExprs' elemType lastSubst curType = runEither $ unify lastSubst (toType elemType) (toType curType)
@@ -171,6 +171,9 @@ inferArray exprs = do
   return $ JSArray (fromType . substituteType finalSubst $ toType elemType)
 
 
+inferStatement :: Statement (Expr a) -> Infer ()
+inferStatement Empty = return ()
+inferStatement (Expression expr) = inferExpr expr >> return ()
 
 ----------------
 
