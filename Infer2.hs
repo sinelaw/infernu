@@ -85,6 +85,7 @@ inferExpr (Expr body _) =
       LitArray exprs -> inferArray exprs
       Assign lval rval -> inferAssign lval rval
       Property expr propName -> inferProperty expr propName
+      Index expr indexExpr -> inferIndex expr indexExpr
 
 inferProperty :: Expr a -> String -> Infer JSType
 inferProperty expr propName = do
@@ -95,14 +96,24 @@ inferProperty expr propName = do
   tellTSubst finalSubst
   return $ fromType . substituteType finalSubst . toType $ propType
 
+inferIndex :: Expr a -> Expr a -> Infer JSType
+inferIndex expr indexExpr = do
+  elemTypeName <- fresh
+  let elemType = JSTVar elemTypeName
+  (rt, rs) <- listenTSubst $ inferExpr expr
+  s1 <- runEither $ unify rs (toType rt) (toType $ JSArray elemType)
+  (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE s1) $ inferExpr indexExpr
+  s2 <- runEither $ unify ls (toType lt) (toType JSNumber)
+  tellTSubst $ s2 `compose` ls `compose` s1 `compose` rs
+  return $ fromType . substituteType ls . toType $ elemType
 
 inferAssign :: Expr a -> Expr a -> Infer JSType
 inferAssign lval rval = do
   (rt, rs) <- listenTSubst $ inferExpr lval
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE rs) $ inferExpr rval
   finalSubst <- runEither $ unify ls (toType rt) (toType lt)
-  tellTSubst finalSubst
-  return rt
+  tellTSubst $ finalSubst `compose` ls `compose` rs
+  return $ fromType . substituteType finalSubst . toType $ rt
 
 
 -- page 178
