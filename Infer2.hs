@@ -11,6 +11,7 @@ import Control.Monad.Trans.Either(EitherT, runEitherT, left, right, hoistEither)
 import qualified Data.Map.Lazy as Map
 
 import Types
+import Pretty
 
 type JSTypeEnv = TypeEnv JSConsType
 type JSTypeSig = TypeSig JSConsType
