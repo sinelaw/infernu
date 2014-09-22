@@ -65,8 +65,8 @@ runEither :: Either JSTypeError r -> Infer r
 runEither = lift . lift . lift . hoistEither
 
 
-returnType :: JSTSubst -> JSType -> Infer JSType
-returnType subst t = do
+returnInfer :: JSTSubst -> JSType -> Infer JSType
+returnInfer subst t = do
     tellTSubst subst
     return . fromType . substituteType subst . toType $ t
 
@@ -81,31 +81,31 @@ accumInfer' inferAct (ts, lastSub) argExpr = do
   (argType, newSub) <- listenTSubst $ withTypeEnv (substituteTE lastSub) (inferAct argExpr)
   return (argType : ts, newSub `compose` lastSub) 
 
-inferExpr :: Expr a -> Infer JSType
-inferExpr (Expr body _) =
+inferExpr :: Expr a -> Infer (Expr JSType)
+inferExpr e@(Expr body _) =
     case body of
       LitFunc name argNames stmts -> inferFunc name argNames stmts
       Assign lval rval -> inferAssign lval rval
       Call callee args -> inferCall callee args
       Index expr indexExpr -> inferIndex expr indexExpr
       LitArray exprs -> inferArray exprs
-      LitBoolean _ -> return JSBoolean
-      LitNumber _ -> return JSNumber
-      LitRegex _ -> return JSRegex
-      LitString _ -> return JSString
+      LitBoolean x -> return $ Expr (LitBoolean x) JSBoolean
+      LitNumber x -> return $ Expr (LitNumber x) JSNumber
+      LitRegex x -> return $ Expr (LitRegex x) JSRegex
+      LitString x -> return $ Expr (LitString x) JSString
       Property expr propName -> inferProperty expr propName
       Var name -> inferVar name
 
-inferProperty :: Expr a -> String -> Infer JSType
+inferProperty :: Expr a -> String -> Infer (Expr JSType)
 inferProperty expr propName = do
   propTypeName <- fresh
   let propType = JSTVar propTypeName
-  (objType, subst) <- listenTSubst $ inferExpr expr
+  (Expr _ objType, subst) <- listenTSubst $ inferExpr expr
   subst' <- runEither $ unify subst (toType objType) (toType $ JSObject [(propName, propType)])
   let finalSubst = subst' `compose` subst
-  returnType finalSubst propType
+  returnInfer finalSubst propType
 
-inferIndex :: Expr a -> Expr a -> Infer JSType
+inferIndex :: Expr a -> Expr a -> Infer (Expr JSType)
 inferIndex expr indexExpr = do
   elemTypeName <- fresh
   let elemType = JSTVar elemTypeName
@@ -114,54 +114,54 @@ inferIndex expr indexExpr = do
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE s1) $ inferExpr indexExpr
   s2 <- runEither $ unify ls (toType lt) (toType JSNumber)
   let finalSubst = s2 `compose` ls `compose` s1 `compose` rs
-  returnType finalSubst elemType
+  returnInfer finalSubst elemType
 
-inferAssign :: Expr a -> Expr a -> Infer JSType
+inferAssign :: Expr a -> Expr a -> Infer (Expr JSType)
 inferAssign lval rval = do
   (rt, rs) <- listenTSubst $ inferExpr lval
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE rs) $ inferExpr rval
   subst' <- runEither $ unify ls (toType rt) (toType lt)
   let finalSubst = subst' `compose` ls `compose` rs
-  returnType finalSubst rt
+  returnInfer finalSubst rt
 
 
 -- page 178
 -- | instantiates a given type signature: allocates fresh variables for all the bound names and replaces them in the type
-newInstance :: JSTypeSig -> Infer JSType
+newInstance :: JSTypeSig -> Infer (Expr JSType)
 newInstance (TypeSig varNames t) = 
     do substList <- forM varNames $ \name -> 
                 do tname <- fresh
-                   return (name, TVar tname)
-       returnType (substFromList substList) $ fromType t
+                   return $ (name, TVar tname)
+       returnInfer (substFromList substList) $ fromType t
 
 -- | Infers a value variable expression. If the variable is assigned a type signature, instantiate it. Otherwise fail.
-inferVar :: String -> Infer JSType
+inferVar :: String -> Infer (Expr JSType)
 inferVar name = do
   tenv <- askTypeEnv
   case Map.lookup name tenv of
     Just tsig -> newInstance tsig
     Nothing -> typeFail $ GenericTypeError ("Unbound variable: " ++ name)
   
-inferCall :: Expr a -> [Expr a] -> Infer JSType
+inferCall :: Expr a -> [Expr a] -> Infer (Expr JSType)
 inferCall callee args = do
   returnTName <- fresh
   let returnTVar = JSTVar returnTName
   (calleeType:argTypes, substN) <- accumInfer inferExpr $ callee:args
   newTSubst <- runEither $ unify substN (toType $ JSFunc argTypes returnTVar) (substituteType substN $ toType calleeType) 
   let finalSubst = newTSubst `compose` substN
-  returnType finalSubst returnTVar
+  returnInfer finalSubst returnTVar
 
 
 introduceVars :: [(String, Name)] -> TypeEnv a -> TypeEnv a
 introduceVars argNames tenv = foldr introduceVars' tenv argNames
     where introduceVars' (argName, argTypeName) = setTypeSig argName (TypeSig [argTypeName] $ TVar argTypeName) 
 
-inferFunc :: Maybe String -> [String] -> [Statement (Expr a)] -> Infer JSType
+inferFunc :: Maybe String -> [String] -> [Statement (Expr a)] -> Infer (Expr JSType)
 inferFunc name argNames stmts = do
   argTypeNames <- forM argNames $ const fresh
-  returnTypeName <- fresh
+  returnInferName <- fresh
   tenv <- askTypeEnv  
-  let funcType = JSFunc (map JSTVar argTypeNames) (JSTVar returnTypeName)
+  let funcType = JSFunc (map JSTVar argTypeNames) (JSTVar returnInferName)
       tenv' = case name of
                 -- anonymous function - doesn't introduce a new local name
                 Nothing -> tenv
@@ -169,18 +169,18 @@ inferFunc name argNames stmts = do
                 Just name' -> setTypeSig name' (TypeSig argTypeNames $ toType funcType) tenv
       tenvWithArgs = introduceVars (zip argNames argTypeNames) tenv'
   (_, subst) <- withTypeEnv (const tenvWithArgs) $ accumInfer inferStatement stmts
-  returnType subst funcType
+  returnInfer subst funcType
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
 unifyExprs' elemType lastSubst curType = runEither $ unify lastSubst (toType elemType) (toType curType)
 
-inferArray :: [Expr a] -> Infer JSType
+inferArray :: [Expr a] -> Infer (Expr JSType)
 inferArray exprs = do
   elemTVarName <- fresh
   let elemType = JSTVar elemTVarName
   (types, subst) <- accumInfer inferExpr exprs
   finalSubst <- foldM (unifyExprs' elemType) subst types
-  returnType finalSubst elemType
+  returnInfer finalSubst elemType
 
 
 inferStatement :: Statement (Expr a) -> Infer ()
