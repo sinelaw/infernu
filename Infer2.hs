@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module Infer2 where
 
 import Data.Functor((<$>))
@@ -61,22 +62,21 @@ tellTSubst = lift . tell
 runEither :: Either JSTypeError r -> Infer r
 runEither = lift . lift . lift . hoistEither
 
-inferExprs :: [Expr a]  -> Infer ([JSType], JSTSubst)
-inferExprs [] = return ([], idSubst)
-inferExprs (e:es) = do
-  (t, s) <- listenTSubst $ inferExpr e
-  foldM inferExprs' ([t], s) es
+accumInfer :: (b -> Infer c) -> [b]  -> Infer ([c], JSTSubst)
+accumInfer _ [] = return ([], idSubst)
+accumInfer act (e:es) = do
+  (t, s) <- listenTSubst $ act e
+  foldM (accumInfer' act) ([t], s) es
 
-inferExprs' :: ([JSType], JSTSubst) -> Expr a -> Infer ([JSType], JSTSubst)
-inferExprs' (ts, lastSub) argExpr = do
-  (argType, newSub) <- listenTSubst $ withTypeEnv (substituteTE lastSub) (inferExpr argExpr)
+accumInfer' :: (b -> Infer c) -> ([c], JSTSubst) -> b -> Infer ([c], JSTSubst)
+accumInfer' inferAct (ts, lastSub) argExpr = do
+  (argType, newSub) <- listenTSubst $ withTypeEnv (substituteTE lastSub) (inferAct argExpr)
   return (argType : ts, newSub `compose` lastSub) 
 
 inferExpr :: Expr a -> Infer JSType
 inferExpr (Expr body _) =
     case body of
-      -- todo other builtin types
-      --LitFunc name argNames stmts -> inferFunc name argNames stmts
+      LitFunc name argNames stmts -> inferFunc name argNames stmts
       Assign lval rval -> inferAssign lval rval
       Call callee args -> inferCall callee args
       Index expr indexExpr -> inferIndex expr indexExpr
@@ -141,22 +141,32 @@ inferCall :: Expr a -> [Expr a] -> Infer JSType
 inferCall callee args = do
   returnTName <- fresh
   let returnTVar = JSTVar returnTName
-  (calleeType:argTypes, substN) <- inferExprs $ callee:args
+  (calleeType:argTypes, substN) <- accumInfer inferExpr $ callee:args
   newTSubst <- runEither $ unify substN (toType $ JSFunc argTypes returnTVar) (substituteType substN $ toType calleeType) 
   let finalSubst = newTSubst `compose` substN
   tellTSubst finalSubst
   return . fromType $ substituteType finalSubst (toType returnTVar)
 
 
-inferFunc :: Maybe String -> [String] -> [Statement a] -> Infer JSType
-inferFunc name argName stmts = do
-  funcTypeName <- fresh
+introduceVars :: [(String, Name)] -> TypeEnv a -> TypeEnv a
+introduceVars argNames tenv = foldr introduceVars' tenv argNames
+    where introduceVars' (argName, argTypeName) = setTypeSig argName (TypeSig [argTypeName] $ TVar argTypeName) 
+
+inferFunc :: Maybe String -> [String] -> [Statement (Expr a)] -> Infer JSType
+inferFunc name argNames stmts = do
+  argTypeNames <- forM argNames $ const fresh
+  returnTypeName <- fresh
   tenv <- askTypeEnv  
-  let tenv' = case name of
-                Nothing -> tenv -- anonymous function - doesn't introduce a new local name
-                Just name' -> setTypeSig name' (TypeSig [] (TVar funcTypeName)) tenv
-  _ <- withTypeEnv (const tenv') $ forM stmts inferStatement
-  return $ JSFunc  
+  let funcType = JSFunc (map JSTVar argTypeNames) (JSTVar returnTypeName)
+      tenv' = case name of
+                -- anonymous function - doesn't introduce a new local name
+                Nothing -> tenv
+                -- named function, equivalent to: let f = < lambda >
+                Just name' -> setTypeSig name' (TypeSig argTypeNames $ toType funcType) tenv
+      tenvWithArgs = introduceVars (zip argNames argTypeNames) tenv'
+  (_, subst) <- withTypeEnv (const tenvWithArgs) $ accumInfer inferStatement stmts
+  tellTSubst subst
+  return $ fromType . substituteType subst . toType $ funcType
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
 unifyExprs' elemType lastSubst curType = runEither $ unify lastSubst (toType elemType) (toType curType)
@@ -165,7 +175,7 @@ inferArray :: [Expr a] -> Infer JSType
 inferArray exprs = do
   elemTVarName <- fresh
   let elemType = JSTVar elemTVarName
-  (types, subst) <- inferExprs exprs
+  (types, subst) <- accumInfer inferExpr exprs
   finalSubst <- foldM (unifyExprs' elemType) subst types
   tellTSubst finalSubst
   return $ JSArray (fromType . substituteType finalSubst $ toType elemType)
@@ -174,7 +184,7 @@ inferArray exprs = do
 inferStatement :: Statement (Expr a) -> Infer ()
 inferStatement Empty = return ()
 inferStatement (Expression expr) = inferExpr expr >> return ()
-
+--inferStatement (Return Nothing) = 
 ----------------
 
 ex b = Expr b ()
@@ -182,3 +192,7 @@ ex b = Expr b ()
 arrayTest = ex $ Index (ex $ LitArray [ex $ LitBoolean False, ex $ LitBoolean True]) (ex $ LitNumber 32)
 
 infArrayTest = runInfer $ inferExpr arrayTest
+
+funcTest = ex $ LitFunc (Just "myFunc") ["x", "y"] [Expression . ex $ Call (ex $ Var "x") [(ex $ Var "y")]]
+
+infFuncTest = runInfer $ inferExpr funcTest
