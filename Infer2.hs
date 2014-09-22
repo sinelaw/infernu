@@ -14,6 +14,8 @@ import qualified Data.Map.Lazy as Map
 import Types
 import Pretty
 
+import Debug.Trace
+
 type JSTypeEnv = TypeEnv JSConsType
 type JSTypeSig = TypeSig JSConsType
 type JSTSubst = TSubst JSConsType
@@ -51,10 +53,10 @@ askTypeEnv :: Infer JSTypeEnv
 askTypeEnv = ask
 
 withTypeEnv :: (JSTypeEnv -> JSTypeEnv) -> Infer a -> Infer a
-withTypeEnv f action = local f action
+withTypeEnv = local
 
 listenTSubst :: Infer a -> Infer (a, JSTSubst)
-listenTSubst a = mapReaderT listen $ a
+listenTSubst = mapReaderT listen 
 
 tellTSubst :: JSTSubst -> Infer ()
 tellTSubst = lift . tell
@@ -196,3 +198,8 @@ infArrayTest = runInfer $ inferExpr arrayTest
 funcTest = ex $ LitFunc (Just "myFunc") ["x", "y"] [Expression . ex $ Call (ex $ Var "x") [(ex $ Var "y")]]
 
 infFuncTest = runInfer $ inferExpr funcTest
+
+failFuncTest = ex $ LitFunc (Just "myFunc") ["x"] [Expression . ex $ Call (ex $ Var "x") [ex $ Var "x"]]
+
+infFailFuncTest = runInfer $ inferExpr failFuncTest
+
