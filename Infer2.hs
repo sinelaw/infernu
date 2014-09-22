@@ -66,7 +66,9 @@ runEither = lift . lift . lift . hoistEither
 
 
 returnType :: JSTSubst -> JSType -> Infer JSType
-returnType subst = return . fromType . substituteType subst . toType
+returnType subst t = do
+    tellTSubst subst
+    return . fromType . substituteType subst . toType $ t
 
 accumInfer :: (b -> Infer c) -> [b]  -> Infer ([c], JSTSubst)
 accumInfer _ [] = return ([], idSubst)
@@ -101,7 +103,6 @@ inferProperty expr propName = do
   (objType, subst) <- listenTSubst $ inferExpr expr
   subst' <- runEither $ unify subst (toType objType) (toType $ JSObject [(propName, propType)])
   let finalSubst = subst' `compose` subst
-  tellTSubst finalSubst
   returnType finalSubst propType
 
 inferIndex :: Expr a -> Expr a -> Infer JSType
@@ -113,7 +114,6 @@ inferIndex expr indexExpr = do
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE s1) $ inferExpr indexExpr
   s2 <- runEither $ unify ls (toType lt) (toType JSNumber)
   let finalSubst = s2 `compose` ls `compose` s1 `compose` rs
-  tellTSubst finalSubst
   returnType finalSubst elemType
 
 inferAssign :: Expr a -> Expr a -> Infer JSType
@@ -122,7 +122,6 @@ inferAssign lval rval = do
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE rs) $ inferExpr rval
   subst' <- runEither $ unify ls (toType rt) (toType lt)
   let finalSubst = subst' `compose` ls `compose` rs
-  tellTSubst finalSubst
   returnType finalSubst rt
 
 
@@ -150,7 +149,6 @@ inferCall callee args = do
   (calleeType:argTypes, substN) <- accumInfer inferExpr $ callee:args
   newTSubst <- runEither $ unify substN (toType $ JSFunc argTypes returnTVar) (substituteType substN $ toType calleeType) 
   let finalSubst = newTSubst `compose` substN
-  tellTSubst finalSubst
   returnType finalSubst returnTVar
 
 
@@ -171,7 +169,6 @@ inferFunc name argNames stmts = do
                 Just name' -> setTypeSig name' (TypeSig argTypeNames $ toType funcType) tenv
       tenvWithArgs = introduceVars (zip argNames argTypeNames) tenv'
   (_, subst) <- withTypeEnv (const tenvWithArgs) $ accumInfer inferStatement stmts
-  tellTSubst subst
   returnType subst funcType
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
@@ -183,7 +180,6 @@ inferArray exprs = do
   let elemType = JSTVar elemTVarName
   (types, subst) <- accumInfer inferExpr exprs
   finalSubst <- foldM (unifyExprs' elemType) subst types
-  tellTSubst finalSubst
   returnType finalSubst elemType
 
 
