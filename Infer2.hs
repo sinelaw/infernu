@@ -201,5 +201,6 @@ infFuncTest = runInfer $ inferExpr funcTest
 
 failFuncTest = ex $ LitFunc (Just "myFunc") ["x"] [Expression . ex $ Call (ex $ Var "x") [ex $ Var "x"]]
 
+-- TODO this should fail but it succeeds! apparently inner statments are not inferred at all.
 infFailFuncTest = runInfer $ inferExpr failFuncTest
 
