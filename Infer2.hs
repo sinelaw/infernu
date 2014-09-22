@@ -64,6 +64,10 @@ tellTSubst = lift . tell
 runEither :: Either JSTypeError r -> Infer r
 runEither = lift . lift . lift . hoistEither
 
+
+returnType :: JSTSubst -> JSType -> Infer JSType
+returnType subst = return . fromType . substituteType subst . toType
+
 accumInfer :: (b -> Infer c) -> [b]  -> Infer ([c], JSTSubst)
 accumInfer _ [] = return ([], idSubst)
 accumInfer act (e:es) = do
@@ -98,7 +102,7 @@ inferProperty expr propName = do
   subst' <- runEither $ unify subst (toType objType) (toType $ JSObject [(propName, propType)])
   let finalSubst = subst' `compose` subst
   tellTSubst finalSubst
-  return $ fromType . substituteType finalSubst . toType $ propType
+  returnType finalSubst propType
 
 inferIndex :: Expr a -> Expr a -> Infer JSType
 inferIndex expr indexExpr = do
@@ -110,7 +114,7 @@ inferIndex expr indexExpr = do
   s2 <- runEither $ unify ls (toType lt) (toType JSNumber)
   let finalSubst = s2 `compose` ls `compose` s1 `compose` rs
   tellTSubst finalSubst
-  return $ fromType . substituteType finalSubst . toType $ elemType
+  returnType finalSubst elemType
 
 inferAssign :: Expr a -> Expr a -> Infer JSType
 inferAssign lval rval = do
@@ -119,7 +123,7 @@ inferAssign lval rval = do
   subst' <- runEither $ unify ls (toType rt) (toType lt)
   let finalSubst = subst' `compose` ls `compose` rs
   tellTSubst finalSubst
-  return $ fromType . substituteType finalSubst . toType $ rt
+  returnType finalSubst rt
 
 
 -- page 178
@@ -129,7 +133,7 @@ newInstance (TypeSig varNames t) =
     do substList <- forM varNames $ \name -> 
                 do tname <- fresh
                    return (name, TVar tname)
-       return . fromType $ substituteType (substFromList substList) t
+       returnType (substFromList substList) $ fromType t
 
 -- | Infers a value variable expression. If the variable is assigned a type signature, instantiate it. Otherwise fail.
 inferVar :: String -> Infer JSType
@@ -147,7 +151,7 @@ inferCall callee args = do
   newTSubst <- runEither $ unify substN (toType $ JSFunc argTypes returnTVar) (substituteType substN $ toType calleeType) 
   let finalSubst = newTSubst `compose` substN
   tellTSubst finalSubst
-  return . fromType $ substituteType finalSubst (toType returnTVar)
+  returnType finalSubst returnTVar
 
 
 introduceVars :: [(String, Name)] -> TypeEnv a -> TypeEnv a
@@ -168,7 +172,7 @@ inferFunc name argNames stmts = do
       tenvWithArgs = introduceVars (zip argNames argTypeNames) tenv'
   (_, subst) <- withTypeEnv (const tenvWithArgs) $ accumInfer inferStatement stmts
   tellTSubst subst
-  return $ fromType . substituteType subst . toType $ funcType
+  returnType subst funcType
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
 unifyExprs' elemType lastSubst curType = runEither $ unify lastSubst (toType elemType) (toType curType)
@@ -180,7 +184,7 @@ inferArray exprs = do
   (types, subst) <- accumInfer inferExpr exprs
   finalSubst <- foldM (unifyExprs' elemType) subst types
   tellTSubst finalSubst
-  return $ JSArray (fromType . substituteType finalSubst $ toType elemType)
+  returnType finalSubst elemType
 
 
 inferStatement :: Statement (Expr a) -> Infer ()

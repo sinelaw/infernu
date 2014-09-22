@@ -204,23 +204,23 @@ data TypeError a = GenericTypeError String | TypeMismatch (Type a) (Type a)
                  deriving (Show, Eq, Generic)
 
 
-data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
-               deriving (Show, Eq, Generic)
+-- data VarScope = Global | VarScope { parent :: VarScope, vars :: [(String, JSType)] }
+--                deriving (Show, Eq, Generic)
 
 
-data TypeScope = TypeScope { tVars :: TSubst JSConsType
-                           , maxNum :: Int
-                           , tEnv :: TypeEnv JSConsType }
-               deriving (Show, Eq, Generic)
+-- data TypeScope = TypeScope { tVars :: TSubst JSConsType
+--                            , maxNum :: Int
+--                            , tEnv :: TypeEnv JSConsType }
+--                deriving (Show, Eq, Generic)
 
 
-data FuncScope = FuncScope { returnType :: JSType }
-               deriving (Show, Eq, Generic)
+-- data FuncScope = FuncScope { returnType :: JSType }
+--                deriving (Show, Eq, Generic)
 
 
 
-data Scope = Scope { typeScope :: TypeScope
-                   , varScope :: VarScope
-                   , funcScope :: Maybe FuncScope }
-               deriving (Show, Eq, Generic)
+-- data Scope = Scope { typeScope :: TypeScope
+--                    , varScope :: VarScope
+--                    , funcScope :: Maybe FuncScope }
+--                deriving (Show, Eq, Generic)
 
