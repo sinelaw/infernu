@@ -244,6 +244,7 @@ inferStatement (Return (Just expr)) = do
       s2 <- runEither $ unify s1 (toType t) (toType . exprData $ infExpr)
       tellTSubst $ s2 `compose` s1 `compose` s0
       return (Return $ Just infExpr)
+-- TODO implement var decls, possibly by removing this statement type and doing a pre-pass for var hoisting, so that LitFunc also has a list of var names
 --inferStatement (VarDecl name) = do
   
  
