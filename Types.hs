@@ -25,6 +25,7 @@ instance Out a => Out (Type a)
 data TypeSig a = TypeSig [Name] (Type a)
                  deriving (Show, Eq, Generic)
                         
+--instance (Out k, Out v) => Out (Map.Map k v)
 
 type Subst a = Map.Map Name a
 
@@ -69,7 +70,7 @@ compose m2 m1 = Map.union merged m2
 extend :: Eq a => TSubst a -> Name -> Type a -> Either (TypeError a) (TSubst a)
 extend m name t
     | TVar name == t = Right m
-    | name `elem` tvarsIn t = Left $ GenericTypeError "occurs check failed"
+    | name `elem` tvarsIn t = Left $ OccursCheckError name t 
     | otherwise = Right $ Map.insert name t m
 
 unify :: Eq a => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
@@ -200,7 +201,9 @@ data Expr a = Expr { exprBody :: Body (Expr a), exprData :: a }
 
 
             
-data TypeError a = GenericTypeError String | TypeMismatch String (Type a) (Type a)
+data TypeError a = GenericTypeError String 
+                 | OccursCheckError Name (Type a)
+                 | TypeMismatch String (Type a) (Type a)
                  deriving (Show, Eq, Generic)
 
 
