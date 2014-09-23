@@ -84,7 +84,7 @@ unify m t1@(TCons _ _) t2@(TVar _) = unify m t2 t1
 unify m t1@(TCons consName1 ts1) t2@(TCons consName2 ts2) =
     if consName1 == consName2
     then unifyl m (zip ts1 ts2)
-    else Left  $ TypeMismatch t1 t2
+    else Left $ TypeMismatch "TCons names do not match" t1 t2
 
 unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either (TypeError a) (TSubst a)
 unifyl m = foldr unify' (Right m)
@@ -200,7 +200,7 @@ data Expr a = Expr { exprBody :: Body (Expr a), exprData :: a }
 
 
             
-data TypeError a = GenericTypeError String | TypeMismatch (Type a) (Type a)
+data TypeError a = GenericTypeError String | TypeMismatch String (Type a) (Type a)
                  deriving (Show, Eq, Generic)
 
 

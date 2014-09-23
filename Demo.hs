@@ -2,8 +2,6 @@ module Main where
 
 import System.Environment(getArgs)
 import Text.PrettyPrint.GenericPretty(pp, Out(..))
-import Control.Monad.State(evalState)
-import Control.Monad.Trans.Either(runEitherT)
 import Control.Arrow((***))
 
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
@@ -98,13 +96,13 @@ fromProp (ES3.PropNum _ x) = show x
 -- printInferredExprType (Right t) = incomment . toJsDoc . exprData $ t
 -- printInferredExprType (Left x) = incomment . show $ x
 
-printType :: InferredStatement -> IO ()
+printType :: Statement (Expr JSType) -> IO ()
 printType stmt = putStrLn $ toJsSt (incomment . toJsDoc) 0 stmt
 
 instance (Out a) => Out (Body a)
 instance (Out a) => Out (Expr a)
 instance (Out a) => Out (Statement a)
-instance Out TypeError
+instance (Out a) => Out (TypeError a)
 
 main :: IO ()
 main = do
@@ -114,7 +112,7 @@ main = do
 --  putStrLn . show $ js
   let stmts = map fromStatement $ ES3.unJavaScript js
 --  pp $ Block . flattenBlocks $ stmts
-  let inf = evalState (runEitherT . inferStatement . flattenBlocks . Block $ stmts) emptyScope
+  let inf = runInfer $ inferStatement . flattenBlocks . Block $ stmts
   pp inf
   case inf of
     Left err' -> print err'
@@ -143,4 +141,16 @@ main = do
 
 -- e3 = ex $ Assign (ex $ Var "f") e1
 -- s3 = runState (inferType e3) emptyScope
+
+-- arrayTest = ex $ Index (ex $ LitArray [ex $ LitBoolean False, ex $ LitBoolean True]) (ex $ LitNumber 32)
+
+-- infArrayTest = runInfer $ inferExpr arrayTest
+
+-- funcTest = ex $ LitFunc (Just "myFunc") ["x", "y"] [Expression . ex $ Call (ex $ Var "x") [(ex $ Var "y")]]
+
+-- infFuncTest = runInfer $ inferExpr funcTest
+
+-- failFuncTest = ex $ LitFunc (Just "myFunc") ["x"] [Expression . ex $ Call (ex $ Var "x") [ex $ Var "x"]]
+
+-- infFailFuncTest = runInfer $ inferExpr failFuncTest
 
