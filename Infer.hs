@@ -25,12 +25,19 @@ data NameSupply = NameSupply { maxName :: Name }
 emptyNameSupply :: NameSupply
 emptyNameSupply = NameSupply { maxName = 0 }
 
+data Env = Env { typeEnv :: JSTypeEnv
+               , funcReturnType :: Maybe JSType }
+
+emptyEnv :: Env
+emptyEnv = Env { typeEnv = emptyTEnv
+               , funcReturnType = Nothing }
+
 -- | An inference result with internal context.
 -- | ReaderT JSTypeEnv - type signatures must be propogated only inward towards nested expressions
 -- | WriterT JSTSubst - results of unification, stored in a TSubst, must be propogated outwards from nested expressions and composed with the current subst map
 -- | StateT NameSupply - stateful "counter" used for naming fresh type variables
 -- | EitherT TypeError - failure at any point shortcuts the result returning a Left TypeError instead.
-type Infer a = ReaderT (JSTypeEnv, Maybe JSType) (WriterT JSTSubst (StateT NameSupply (EitherT JSTypeError Identity))) a
+type Infer a = ReaderT Env (WriterT JSTSubst (StateT NameSupply (EitherT JSTypeError Identity))) a
 
 runInfer :: Infer a -> Either JSTypeError a
 runInfer = runIdentity 
@@ -38,7 +45,7 @@ runInfer = runIdentity
            . flip evalStateT emptyNameSupply
            . fmap fst 
            . runWriterT 
-           . flip runReaderT (emptyTEnv, Nothing)
+           . flip runReaderT emptyEnv
 
 typeFail :: JSTypeError -> Infer a
 typeFail = lift . lift . lift . left
@@ -50,20 +57,20 @@ fresh = do ns <- lift . lift $ get
            return newName
 
 askTypeEnv :: Infer JSTypeEnv
-askTypeEnv = fst <$> ask
+askTypeEnv = typeEnv <$> ask
 
 withTypeEnv :: (JSTypeEnv -> JSTypeEnv) -> Infer a -> Infer a
-withTypeEnv f = local (\(tenv, x) -> (f tenv, x))
+withTypeEnv f = local (\env -> env { typeEnv = f . typeEnv $ env })
 
 
 listenTSubst :: Infer a -> Infer (a, JSTSubst)
 listenTSubst = mapReaderT listen 
 
 askReturnType :: Infer (Maybe JSType)
-askReturnType = snd <$> ask
+askReturnType = funcReturnType <$> ask
 
 withReturnType :: JSType -> Infer a -> Infer a
-withReturnType t = local (\(tenv, _) -> (tenv, Just t))
+withReturnType t = local (\env -> env { funcReturnType = Just t })
 
 tellTSubst :: JSTSubst -> Infer ()
 tellTSubst = lift . tell

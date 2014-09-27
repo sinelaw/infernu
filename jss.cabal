@@ -16,7 +16,7 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Infer, Pretty, Types
+  exposed-modules:     Infer, Pretty, Types, Parse
   -- other-modules:       
   other-extensions:    DeriveGeneric
   build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers
