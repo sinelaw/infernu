@@ -9,10 +9,10 @@ import Control.Monad.Trans.State(StateT, evalStateT, get, put)
 import Control.Monad.Trans.Reader(ReaderT, runReaderT, ask, local, mapReaderT)
 import Control.Monad.Trans.Writer(WriterT, runWriterT, tell, listen)
 import Control.Monad.Trans.Either(EitherT, runEitherT, left, hoistEither)
+import Control.Arrow(first)
 import qualified Data.Map.Lazy as Map
 
 import Types
---import Pretty
 
 --import Debug.Trace
 
@@ -90,7 +90,7 @@ returnInfer b t subst = Expr b <$> returnSubstType t subst
 -- TODO generalize to foldable
 accumInfer :: (b -> Infer c) -> [b]  -> Infer ([c], JSTSubst)
 accumInfer act es = do
-  foldM (accumInfer' act) ([], idSubst) . reverse $ es
+  (first reverse) <$> foldM (accumInfer' act) ([], idSubst) es
 
 accumInfer' :: (b -> Infer c) -> ([c], JSTSubst) -> b -> Infer ([c], JSTSubst)
 accumInfer' inferAct (ts, lastSub) argExpr = do
