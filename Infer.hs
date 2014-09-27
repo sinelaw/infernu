@@ -184,7 +184,7 @@ introduceArgs :: [(String, Name)] -> TypeEnv a -> TypeEnv a
 introduceArgs argNames tenv = foldr introduceArgs' tenv argNames
     where introduceArgs' (argName, argTypeName) = setTypeSig argName (TypeSig [] $ TVar argTypeName) 
 
-inferFunc :: Maybe String -> [String] -> [Statement (Expr a)] -> Infer (Expr JSType)
+inferFunc :: Maybe String -> [String] -> Statement (Expr a) -> Infer (Expr JSType)
 inferFunc name argNames stmts = do
   argTypeNames <- forM argNames $ const fresh
   returnInferName <- fresh
@@ -197,7 +197,7 @@ inferFunc name argNames stmts = do
                 -- named function, equivalent to: let f = < lambda >
                 Just name' -> setTypeSig name' (TypeSig argTypeNames $ toType funcType) tenv
       tenvWithArgs = introduceArgs (zip argNames argTypeNames) tenv'
-  (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType $ accumInfer inferStatement stmts
+  (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType . listenTSubst $ inferStatement stmts
   returnInfer (LitFunc name argNames infStmts) funcType subst
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst

@@ -39,7 +39,7 @@ fromStatement (ES3.ForStmt _ forInit pred' incr stmt) =
           ]
     where incr'' = maybe [] (\x -> [Expression $ fromExpression x]) incr
 fromStatement (ES3.VarDeclStmt _ decls) = Block $ concatMap fromVarDecl decls
-fromStatement (ES3.FunctionStmt _ name args stmts) = Expression . ex $ LitFunc (Just . ES3.unId $ name) (map ES3.unId args) (map fromStatement stmts)
+fromStatement (ES3.FunctionStmt _ name args stmts) = Expression . ex $ LitFunc (Just . ES3.unId $ name) (map ES3.unId args) (Block $ map fromStatement stmts)
 fromStatement s = error $ "Not implemented statment: " ++ show (ES3PP.prettyPrint s)
 
 
@@ -73,7 +73,7 @@ fromExpression es3x =
       ES3.BoolLit _ x -> LitBoolean x
       ES3.ArrayLit _ xs -> LitArray $ map fromExpression xs
       ES3.ObjectLit _ props -> LitObject $ map (fromProp *** fromExpression) props
-      ES3.FuncExpr _ name argNames stmts -> LitFunc (fmap ES3.unId name) (map ES3.unId argNames) (map fromStatement stmts) 
+      ES3.FuncExpr _ name argNames stmts -> LitFunc (fmap ES3.unId name) (map ES3.unId argNames) (Block $ map fromStatement stmts) 
       ES3.VarRef _ name -> Var $ ES3.unId name
       ES3.DotRef _ expr name -> Property (fromExpression expr) (ES3.unId name)
       ES3.AssignExpr _ ES3.OpAssign lvalue expr -> Assign (fromLValue lvalue) (fromExpression expr)

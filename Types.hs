@@ -176,7 +176,7 @@ data Body expr = LitBoolean Bool
                | LitString String 
                | LitRegex String 
                | Var String
-               | LitFunc (Maybe String) [String] [Statement expr]
+               | LitFunc (Maybe String) [String] (Statement expr)
                | LitArray [expr] 
                | LitObject [(String, expr)]
                | Call expr [expr]

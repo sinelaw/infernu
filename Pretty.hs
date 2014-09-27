@@ -57,7 +57,7 @@ toJs' aToJs tabAmount (Expr body a) = let tab = makeTab tabAmount in
       LitBoolean x -> if x then "true" else "false"
       LitFunc name args exprs -> "function " ++ fromMaybe "" name ++ "(" ++ argsJs ++ ") {" ++ statements ++ tab ++ "}"
           where argsJs = commafy args
-                statements = concatMap (toJsSt aToJs (tabAmount + 1)) exprs
+                statements = toJsSt aToJs (tabAmount + 1) exprs
       LitNumber x -> toJsNumberStr x
       LitObject xs -> "{ " ++ commafy (map (\(name, val) -> name ++ ": " ++ toJs'' val) xs) ++ " }"
       LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly
@@ -95,7 +95,7 @@ toJsDoc (JSTVar name) = toStrName name
 flattenBlocks' :: Expr a -> Expr a
 flattenBlocks' (Expr body x) = Expr b x 
     where b = case body of
-                LitFunc name args stmts -> LitFunc name args $ map flattenBlocks stmts
+                LitFunc name args stmts -> LitFunc name args $ flattenBlocks stmts
                 LitArray exprs -> LitArray $ map flattenBlocks' exprs
                 LitObject props -> LitObject $ map (second flattenBlocks') props
                 Call expr exprs -> Call (flattenBlocks' expr) (map flattenBlocks' exprs)
