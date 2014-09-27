@@ -166,10 +166,6 @@ fromType (TCons consName types) =
       JSConsArray -> JSArray (fromType . head $ types) -- TODO ensure single
       JSConsObject names -> JSObject $ zip names (map fromType types)
 
-
-
-
-
 --data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
 data Body expr = LitBoolean Bool 
                | LitNumber Double 

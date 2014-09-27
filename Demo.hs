@@ -30,7 +30,11 @@ main = do
   putStrLn . show $ js
   let stmts = map fromStatement $ ES3.unJavaScript js
 --  pp $ Block . flattenBlocks $ stmts
-  let inf = runInfer $ inferStatement . flattenBlocks . Block $ stmts
+  let input = flattenBlocks . Block $ stmts
+  -- pp input
+  -- putStrLn "\n---------------\n"
+  let inf = runInfer $ inferStatement input
+  putStrLn "\n---------------\n"
   pp inf
   case inf of
     Left err' -> print err'
