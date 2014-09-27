@@ -56,8 +56,9 @@ toJs' aToJs tabAmount (Expr body a) = let tab = makeTab tabAmount in
       LitBoolean x -> if x then "true" else "false"
       LitFunc name args vars funcBody -> "function " ++ fromMaybe "" name ++ "(" ++ argsJs ++ ") {" ++ vars' ++ tab ++ statements ++ tab ++ "}"
           where argsJs = commafy args
-                vars' = concatMap ((++ (";" ++ tab)) . ("var " ++)) vars
+                vars' = concatMap ((++ ";") . ((plusTab ++ "var ") ++)) vars
                 statements = toJsSt aToJs (tabAmount + 1) funcBody
+                plusTab = makeTab $ tabAmount + 1
       LitNumber x -> toJsNumberStr x
       LitObject xs -> "{ " ++ commafy (map (\(name, val) -> name ++ ": " ++ toJs'' val) xs) ++ " }"
       LitRegex regex -> "/" ++ regex ++ "/" -- todo correctly

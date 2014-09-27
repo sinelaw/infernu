@@ -180,17 +180,18 @@ inferCall callee args = do
   returnInfer (Call infCallee infArgs) returnTVar finalSubst 
 
 
-introduceVars :: [(String, Name, [Name])] -> TypeEnv a -> TypeEnv a
-introduceVars argNames tenv = foldr introduceArgs' tenv argNames
-    where introduceArgs' (argName, argTypeName, typeSigNames) = setTypeSig argName (TypeSig typeSigNames $ TVar argTypeName) 
+introduceVars :: [((String, Name), [Name])] -> TypeEnv a -> TypeEnv a
+introduceVars argNames tenv = foldr introduceVars' tenv argNames
+    where introduceVars' ((argName, argTypeName), typeSigNames) = setTypeSig argName (TypeSig typeSigNames $ TVar argTypeName) 
 
 introduceArgs :: [(String, Name)] -> TypeEnv a -> TypeEnv a
 introduceArgs argNames tenv = introduceVars argNames' tenv
-    where argNames' = map (\(a,b) -> (a,b,[])) argNames
+    where argNames' = map (,[]) argNames
 
 inferFunc :: Maybe String -> [String] -> [String] -> Statement (Expr a) -> Infer (Expr JSType)
 inferFunc name argNames varNames stmts = do
   argTypeNames <- forM argNames $ const fresh
+  varTypeNames <- forM varNames $ const fresh
   returnInferName <- fresh
   tenv <- askTypeEnv  
   let returnType = JSTVar returnInferName
@@ -200,7 +201,10 @@ inferFunc name argNames varNames stmts = do
                 Nothing -> tenv
                 -- named function, equivalent to: let f = < lambda >
                 Just name' -> setTypeSig name' (TypeSig argTypeNames $ toType funcType) tenv
-      tenvWithArgs = introduceArgs (zip argNames argTypeNames) tenv'
+      argNamesWithTypeVars = zip argNames argTypeNames
+      varNamesWithTypeVars = zip varNames varTypeNames
+      tenv'' = introduceVars (map (\(varName, tvarName) -> ((varName, tvarName), [tvarName])) varNamesWithTypeVars) tenv'
+      tenvWithArgs = introduceArgs argNamesWithTypeVars tenv''
   (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType . listenTSubst $ inferStatement stmts
   returnInfer (LitFunc name argNames varNames infStmts) funcType subst
 
