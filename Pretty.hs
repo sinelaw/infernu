@@ -112,5 +112,6 @@ flattenBlocks (Block xs) = case map flattenBlocks xs of
                              xs' -> Block xs'
 flattenBlocks (While expr stmt) = While (flattenBlocks' expr) (flattenBlocks stmt)
 flattenBlocks (IfThenElse expr s1 s2) = IfThenElse (flattenBlocks' expr) (flattenBlocks s1) (flattenBlocks s2)
+flattenBlocks (Expression x) = Expression $ flattenBlocks' x
+flattenBlocks Empty = Empty
 flattenBlocks x = x
-

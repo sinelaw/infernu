@@ -27,7 +27,7 @@ main = do
   args <- getArgs
   let arg = head args
   js <- ES3Parser.parseFromFile arg 
---  putStrLn . show $ js
+  putStrLn . show $ js
   let stmts = map fromStatement $ ES3.unJavaScript js
 --  pp $ Block . flattenBlocks $ stmts
   let inf = runInfer $ inferStatement . flattenBlocks . Block $ stmts

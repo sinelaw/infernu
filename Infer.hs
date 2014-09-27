@@ -90,7 +90,7 @@ returnInfer b t subst = Expr b <$> returnSubstType t subst
 -- TODO generalize to foldable
 accumInfer :: (b -> Infer c) -> [b]  -> Infer ([c], JSTSubst)
 accumInfer act es = do
-  foldM (accumInfer' act) ([], idSubst) es
+  foldM (accumInfer' act) ([], idSubst) . reverse $ es
 
 accumInfer' :: (b -> Infer c) -> ([c], JSTSubst) -> b -> Infer ([c], JSTSubst)
 accumInfer' inferAct (ts, lastSub) argExpr = do
