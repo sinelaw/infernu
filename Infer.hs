@@ -14,7 +14,7 @@ import qualified Data.Map.Lazy as Map
 
 import Types
 
---import Debug.Trace
+import Debug.Trace
 
 type JSTypeEnv = TypeEnv JSConsType
 type JSTypeSig = TypeSig JSConsType
@@ -78,11 +78,12 @@ tellTSubst = lift . tell
 runEither :: Either JSTypeError r -> Infer r
 runEither = lift . lift . lift . hoistEither
 
+traceShowId' s x = traceShow (s ++ show x) x
 
 returnSubstType :: JSType -> JSTSubst -> Infer JSType
 returnSubstType t subst  = do
     tellTSubst subst
-    return . fromType . substituteType subst . toType $ t 
+    return . traceShowId' "returnSubst: " . fromType . substituteType subst . toType $ t 
 
 returnInfer :: Body (Expr JSType) -> JSType -> JSTSubst -> Infer (Expr JSType)
 returnInfer b t subst = Expr b <$> returnSubstType t subst
@@ -175,8 +176,8 @@ inferCall callee args = do
   returnTName <- fresh
   let returnTVar = JSTVar returnTName
   (infCallee:infArgs, substN) <- accumInfer inferExpr $ callee:args
-  newTSubst <- runEither $ unify substN (toType $ JSFunc (map exprData infArgs) returnTVar) (substituteType substN . toType . exprData $ infCallee) 
-  let finalSubst = newTSubst `compose` substN
+  newTSubst <- runEither $ unify substN (traceShowId' "expected callee type: " . toType $ JSFunc (map exprData infArgs) returnTVar) (traceShowId' "callee type: " . toType . exprData $ infCallee) 
+  let finalSubst = traceShowId' "finalSubst: " $ newTSubst `compose` substN
   returnInfer (Call infCallee infArgs) returnTVar finalSubst 
 
 
@@ -204,7 +205,7 @@ inferFunc name argNames varNames stmts = do
       argNamesWithTypeVars = zip argNames argTypeNames
       varNamesWithTypeVars = zip varNames varTypeNames
       tenv'' = introduceVars (map (\(varName, tvarName) -> ((varName, tvarName), [tvarName])) varNamesWithTypeVars) tenv'
-      tenvWithArgs = introduceArgs argNamesWithTypeVars tenv''
+      tenvWithArgs = traceShowId' "tenvWithArgs" $ introduceArgs argNamesWithTypeVars tenv''
   (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType . listenTSubst $ inferStatement stmts
   returnInfer (LitFunc name argNames varNames infStmts) funcType subst
 

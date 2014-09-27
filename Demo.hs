@@ -26,6 +26,10 @@ main :: IO ()
 main = do
   args <- getArgs
   let arg = head args
+  parseFile arg
+
+parseFile :: String -> IO ()
+parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
   putStrLn . show $ js
   let stmts = map fromStatement $ ES3.unJavaScript js
@@ -40,7 +44,6 @@ main = do
     Left err' -> print err'
     Right inf' -> printType inf'
 --  toJsSt $ fst inf
-
 
 -- idE = ex $ LitFunc ["arg"] [ Return . Just . ex $ Var "arg", VarDecl "var1", st $ Assign (ex $ Var "var1") (ex $ LitNumber 1), Return . Just . ex $ Var "arg" ]
 -- idT = runState (inferType idE) emptyScope

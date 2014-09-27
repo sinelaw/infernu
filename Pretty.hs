@@ -84,14 +84,12 @@ toJsDoc (JSArray elem') = "[" ++ toJsDoc elem' ++ "]"
 toJsDoc (JSObject props) = "{ " ++ (commafy . map showProp $ props) ++ " }"
     where showProp (name, t) = show name ++ ": " ++ toJsDoc t
 toJsDoc (JSTVar name) = toStrName name
-    where toStrName x = letters!!(x `mod` numLetters):[] ++ suffix x
+    where toStrName x = show x --letters!!(x `mod` numLetters):[] ++ suffix x
           letters = ['a'..'z']
           numLetters = length letters
           suffix x = if 0 < x `div` numLetters
                    then show (x `div` numLetters)
                    else ""
-                                  
-
 
 flattenBlocks' :: Expr a -> Expr a
 flattenBlocks' (Expr body x) = Expr b x 

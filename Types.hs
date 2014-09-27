@@ -11,6 +11,8 @@ import Data.Foldable(Foldable(..))
 import Text.PrettyPrint.GenericPretty(Generic, Out(..))
 import Prelude hiding (foldr, mapM)
 
+import Debug.Trace
+
 type Name = Int
 
 data Type a = TVar Name
@@ -80,7 +82,6 @@ unify m (TVar name) t =
     else unify m lookedUpType substType
     where lookedUpType = safeLookup name m
           substType = substituteType m t
-
 unify m t1@(TCons _ _) t2@(TVar _) = unify m t2 t1
 unify m t1@(TCons consName1 ts1) t2@(TCons consName2 ts2) =
     if consName1 == consName2
