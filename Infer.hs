@@ -217,7 +217,7 @@ inferArray exprs = do
   let elemType = JSTVar elemTVarName
   (infExprs, subst) <- accumInfer inferExpr exprs
   finalSubst <- foldM (unifyExprs' elemType) subst $ map exprData infExprs
-  returnInfer (LitArray infExprs) elemType finalSubst
+  returnInfer (LitArray infExprs) (JSArray elemType) finalSubst
 
 
 inferStatement :: Statement (Expr a) -> Infer (Statement (Expr JSType))
