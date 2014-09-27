@@ -1,15 +1,11 @@
 module Parse where
 
-import System.Environment(getArgs)
-import Text.PrettyPrint.GenericPretty(pp, Out(..))
 import Control.Arrow((***))
 
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
-import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 
-import Infer
-import Pretty
+
 import Types
 
 -- ------------------------------------------------------------------------
@@ -38,23 +34,57 @@ fromStatement (ES3.ForStmt _ forInit pred' incr stmt) =
                       (Block $ fromStatement stmt : incr'')
           ]
     where incr'' = maybe [] (\x -> [Expression $ fromExpression x]) incr
-fromStatement (ES3.VarDeclStmt _ decls) = Block $ concatMap fromVarDecl decls
-fromStatement (ES3.FunctionStmt _ name args stmts) = Expression . ex $ LitFunc (Just . ES3.unId $ name) (map ES3.unId args) (Block $ map fromStatement stmts)
-fromStatement s = error $ "Not implemented statment: " ++ show (ES3PP.prettyPrint s)
+fromStatement (ES3.VarDeclStmt _ decls) = Block $ map fromVarDecl decls
+fromStatement (ES3.FunctionStmt _ name args stmts) = Expression . ex $ LitFunc (Just . ES3.unId $ name) (map ES3.unId args) (concatMap collectVarDecls stmts) funcBody
+    where funcBody = Block $ map fromStatement stmts
+fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPrint s)
 
 
+collectVarDecls :: ES3.Statement a -> [String]
+collectVarDecls (ES3.EmptyStmt _) = []
+collectVarDecls (ES3.BlockStmt _ stmts) = concatMap collectVarDecls stmts
+collectVarDecls (ES3.ExprStmt _ _) = []
+collectVarDecls (ES3.IfStmt _ _ s1 s2) = (collectVarDecls s1) ++ (collectVarDecls s2)
+collectVarDecls (ES3.IfSingleStmt _ _ s) = collectVarDecls s
+collectVarDecls (ES3.SwitchStmt _ _ cases) = concatMap collectVarDecls $ concatMap getCaseStatements cases
+collectVarDecls (ES3.WhileStmt _ _ s) = collectVarDecls s
+collectVarDecls (ES3.DoWhileStmt _ s _) = collectVarDecls s
+collectVarDecls (ES3.BreakStmt _ _) = []
+collectVarDecls (ES3.ContinueStmt _ _) = []
+collectVarDecls (ES3.LabelledStmt _ _ s) = collectVarDecls s
+collectVarDecls (ES3.ForInStmt _ forInInit' _ s) = forInVars ++ collectVarDecls s
+    where forInVars = case forInInit' of
+                        ES3.ForInVar (ES3.Id _ name) -> [name]
+                        _ -> []
+collectVarDecls (ES3.ForStmt _ forInit' _ _ s) = forVars ++ collectVarDecls s
+    where forVars = case forInit' of
+                      ES3.VarInit varDecls -> map getVarName varDecls
+                      _ -> []
+collectVarDecls (ES3.TryStmt _ sTry msCatch msFinally) = 
+    collectVarDecls sTry ++ maybe [] (collectVarDecls . getCatchStatement) msCatch ++ maybe [] collectVarDecls msFinally
+    where getCatchStatement (ES3.CatchClause _ _ s') = s'
+collectVarDecls (ES3.ThrowStmt _ _) = []
+collectVarDecls (ES3.ReturnStmt _ _) = []
+collectVarDecls (ES3.WithStmt _ _ s) = collectVarDecls s
+collectVarDecls (ES3.VarDeclStmt _ vars) = map getVarName vars
+collectVarDecls (ES3.FunctionStmt _ (ES3.Id _ funcName) _ _) = [funcName]
 
-fromVarDecl :: ES3.VarDecl a -> [Statement (Expr ())]
-fromVarDecl (ES3.VarDecl _ id' assignRValue) = declS : assignS
-    where declS = VarDecl varName
-          varName = ES3.unId id'
-          assignS = case assignRValue of
-                      Nothing -> []
-                      Just ex' -> [Expression . ex $ Assign (ex $ Var varName) (fromExpression ex')]
+getVarName :: ES3.VarDecl a -> String
+getVarName (ES3.VarDecl _ (ES3.Id _ name) _) = name
+
+getCaseStatements :: ES3.CaseClause a -> [ES3.Statement a]
+getCaseStatements (ES3.CaseClause _ _ stmts) = stmts
+getCaseStatements (ES3.CaseDefault _ stmts) = stmts
+
+fromVarDecl :: ES3.VarDecl a -> Statement (Expr ())
+fromVarDecl (ES3.VarDecl _ (ES3.Id _ varName) assignRValue) = assignS
+    where assignS = case assignRValue of
+                      Nothing -> Empty
+                      Just ex' -> Expression . ex $ Assign (ex $ Var varName) (fromExpression ex')
 
 fromForInit :: ES3.ForInit a -> Statement (Expr ())
 fromForInit ES3.NoInit = Empty
---fromForInit (ES3.VarInit varDecls) = Block $ map fromVarDecl varDecls
+fromForInit (ES3.VarInit varDecls) = Block $ map fromVarDecl varDecls
 fromForInit (ES3.ExprInit expr) = Expression $ fromExpression expr
 --fromStatement
 
@@ -73,7 +103,8 @@ fromExpression es3x =
       ES3.BoolLit _ x -> LitBoolean x
       ES3.ArrayLit _ xs -> LitArray $ map fromExpression xs
       ES3.ObjectLit _ props -> LitObject $ map (fromProp *** fromExpression) props
-      ES3.FuncExpr _ name argNames stmts -> LitFunc (fmap ES3.unId name) (map ES3.unId argNames) (Block $ map fromStatement stmts) 
+      ES3.FuncExpr _ name argNames stmts -> LitFunc (fmap ES3.unId name) (map ES3.unId argNames) (concatMap collectVarDecls stmts) funcBody
+          where funcBody = Block $ map fromStatement stmts 
       ES3.VarRef _ name -> Var $ ES3.unId name
       ES3.DotRef _ expr name -> Property (fromExpression expr) (ES3.unId name)
       ES3.AssignExpr _ ES3.OpAssign lvalue expr -> Assign (fromLValue lvalue) (fromExpression expr)

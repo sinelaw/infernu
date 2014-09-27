@@ -100,7 +100,7 @@ accumInfer' inferAct (ts, lastSub) argExpr = do
 inferExpr :: Expr a -> Infer (Expr JSType)
 inferExpr (Expr body _) =
     case body of
-      LitFunc name argNames stmts -> inferFunc name argNames stmts
+      LitFunc name argNames varNames stmts -> inferFunc name argNames varNames stmts
       Assign lval rval -> inferAssign lval rval
       Call callee args -> inferCall callee args
       Index expr indexExpr -> inferIndex expr indexExpr
@@ -180,12 +180,16 @@ inferCall callee args = do
   returnInfer (Call infCallee infArgs) returnTVar finalSubst 
 
 
-introduceArgs :: [(String, Name)] -> TypeEnv a -> TypeEnv a
-introduceArgs argNames tenv = foldr introduceArgs' tenv argNames
-    where introduceArgs' (argName, argTypeName) = setTypeSig argName (TypeSig [] $ TVar argTypeName) 
+introduceVars :: [(String, Name, [Name])] -> TypeEnv a -> TypeEnv a
+introduceVars argNames tenv = foldr introduceArgs' tenv argNames
+    where introduceArgs' (argName, argTypeName, typeSigNames) = setTypeSig argName (TypeSig typeSigNames $ TVar argTypeName) 
 
-inferFunc :: Maybe String -> [String] -> Statement (Expr a) -> Infer (Expr JSType)
-inferFunc name argNames stmts = do
+introduceArgs :: [(String, Name)] -> TypeEnv a -> TypeEnv a
+introduceArgs argNames tenv = introduceVars argNames' tenv
+    where argNames' = map (\(a,b) -> (a,b,[])) argNames
+
+inferFunc :: Maybe String -> [String] -> [String] -> Statement (Expr a) -> Infer (Expr JSType)
+inferFunc name argNames varNames stmts = do
   argTypeNames <- forM argNames $ const fresh
   returnInferName <- fresh
   tenv <- askTypeEnv  
@@ -198,7 +202,7 @@ inferFunc name argNames stmts = do
                 Just name' -> setTypeSig name' (TypeSig argTypeNames $ toType funcType) tenv
       tenvWithArgs = introduceArgs (zip argNames argTypeNames) tenv'
   (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType . listenTSubst $ inferStatement stmts
-  returnInfer (LitFunc name argNames infStmts) funcType subst
+  returnInfer (LitFunc name argNames varNames infStmts) funcType subst
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
 unifyExprs' elemType lastSubst curType = runEither $ unify lastSubst (toType elemType) (toType curType)

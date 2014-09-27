@@ -176,7 +176,11 @@ data Body expr = LitBoolean Bool
                | LitString String 
                | LitRegex String 
                | Var String
-               | LitFunc (Maybe String) [String] (Statement expr)
+               | LitFunc { litFuncName :: Maybe String
+                         , litFuncArgs :: [String]
+                         , litFuncVars :: [String]
+                         , litFuncBody :: Statement expr
+                         }
                | LitArray [expr] 
                | LitObject [(String, expr)]
                | Call expr [expr]
@@ -192,7 +196,6 @@ data Statement expr = Empty
                     | IfThenElse expr (Statement expr) (Statement expr)
                     | While expr (Statement expr)
                     | Return (Maybe expr)
-                    | VarDecl String
           deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 
