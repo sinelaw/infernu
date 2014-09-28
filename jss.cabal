@@ -16,10 +16,10 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Infer, Pretty, Types, Parse
+  exposed-modules:     Infer, Pretty, Types, Parse, Test
   -- other-modules:       
   other-extensions:    DeriveGeneric
-  build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck
+  build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive
   --hs-source-dirs:      
   default-language:    Haskell2010
   ghc-options: -Wall
@@ -27,7 +27,7 @@ library
 executable sjs-demo
   main-is: Demo.hs
   other-extensions:    DeriveGeneric
-  build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck
+  build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive
   --hs-source-dirs:      
   default-language:    Haskell2010
   ghc-options: -Wall

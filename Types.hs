@@ -1,7 +1,5 @@
 {-# LANGUAGE DeriveGeneric, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-
 module Types where
-
 
 import qualified Data.Map.Lazy as Map
 import Data.Maybe(fromMaybe)
@@ -13,7 +11,6 @@ import Prelude hiding (foldr, mapM)
 
 -----------------------------------------------------------------------
 import Debug.Trace
-import Test.QuickCheck
 
 assertEqual :: (Show a, Eq a) => a -> a -> Bool
 assertEqual a b = if a == b then True else trace ("    expected: " ++ show b ++ "\n    got:      " ++ show a) False
@@ -57,9 +54,9 @@ substFromList = Map.fromList
 
 -- page 164
 tvarsIn :: Type a -> [Name]
-tvarsIn t = tvarsIn' t []
-    where tvarsIn' (TVar x) names = x:names
-          tvarsIn' (TCons _ ts) names = foldr tvarsIn' names ts
+tvarsIn t = tvarsIn' [] t
+    where tvarsIn' names (TVar x) = x:names
+          tvarsIn' names (TCons _ ts) = foldl' tvarsIn' names ts
 
 safeLookup :: Name -> TSubst a -> Type a
 safeLookup name m = fromMaybe (TVar name) (Map.lookup name m)
@@ -145,10 +142,6 @@ data JSConsType = JSConsBoolean | JSConsNumber | JSConsString | JSConsRegex
                deriving (Show, Eq, Generic)
 
 instance Out JSConsType
-
-instance Arbitrary JSConsType
-instance (Arbitrary a) => Arbitrary (Type a)
-                  
 
 data JSType = JSBoolean | JSNumber | JSString | JSRegex
             | JSFunc [JSType] JSType
