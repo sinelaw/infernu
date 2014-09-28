@@ -87,7 +87,8 @@ compose m1 m2 = (Map.map (substituteType m1) m2) `Map.union` m1
 prop_compose_distributive :: TSubst JSConsType -> TSubst JSConsType -> Type JSConsType -> Bool
 prop_compose_distributive s1 s2 t = substituteType (compose s1 s2) t == (substituteType s1 . substituteType s2 $ t)
 
-
+-- | Adds a substitution from type variable name to type, to the given substitution.
+-- | The given pair must not be recursive, i.e. the type variable name must not appear in the given type, otherwise an occurs check will fail.
 extend :: Eq a => TSubst a -> Name -> Type a -> Either (TypeError a) (TSubst a)
 extend m name t
     | TVar name == t = Right m
@@ -101,28 +102,32 @@ prop_extend subst n t = case subst' of
                           Left _ -> True -- TODO verify infinite type
     where subst' = (extend subst n t)
 
+traceShowId' s x = traceShow (s ++ show x) x
+
+unify :: (Show a, Eq a) => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
+unify s t1 t2 = traceShowId' "unified into: " $ unify' (traceShowId' "subst: " s) (traceShowId' "t1: " t1) (traceShowId' "t2: " t2)
 
 -- | Subst is assumed to not have cycles
-unify :: Eq a => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
-unify m (TVar name) t = 
+unify' :: Eq a => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
+unify' m (TVar name) t = 
     if lookedUpType == TVar name
     then extend m name substType
-    else unify m lookedUpType substType
+    else unify' m lookedUpType substType
     where lookedUpType = safeLookup name m
           substType = substituteType m t
-unify m t1@(TCons _ _) t2@(TVar _) = unify m t2 t1
-unify m t1@(TCons consName1 ts1) t2@(TCons consName2 ts2) =
+unify' m t1@(TCons _ _) t2@(TVar _) = unify' m t2 t1
+unify' m t1@(TCons consName1 ts1) t2@(TCons consName2 ts2) =
     if consName1 == consName2
     then unifyl m (zip ts1 ts2)
     else Left $ TypeMismatch "TCons names do not match" t1 t2
 
 unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either (TypeError a) (TSubst a)
-unifyl m = foldr unify' (Right m)
-    where unify' (t1, t2) (Right m') = unify m' t1 t2
-          unify' _ (Left e) = Left e
+unifyl m = foldr unify'' (Right m)
+    where unify'' (t1, t2) (Right m') = unify' m' t1 t2
+          unify'' _ (Left e) = Left e
 
 prop_unify_self :: TSubst JSConsType -> Type JSConsType -> Bool
-prop_unify_self subst t = case unify subst t t of
+prop_unify_self subst t = case unify' subst t t of
                             Left _ -> False
                             Right _ -> True
 

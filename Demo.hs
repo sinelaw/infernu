@@ -37,7 +37,7 @@ parseFile arg = do
   let input = flattenBlocks . Block $ stmts
   -- pp input
   -- putStrLn "\n---------------\n"
-  let inf = runInfer $ inferStatement input
+  let inf = typeInference input
   putStrLn "\n---------------\n"
   pp inf
   case inf of
