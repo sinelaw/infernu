@@ -51,10 +51,14 @@ runInfer = runIdentity
            . runWriterT 
            . flip runReaderT emptyEnv
 
+-- TODO: Change extend (in Types.hs) so that the types map always contains var -> tcons mappings, without intermediate tvars.
 substStatement :: JSTSubst -> Statement (Expr JSType) -> Statement (Expr JSType)
 substStatement subst stmt = f stmt
     where f :: Statement (Expr JSType) -> Statement (Expr JSType)
-          f = fmap . fmap $ (fromType . substituteType subst . toType)
+          f = fmap . fmap $ (fromType . substituteType' subst . toType)
+          substituteType' subst x = case substituteType subst x of
+                                      t@(TVar x') -> if t == x then t else substituteType' subst t
+                                      TCons name ys -> TCons name $ map (substituteType' subst) ys
 
 typeInference :: Statement (Expr a) -> Either JSTypeError (Statement (Expr JSType))
 typeInference stmt = runIdentity 
