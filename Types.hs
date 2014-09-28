@@ -61,10 +61,15 @@ tvarsIn t = tvarsIn' [] t
 safeLookup :: Name -> TSubst a -> Type a
 safeLookup name m = fromMaybe (TVar name) (Map.lookup name m)
 
+
 -- page 166
 substituteType :: TSubst a -> Type a -> Type a
 substituteType m (TVar name) = safeLookup name m
 substituteType m (TCons consName ts) = TCons consName $ map (substituteType m) ts
+
+
+prop_substituteType_identity :: Type JSConsType -> Bool
+prop_substituteType_identity t = substituteType idSubst t == t
 
 prop_substituteType_basic :: () -> Bool
 prop_substituteType_basic _ = assertEqual (substituteType subst t) expectedType
@@ -73,14 +78,14 @@ prop_substituteType_basic _ = assertEqual (substituteType subst t) expectedType
           u = JSFunc [JSTVar 2] (JSTVar 3)
           expectedType = toType $ JSFunc [u] (u)
 
+
 compose :: TSubst a -> TSubst a -> TSubst a
 compose m1 m2 = (Map.map (substituteType m1) m2) `Map.union` m1
 
-prop_compose_basic :: () -> Bool
-prop_compose_basic _ = assertEqual (compose subst2 subst1) expectedMap
-    where subst1 = Map.fromList [(1, TVar 2)] :: TSubst JSConsType
-          subst2 = Map.fromList [(2, TVar 3)]
-          expectedMap = Map.fromList [(1, TVar 3), (2, TVar 3)]
+
+prop_compose_distributive :: TSubst JSConsType -> TSubst JSConsType -> Type JSConsType -> Bool
+prop_compose_distributive s1 s2 t = substituteType (compose s1 s2) t == (substituteType s1 . substituteType s2 $ t)
+
 
 extend :: Eq a => TSubst a -> Name -> Type a -> Either (TypeError a) (TSubst a)
 extend m name t
@@ -88,6 +93,7 @@ extend m name t
     | name `elem` tvarsIn t = Left $ OccursCheckError name t 
     | otherwise = Right $ Map.insert name t m
 
+-- | Subst is assumed to not have cycles
 unify :: Eq a => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
 unify m (TVar name) t = 
     if lookedUpType == TVar name
