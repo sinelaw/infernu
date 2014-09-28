@@ -1,6 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module Infer where
 
+import Data.Maybe(fromMaybe)
 import Data.Functor((<$>))
 import Data.Functor.Identity(Identity(..), runIdentity)
 import Control.Monad(forM, foldM)
@@ -24,7 +25,8 @@ type JSTSubst = TSubst JSConsType
 type JSTypeError = TypeError JSConsType
 data NameSupply = NameSupply { maxName :: Name }
 
-inferTrace _ x = x
+traceInfer s x = traceShow (s ++ show x) x
+--traceInfer _ x = x
 
 emptyNameSupply :: NameSupply
 emptyNameSupply = NameSupply { maxName = 0 }
@@ -107,7 +109,7 @@ runEither = lift . lift . lift . hoistEither
 returnSubstType :: JSType -> JSTSubst -> Infer JSType
 returnSubstType t subst  = do
     tellTSubst subst
-    return . inferTrace "returnSubst: " . fromType . substituteType subst . toType $ t 
+    return . fromType . substituteType subst . toType $ t 
 
 returnInfer :: Body (Expr JSType) -> JSType -> JSTSubst -> Infer (Expr JSType)
 returnInfer b t subst = Expr b <$> returnSubstType t subst
@@ -178,10 +180,11 @@ inferAssign lval rval = do
   returnInfer (Assign rt lt) (exprData rt) finalSubst
 
 
+newInstance tsig = (traceInfer "instantiated to: " <$> newInstance' (traceInfer "tsig: " tsig))
 -- page 178
 -- | instantiates a given type signature: allocates fresh variables for all the bound names and replaces them in the type
-newInstance :: JSTypeSig -> Infer JSType
-newInstance (TypeSig varNames t) = 
+newInstance' :: JSTypeSig -> Infer JSType
+newInstance' (TypeSig varNames t) = 
     do substList <- forM varNames $ \name -> 
                 do tname <- fresh
                    return $ (name, TVar tname)
@@ -191,7 +194,7 @@ newInstance (TypeSig varNames t) =
 inferVar :: String -> Infer (Expr JSType)
 inferVar name = do
   tenv <- askTypeEnv
-  case Map.lookup name tenv of
+  case Map.lookup (traceInfer "var name: " name) tenv of
     Just tsig -> Expr (Var name) <$> newInstance tsig
     Nothing -> typeFail $ GenericTypeError ("Unbound variable: " ++ name)
   
@@ -200,8 +203,8 @@ inferCall callee args = do
   returnTName <- fresh
   let returnTVar = JSTVar returnTName
   (infCallee:infArgs, substN) <- accumInfer inferExpr $ callee:args
-  newTSubst <- runEither $ unify substN (inferTrace "expected callee type: " . toType $ JSFunc (map exprData infArgs) returnTVar) (inferTrace "callee type: " . toType . exprData $ infCallee) 
-  let finalSubst = inferTrace "finalSubst: " $ newTSubst `compose` substN
+  newTSubst <- runEither $ unify substN (toType $ JSFunc (map exprData infArgs) returnTVar) (toType . exprData $ infCallee) 
+  let finalSubst = newTSubst `compose` substN
   returnInfer (Call infCallee infArgs) returnTVar finalSubst 
 
 
@@ -225,11 +228,13 @@ inferFunc name argNames varNames stmts = do
                 -- anonymous function - doesn't introduce a new local name
                 Nothing -> tenv
                 -- named function, equivalent to: let f = < lambda >
-                Just name' -> setTypeSig name' (TypeSig argTypeNames $ toType funcType) tenv
+                Just name' -> setTypeSig name' (TypeSig (returnInferName:argTypeNames) $ toType funcType) tenv
       argNamesWithTypeVars = zip argNames argTypeNames
       varNamesWithTypeVars = zip varNames varTypeNames
-      tenv'' = introduceVars (map (\(varName, tvarName) -> ((varName, tvarName), [tvarName])) varNamesWithTypeVars) tenv'
-      tenvWithArgs = inferTrace "tenvWithArgs" $ introduceArgs argNamesWithTypeVars tenv''
+      -- don't allow variable type polymorphism - so set the type scheme bound vars to an empty list []
+      tenv'' = introduceVars (map (\(varName, tvarName) -> ((varName, tvarName), [])) varNamesWithTypeVars) tenv'
+      tenvWithArgs = traceInfer _title $ introduceArgs argNamesWithTypeVars tenv''
+      _title = "tenvWithArgs: " ++ (fromMaybe "<anon>" name) ++ ": "
   (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType . listenTSubst $ inferStatement stmts
   returnInfer (LitFunc name argNames varNames infStmts) funcType subst
 

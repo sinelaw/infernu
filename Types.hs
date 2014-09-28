@@ -14,6 +14,7 @@ import Debug.Trace
 
 assertEqual :: (Show a, Eq a) => a -> a -> Bool
 assertEqual a b = if a == b then True else trace ("    expected: " ++ show b ++ "\n    got:      " ++ show a) False
+traceTypes s x = x --traceShow (s ++ show x) x
 
 -----------------------------------------------------------------------
  
@@ -102,10 +103,9 @@ prop_extend subst n t = case subst' of
                           Left _ -> True -- TODO verify infinite type
     where subst' = (extend subst n t)
 
-traceShowId' s x = traceShow (s ++ show x) x
 
 unify :: (Show a, Eq a) => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
-unify s t1 t2 = traceShowId' "unified into: " $ unify' (traceShowId' "subst: " s) (traceShowId' "t1: " t1) (traceShowId' "t2: " t2)
+unify s t1 t2 = traceTypes "unified into: " $ unify' (traceTypes "subst: " s) (traceTypes "t1: " t1) (traceTypes "t2: " t2)
 
 -- | Subst is assumed to not have cycles
 unify' :: Eq a => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
