@@ -78,7 +78,8 @@ prop_substituteType_basic _ = assertEqual (substituteType subst t) expectedType
           u = JSFunc [JSTVar 2] (JSTVar 3)
           expectedType = toType $ JSFunc [u] (u)
 
-
+-- | Compose substitutions. [[ m1 `compose` m2 ]] = [[ m1 ]] . [[ m2 ]] 
+-- | where the TSubst values are seen as functions (for type variable names to types)
 compose :: TSubst a -> TSubst a -> TSubst a
 compose m1 m2 = (Map.map (substituteType m1) m2) `Map.union` m1
 
