@@ -94,6 +94,14 @@ extend m name t
     | name `elem` tvarsIn t = Left $ OccursCheckError name t 
     | otherwise = Right $ Map.insert name t m
 
+
+prop_extend :: TSubst JSConsType -> Name -> Type JSConsType -> Bool
+prop_extend subst n t = case subst' of
+                          Right subst'' -> substituteType subst'' (TVar n) == t
+                          Left _ -> True -- TODO verify infinite type
+    where subst' = (extend subst n t)
+
+
 -- | Subst is assumed to not have cycles
 unify :: Eq a => TSubst a -> Type a -> Type a -> Either (TypeError a) (TSubst a)
 unify m (TVar name) t = 
