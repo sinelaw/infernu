@@ -14,6 +14,8 @@ import qualified Data.Map.Lazy as Map
 
 import Types
 
+
+import Test.QuickCheck
 import Debug.Trace
 
 type JSTypeEnv = TypeEnv JSConsType

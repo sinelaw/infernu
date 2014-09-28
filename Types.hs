@@ -11,8 +11,15 @@ import Data.Foldable(Foldable(..))
 import Text.PrettyPrint.GenericPretty(Generic, Out(..))
 import Prelude hiding (foldr, mapM)
 
+-----------------------------------------------------------------------
 import Debug.Trace
+import Test.QuickCheck
 
+assertEqual :: (Show a, Eq a) => a -> a -> Bool
+assertEqual a b = if a == b then True else trace ("    expected: " ++ show b ++ "\n    got:      " ++ show a) False
+
+-----------------------------------------------------------------------
+ 
 type Name = Int
 
 data Type a = TVar Name
@@ -62,12 +69,21 @@ substituteType :: TSubst a -> Type a -> Type a
 substituteType m (TVar name) = safeLookup name m
 substituteType m (TCons consName ts) = TCons consName $ map (substituteType m) ts
 
+prop_substituteType_basic :: () -> Bool
+prop_substituteType_basic _ = assertEqual (substituteType subst t) expectedType
+    where subst = Map.fromList [(1, toType u)]
+          t = toType $ JSFunc [JSTVar 1] (JSTVar 1)
+          u = JSFunc [JSTVar 2] (JSTVar 3)
+          expectedType = toType $ JSFunc [u] (u)
 
 compose :: TSubst a -> TSubst a -> TSubst a
-compose m2 m1 = Map.union merged m2
-    where merged = Map.mapWithKey f m1
-          f _ (TVar name') = safeLookup name' m2
-          f _ t = t
+compose m1 m2 = (Map.map (substituteType m1) m2) `Map.union` m1
+
+prop_compose_basic :: () -> Bool
+prop_compose_basic _ = assertEqual (compose subst2 subst1) expectedMap
+    where subst1 = Map.fromList [(1, TVar 2)] :: TSubst JSConsType
+          subst2 = Map.fromList [(2, TVar 3)]
+          expectedMap = Map.fromList [(1, TVar 3), (2, TVar 3)]
 
 extend :: Eq a => TSubst a -> Name -> Type a -> Either (TypeError a) (TSubst a)
 extend m name t
@@ -92,6 +108,11 @@ unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either (TypeError a) (TSubst
 unifyl m = foldr unify' (Right m)
     where unify' (t1, t2) (Right m') = unify m' t1 t2
           unify' _ (Left e) = Left e
+
+prop_unify_self :: TSubst JSConsType -> Type JSConsType -> Bool
+prop_unify_self subst t = case unify subst t t of
+                            Left _ -> False
+                            Right _ -> True
 
 -- | Finds the free vars in a type signature, i.e. var names used in the type but not mentioned in the sig's bound names
 freeVariables :: TypeSig a -> [Name]
@@ -124,6 +145,9 @@ data JSConsType = JSConsBoolean | JSConsNumber | JSConsString | JSConsRegex
                deriving (Show, Eq, Generic)
 
 instance Out JSConsType
+
+instance Arbitrary JSConsType
+instance (Arbitrary a) => Arbitrary (Type a)
                   
 
 data JSType = JSBoolean | JSNumber | JSString | JSRegex
