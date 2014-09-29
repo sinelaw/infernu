@@ -11,6 +11,7 @@ Safe JavaScript
 - [ ] handle funcs with no return statement (should be same as return;)
 - [x] get fix.js to infer correctly
 - [ ] implement the type system described below
+- [ ] function return types should be like vars (use type sigs)
 
 ## Outline (TODO)
 
