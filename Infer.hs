@@ -138,12 +138,12 @@ inferExpr (Expr body _) =
 
 inferObject :: [(String, Expr a)] -> Infer (Expr JSType)
 inferObject props = do
-  objTypeName <- fresh
   let propNames = map fst props
       propExprs = map snd props
   (inferredProps, subst) <- accumInfer inferExpr propExprs
   let newBody = LitObject $ zip propNames inferredProps
-  returnInfer newBody (JSTVar objTypeName) subst
+      propTypes = map exprData inferredProps
+  returnInfer newBody (JSObject $ zip propNames propTypes) subst
 
 
 inferProperty :: Expr a -> String -> Infer (Expr JSType)
