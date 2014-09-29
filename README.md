@@ -19,8 +19,15 @@ Safe JavaScript
 
 Implementation options:
 
-- In unification allow also negative rules such as: t != function, and we can use them in assignment expressions (in `f = ...` => f must not be a function)
-- In call expressions, tell the lvalue subexpr that it can instantiate a type scheme. Otherwise, var exprs do not really instantiate type schemes (they don't allow any bound tvars)
+1. In unification allow also negative rules such as: t != function, and we can use them in assignment expressions (in `f = ...` => f must not be a function)
+2. In call expressions, tell the lvalue subexpr that it can instantiate a type scheme. Otherwise, var exprs do not really instantiate type schemes (they don't allow any bound tvars)
+3. Switch from type schemes to "forall" as a basic type (higher order types):
+
+example (of option 3):
+
+    makeFunc :: () -> (forall t. t -> t)
+    obj.a = makeFunc() // will get: obj.a :: forall t. t -> t
+    
 
 Examples:
 

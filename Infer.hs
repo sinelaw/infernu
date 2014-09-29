@@ -229,8 +229,8 @@ inferFunc name argNames varNames stmts = do
       argNamesWithTypeVars = zip argNames argTypeNames
       varNamesWithTypeVars = zip varNames varTypeNames
       -- don't allow variable type polymorphism - so set the type scheme bound vars to an empty list []
-      tenv'' = introduceVars (map sndToLThird varNamesWithTypeVars) tenv'
-      sndToLThird (a,b) = ((a,b),[b])
+      tenv'' = introduceVars (map (,[]) varNamesWithTypeVars) tenv'
+--      sndToLThird (a,b) = ((a,b),[b])
       tenvWithArgs = introduceArgs argNamesWithTypeVars tenv''
                      
       -- _title = "tenvWithArgs: " ++ (fromMaybe "<anon>" name) ++ ": "
