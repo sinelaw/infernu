@@ -2,6 +2,7 @@
 module Infer where
 
 import Data.Functor((<$>))
+import Control.Applicative((<*>))
 import Data.Functor.Identity(Identity(..), runIdentity)
 import Control.Monad(forM, foldM)
 import Control.Monad.Trans(lift)
@@ -205,37 +206,38 @@ inferCall callee args = do
   returnInfer (Call infCallee infArgs) returnTVar finalSubst 
 
 
-introduceVars :: [((String, Name), [Name])] -> TypeEnv a -> TypeEnv a
-introduceVars argNames tenv = foldr introduceVars' tenv argNames
+introduceTVars :: [((String, Name), [Name])] -> TypeEnv a -> TypeEnv a
+introduceTVars argNames tenv = foldr introduceVars' tenv argNames
     where introduceVars' ((argName, argTypeName), typeSigNames) = setTypeSig argName (TypeSig typeSigNames $ TVar argTypeName) 
 
-introduceArgs :: [(String, Name)] -> TypeEnv a -> TypeEnv a
-introduceArgs argNames tenv = introduceVars argNames' tenv
-    where argNames' = map (,[]) argNames
+-- don't allow variable type polymorphism - so set the type scheme bound vars to an empty list []
+introduceMonomorph :: [(String, Name)] -> TypeEnv a -> TypeEnv a
+introduceMonomorph argNames = introduceTVars $ map (,[]) argNames
+
+mkJSFunc :: Name -> [Name] -> JSType
+mkJSFunc returnTypeName argTypeNames = JSFunc (map JSTVar argTypeNames) (JSTVar returnTypeName)
+
+getFuncTypeSig :: [String] -> Infer JSTypeSig
+getFuncTypeSig argNames = do
+  argTypeNames <- forM argNames $ const fresh
+  returnInferName <- fresh
+  let funcType = mkJSFunc returnInferName argTypeNames
+  return . TypeSig (returnInferName:argTypeNames) $ toType funcType
 
 inferFunc :: Maybe String -> [String] -> [String] -> Statement (Expr a) -> Infer (Expr JSType)
 inferFunc name argNames varNames stmts = do
-  argTypeNames <- forM argNames $ const fresh
   varTypeNames <- forM varNames $ const fresh
-  returnInferName <- fresh
-  tenv <- askTypeEnv  
-  let returnType = JSTVar returnInferName
-      funcType = JSFunc (map JSTVar argTypeNames) returnType
-      tenv' = case name of
-                -- anonymous function - doesn't introduce a new local name
-                Nothing -> tenv
-                -- named function, equivalent to: let f = < lambda >
-                Just name' -> setTypeSig name' (TypeSig (returnInferName:argTypeNames) $ toType funcType) tenv
-      argNamesWithTypeVars = zip argNames argTypeNames
+  argTypeNames <- forM argNames $ const fresh
+  funcTypeSig <- getFuncTypeSig argNames
+  let setFuncTypeSig = flip setTypeSig funcTypeSig
       varNamesWithTypeVars = zip varNames varTypeNames
-      -- don't allow variable type polymorphism - so set the type scheme bound vars to an empty list []
-      tenv'' = introduceVars (map (,[]) varNamesWithTypeVars) tenv'
---      sndToLThird (a,b) = ((a,b),[b])
-      tenvWithArgs = introduceArgs argNamesWithTypeVars tenv''
-                     
-      -- _title = "tenvWithArgs: " ++ (fromMaybe "<anon>" name) ++ ": "
-  (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType . listenTSubst $ inferStatement stmts
-  returnInfer (LitFunc name argNames varNames infStmts) funcType subst
+      argNamesWithTypeVars = zip argNames argTypeNames
+  returnTypeName <- fresh
+  tenv <- introduceMonomorph (varNamesWithTypeVars ++ argNamesWithTypeVars) 
+          <$> maybe id setFuncTypeSig name 
+          <$> askTypeEnv  
+  (infStmts, subst) <- withTypeEnv (const tenv) . withReturnType (JSTVar returnTypeName) . listenTSubst $ inferStatement stmts
+  returnInfer (LitFunc name argNames varNames infStmts) (mkJSFunc returnTypeName argTypeNames) subst
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
 unifyExprs' elemType lastSubst curType = runEither $ unify lastSubst (toType elemType) (toType curType)
