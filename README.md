@@ -5,11 +5,12 @@ Safe JavaScript
 ## TODO
 
 - [ ] add "module" primitive that allows vardecls, use it to map ES3 Scripts (should cause trivial.js to pass)
-- [ ] support all ES3 statement (or reject them, but handle all)
+- [ ] support all ES3 statement types (or reject them, but handle all)
 - [ ] preserve source code context info and use it for errors
 - [ ] support warnings
 - [ ] handle funcs with no return statement (should be same as return;)
-- [ ] get fix.js to infer correctly
+- [x] get fix.js to infer correctly
+- [ ] implement the type system described below
 
 ## Outline (TODO)
 
@@ -30,4 +31,5 @@ Examples:
     f = 2; // type error
     g = f(2); // g has type [number]
     h = f('a'); // h has type [string] -- crucial point! function calls cause instantiation of type scheme
-    
+
+
