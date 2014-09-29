@@ -17,6 +17,11 @@ Safe JavaScript
 - polymorphism: no variable polymorphism (variable assignments must have the same concrete type), but yes function polymorphism (function calls instantiate type schemes)
 - row type polymorphism (not implemented)
 
+Implementation options:
+
+- In unification allow also negative rules such as: t != function, and we can use them in assignment expressions (in `f = ...` => f must not be a function)
+- In call expressions, tell the lvalue subexpr that it can instantiate a type scheme. Otherwise, var exprs do not really instantiate type schemes (they don't allow any bound tvars)
+
 Examples:
 
     var x, y, f, g, h;

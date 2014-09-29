@@ -68,7 +68,7 @@ collectVarDecls (ES3.ThrowStmt _ _) = []
 collectVarDecls (ES3.ReturnStmt _ _) = []
 collectVarDecls (ES3.WithStmt _ _ s) = collectVarDecls s
 collectVarDecls (ES3.VarDeclStmt _ vars) = map getVarName vars
-collectVarDecls (ES3.FunctionStmt _ (ES3.Id _ funcName) _ _) = [] -- [funcName]
+collectVarDecls (ES3.FunctionStmt _ (ES3.Id _ funcName) _ _) = [funcName]
 
 getVarName :: ES3.VarDecl a -> String
 getVarName (ES3.VarDecl _ (ES3.Id _ name) _) = name

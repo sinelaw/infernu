@@ -1,7 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 module Infer where
 
-import Data.Maybe(fromMaybe)
 import Data.Functor((<$>))
 import Data.Functor.Identity(Identity(..), runIdentity)
 import Control.Monad(forM, foldM)
@@ -15,18 +14,15 @@ import qualified Data.Map.Lazy as Map
 
 import Types
 
-
-import Test.QuickCheck
-import Debug.Trace
+--import Debug.Trace
+--traceInfer s x = traceShow (s ++ show x) x
+--traceInfer _ x = x
 
 type JSTypeEnv = TypeEnv JSConsType
 type JSTypeSig = TypeSig JSConsType
 type JSTSubst = TSubst JSConsType
 type JSTypeError = TypeError JSConsType
 data NameSupply = NameSupply { maxName :: Name }
-
-traceInfer s x = traceShow (s ++ show x) x
---traceInfer _ x = x
 
 emptyNameSupply :: NameSupply
 emptyNameSupply = NameSupply { maxName = 0 }
@@ -57,10 +53,10 @@ runInfer = runIdentity
 substStatement :: JSTSubst -> Statement (Expr JSType) -> Statement (Expr JSType)
 substStatement subst stmt = f stmt
     where f :: Statement (Expr JSType) -> Statement (Expr JSType)
-          f = fmap . fmap $ (fromType . substituteType' subst . toType)
-          substituteType' subst x = case substituteType subst x of
-                                      t@(TVar x') -> if t == x then t else substituteType' subst t
-                                      TCons name ys -> TCons name $ map (substituteType' subst) ys
+          f = fmap . fmap $ (fromType . substituteType' . toType)
+          substituteType' x = case substituteType subst x of
+                                t@(TVar _) -> if t == x then t else substituteType' t
+                                TCons name ys -> TCons name $ map substituteType' ys
 
 typeInference :: Statement (Expr a) -> Either JSTypeError (Statement (Expr JSType))
 typeInference stmt = runIdentity 
@@ -180,11 +176,11 @@ inferAssign lval rval = do
   returnInfer (Assign rt lt) (exprData rt) finalSubst
 
 
-newInstance tsig = (traceInfer "instantiated to: " <$> newInstance' (traceInfer "tsig: " tsig))
+-- newInstance tsig = (traceInfer "instantiated to: " <$> newInstance' (traceInfer "tsig: " tsig))
 -- page 178
 -- | instantiates a given type signature: allocates fresh variables for all the bound names and replaces them in the type
-newInstance' :: JSTypeSig -> Infer JSType
-newInstance' (TypeSig varNames t) = 
+newInstance :: JSTypeSig -> Infer JSType
+newInstance (TypeSig varNames t) = 
     do substList <- forM varNames $ \name -> 
                 do tname <- fresh
                    return $ (name, TVar tname)
@@ -194,8 +190,9 @@ newInstance' (TypeSig varNames t) =
 inferVar :: String -> Infer (Expr JSType)
 inferVar name = do
   tenv <- askTypeEnv
-  case Map.lookup (traceInfer "var name: " name) tenv of
-    Just tsig -> Expr (Var name) <$> newInstance tsig
+  case Map.lookup name tenv of
+    Just tsig@(TypeSig _ (TCons JSConsFunc _)) -> Expr (Var name) <$> newInstance tsig
+    Just (TypeSig _ t) -> Expr (Var name) <$> newInstance (TypeSig [] t)
     Nothing -> typeFail $ GenericTypeError ("Unbound variable: " ++ name)
   
 inferCall :: Expr a -> [Expr a] -> Infer (Expr JSType)
@@ -232,9 +229,11 @@ inferFunc name argNames varNames stmts = do
       argNamesWithTypeVars = zip argNames argTypeNames
       varNamesWithTypeVars = zip varNames varTypeNames
       -- don't allow variable type polymorphism - so set the type scheme bound vars to an empty list []
-      tenv'' = introduceVars (map (\(varName, tvarName) -> ((varName, tvarName), [])) varNamesWithTypeVars) tenv'
-      tenvWithArgs = traceInfer _title $ introduceArgs argNamesWithTypeVars tenv''
-      _title = "tenvWithArgs: " ++ (fromMaybe "<anon>" name) ++ ": "
+      tenv'' = introduceVars (map sndToLThird varNamesWithTypeVars) tenv'
+      sndToLThird (a,b) = ((a,b),[b])
+      tenvWithArgs = introduceArgs argNamesWithTypeVars tenv''
+                     
+      -- _title = "tenvWithArgs: " ++ (fromMaybe "<anon>" name) ++ ": "
   (infStmts, subst) <- withTypeEnv (const tenvWithArgs) . withReturnType returnType . listenTSubst $ inferStatement stmts
   returnInfer (LitFunc name argNames varNames infStmts) funcType subst
 
