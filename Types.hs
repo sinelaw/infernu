@@ -3,7 +3,7 @@ module Types where
 
 import qualified Data.Map.Lazy as Map
 import Data.Maybe(fromMaybe)
-import Data.List((\\))
+import Data.List((\\), isPrefixOf, sortBy)
 import Data.Traversable(Traversable(..))
 import Data.Foldable(Foldable(..))
 import Text.PrettyPrint.GenericPretty(Generic, Out(..))
@@ -22,6 +22,7 @@ type Name = Int
 
 data Type a = TVar Name
             | TCons a [Type a]
+            | TRow [(String, Type a)]
                deriving (Show, Eq, Generic)
 
 instance Out a => Out (Type a)
@@ -44,6 +45,9 @@ type TSubst a = Subst (Type a)
 -- e.g. "x" :: forall "a" "b". "a" -> "b" -> Bool
 type TypeEnv a = Map.Map String (TypeSig a)
 
+sortWith :: Ord b => (a -> b) -> [a] -> [a]
+sortWith f = sortBy (\x y -> compare (f x) (f y))
+
 idSubst :: Subst a 
 idSubst = Map.empty
 
@@ -58,6 +62,7 @@ tvarsIn :: Type a -> [Name]
 tvarsIn t = tvarsIn' [] t
     where tvarsIn' names (TVar x) = x:names
           tvarsIn' names (TCons _ ts) = foldl' tvarsIn' names ts
+          tvarsIn' names (TRow fields) = foldl' tvarsIn' names (map snd fields)
 
 safeLookup :: Name -> TSubst a -> Type a
 safeLookup name m = fromMaybe (TVar name) (Map.lookup name m)
@@ -67,7 +72,7 @@ safeLookup name m = fromMaybe (TVar name) (Map.lookup name m)
 substituteType :: TSubst a -> Type a -> Type a
 substituteType m (TVar name) = safeLookup name m
 substituteType m (TCons consName ts) = TCons consName $ map (substituteType m) ts
-
+substituteType m (TRow fields) = TRow $ map (\(n,t) -> (n, substituteType m t)) fields
 
 prop_substituteType_identity :: Type JSConsType -> Bool
 prop_substituteType_identity t = substituteType idSubst t == t
@@ -117,6 +122,17 @@ unify m t1@(TCons consName1 ts1) t2@(TCons consName2 ts2) =
     if (consName1 == consName2) && (length ts1 == length ts2)
     then unifyl m (zip ts1 ts2)
     else Left $ TypeMismatch "TCons names do not match" t1 t2
+unify m t1@(TRow _) t2@(TVar _) = unify m t2 t1
+unify m t1@(TRow _) t2@(TCons _ _) = Left $ TypeMismatch "TCons never matches TRow" t1 t2
+unify m t1@(TCons _ _) t2@(TRow _) = unify m t2 t1
+unify m t1@(TRow fields1) t2@(TRow fields2) =
+    let sortFields = sortWith fst
+        f1 = sortFields fields1
+        f2 = sortFields fields2
+        (minF, maxF) = if (length f1) < (length f2) then (f1, f2) else (f2, f1)
+    in if (map fst minF) `isPrefixOf` (map fst maxF)
+       then unifyl m (zip (map snd minF) (map snd maxF))
+       else Left $ TypeMismatch "TRow fields are not a prefix/extension pair" t1 t2
 
 unifyl :: Eq a => TSubst a -> [(Type a, Type a)] -> Either (TypeError a) (TSubst a)
 unifyl m = foldr unify'' (Right m)
@@ -186,13 +202,13 @@ toType JSString = TCons JSConsString []
 toType JSRegex = TCons JSConsRegex []
 toType (JSFunc argsT resT) = TCons JSConsFunc $ toType resT : map toType argsT
 toType (JSArray elemT) = TCons JSConsArray [toType elemT]
-toType (JSObject propsT) = TCons (JSConsObject $ map fst propsT) 
-                           $ map (toType . snd) propsT
+toType (JSObject propsT) = TRow $ map (\(n,t) -> (n, toType t)) propsT
 toType JSUndefined = TCons JSConsUndefined []
 
 
 fromType :: Type JSConsType -> JSType
 fromType (TVar name) = JSTVar name
+fromType (TRow props) = JSObject $ map (\(n,t) -> (n, fromType t)) props
 fromType (TCons consName types) =
     case consName of
       JSConsBoolean -> JSBoolean
@@ -202,7 +218,7 @@ fromType (TCons consName types) =
       JSConsUndefined -> JSUndefined
       JSConsFunc -> JSFunc (map fromType . tail $ types) (fromType . head $ types)
       JSConsArray -> JSArray (fromType . head $ types) -- TODO ensure single
-      JSConsObject names -> JSObject $ zip names (map fromType types)
+--      JSConsObject names -> JSObject $ zip names (map fromType types)
 
 --data LValue = Var String | StrIndex Expr String | NumIndex Expr Int
 data Body expr = LitBoolean Bool 

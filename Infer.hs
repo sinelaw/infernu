@@ -59,6 +59,7 @@ substStatement subst stmt = f stmt
           substituteType' x = case substituteType subst x of
                                 t@(TVar _) -> if t == x then t else substituteType' t
                                 TCons name ys -> TCons name $ map substituteType' ys
+                                TRow props -> TRow $ map (\(n,t) -> (n, substituteType' t)) props
 
 typeInference :: Statement (Expr a) -> Either JSTypeError (Statement (Expr JSType))
 typeInference stmt = runIdentity 
@@ -241,10 +242,10 @@ inferFunc name argNames varNames stmts = do
       varNamesWithTypeVars = zip varNames varTypeNames
       argNamesWithTypeVars = zip argNames argTypeNames
       monotypes = argNamesWithTypeVars ++ varNamesWithTypeVars 
-      --dupeB (a, b) = ((a,b),[b])
-  tenv <- introduceMonomorph monotypes
+--      dupeB (a, b) = ((a,b),[b])
+  tenv <- introduceMonomorph (maybe id ((:) . (, recursionFuncTypeName)) name monotypes)
 --          <$> introduceTVars (map dupeB varNamesWithTypeVars)
-          <$> maybe id setFuncTypeSig name 
+--          <$> maybe id setFuncTypeSig name 
           <$> askTypeEnv  
   (infStmts, subst) <- withTypeEnv (const tenv) . withReturnType (JSTVar returnTypeName) . listenTSubst $ inferStatement stmts
   let updatedFuncType = fromType . substituteType subst $ toType funcType
