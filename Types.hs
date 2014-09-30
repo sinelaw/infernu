@@ -149,6 +149,9 @@ substituteTE tsubst env = Map.map (substitueTypeSig tsubst) env
 setTypeSig :: String -> TypeSig a -> TypeEnv a -> TypeEnv a
 setTypeSig = Map.insert
 
+generalize :: TypeEnv a -> Type a -> TypeSig a
+generalize tenv t = TypeSig (tvarsIn t \\ freeVariablesTE tenv) t
+
 --------------------------------------------------------------------
 
 data JSConsType = JSConsBoolean | JSConsNumber | JSConsString | JSConsRegex

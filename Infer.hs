@@ -1,6 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module Infer where
 
+import Data.List(intersperse)
 import Data.Functor((<$>))
 import Control.Applicative((<*>))
 import Data.Functor.Identity(Identity(..), runIdentity)
@@ -15,9 +16,9 @@ import qualified Data.Map.Lazy as Map
 
 import Types
 
---import Debug.Trace
---traceInfer s x = traceShow (s ++ show x) x
---traceInfer _ x = x
+import Debug.Trace
+traceInfer s x = traceShow (s ++ show x) x
+traceInfer _ x = x
 
 type JSTypeEnv = TypeEnv JSConsType
 type JSTypeSig = TypeSig JSConsType
@@ -113,8 +114,7 @@ returnInfer b t subst = Expr b <$> returnSubstType t subst
 
 -- TODO generalize to foldable
 accumInfer :: (b -> Infer c) -> [b]  -> Infer ([c], JSTSubst)
-accumInfer act es = do
-  (first reverse) <$> foldM (accumInfer' act) ([], idSubst) es
+accumInfer act es = first reverse <$> foldM (accumInfer' act) ([], idSubst) es
 
 accumInfer' :: (b -> Infer c) -> ([c], JSTSubst) -> b -> Infer ([c], JSTSubst)
 accumInfer' inferAct (ts, lastSub) argExpr = do
@@ -170,30 +170,32 @@ inferIndex expr indexExpr = do
 
 inferAssign :: Expr a -> Expr a -> Infer (Expr JSType)
 inferAssign lval rval = do
-  (rt, rs) <- listenTSubst $ inferExpr lval
-  (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE rs) $ inferExpr rval
-  subst' <- runEither $ unify ls (toType . exprData $ rt) (toType . exprData $ lt)
+  (rt, rs) <- listenTSubst $ inferExpr rval
+  (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE rs) $ inferExpr lval
+  tenv <- askTypeEnv
+  rt' <- newInstance . traceInfer "generalized: " . generalize tenv . toType . exprData $ rt
+  subst' <- runEither $ unify ls (traceInfer "RHS: " $ toType rt') (traceInfer "LHS: " $ toType . exprData $ lt)
   let finalSubst = subst' `compose` ls `compose` rs
-  returnInfer (Assign rt lt) (exprData rt) finalSubst
+  returnInfer (Assign lt rt) (exprData rt) finalSubst
 
 
 -- newInstance tsig = (traceInfer "instantiated to: " <$> newInstance' (traceInfer "tsig: " tsig))
 -- page 178
 -- | instantiates a given type signature: allocates fresh variables for all the bound names and replaces them in the type
 newInstance :: JSTypeSig -> Infer JSType
-newInstance (TypeSig varNames t) = 
+newInstance tsig@(TypeSig varNames t) = 
     do substList <- forM varNames $ \name -> 
                 do tname <- fresh
-                   return $ (name, TVar tname)
-       returnSubstType (fromType t) (substFromList substList)
+                   return (name, TVar tname) -- TODO verify name unique in varNames
+       traceInfer ("newInstance: " ++ show tsig ++ " -> ") <$> returnSubstType (fromType t) (substFromList substList)
 
 -- | Infers a value variable expression. If the variable is assigned a type signature, instantiate it. Otherwise fail.
 inferVar :: String -> Infer (Expr JSType)
 inferVar name = do
   tenv <- askTypeEnv
   case Map.lookup name tenv of
-    Just tsig@(TypeSig _ (TCons JSConsFunc _)) -> Expr (Var name) <$> newInstance tsig
-    Just (TypeSig _ t) -> Expr (Var name) <$> newInstance (TypeSig [] t)
+--    Just tsig@(TypeSig _ (TCons JSConsFunc _)) -> Expr (Var name) <$> newInstance tsig
+    Just tsig@(TypeSig _ t) -> Expr (Var name) <$> newInstance tsig --(TypeSig [] t)
     Nothing -> typeFail $ GenericTypeError ("Unbound variable: " ++ name)
   
 inferCall :: Expr a -> [Expr a] -> Infer (Expr JSType)
@@ -201,7 +203,7 @@ inferCall callee args = do
   returnTName <- fresh
   let returnTVar = JSTVar returnTName
   (infCallee:infArgs, substN) <- accumInfer inferExpr $ callee:args
-  newTSubst <- runEither $ unify substN (toType $ JSFunc (map exprData infArgs) returnTVar) (toType . exprData $ infCallee) 
+  newTSubst <- flip unifyExprs' substN (JSFunc (map exprData infArgs) returnTVar) (traceInfer "callee: " $ exprData infCallee) 
   let finalSubst = newTSubst `compose` substN
   returnInfer (Call infCallee infArgs) returnTVar finalSubst 
 
@@ -224,23 +226,33 @@ getFuncTypeSig argNames = do
   let funcType = mkJSFunc returnInferName argTypeNames
   return . TypeSig (returnInferName:argTypeNames) $ toType funcType
 
+consIf :: Bool -> a -> [a] -> [a]
+consIf p = if p then (:) else const id
+
 inferFunc :: Maybe String -> [String] -> [String] -> Statement (Expr a) -> Infer (Expr JSType)
 inferFunc name argNames varNames stmts = do
   varTypeNames <- forM varNames $ const fresh
   argTypeNames <- forM argNames $ const fresh
-  funcTypeSig <- getFuncTypeSig argNames
-  let setFuncTypeSig = flip setTypeSig funcTypeSig
+  --funcTypeSig <- getFuncTypeSig argNames
+  returnTypeName <- fresh
+  recursionFuncTypeName <- fresh
+  let --setFuncTypeSig = flip setTypeSig funcTypeSig
+      funcType = mkJSFunc returnTypeName argTypeNames
       varNamesWithTypeVars = zip varNames varTypeNames
       argNamesWithTypeVars = zip argNames argTypeNames
-  returnTypeName <- fresh
-  tenv <- introduceMonomorph (varNamesWithTypeVars ++ argNamesWithTypeVars) 
-          <$> maybe id setFuncTypeSig name 
+      monotypes = argNamesWithTypeVars ++ varNamesWithTypeVars 
+      dupeB (a, b) = ((a,b),[b])
+  tenv <- introduceMonomorph (maybe id ((:) . (, recursionFuncTypeName)) name monotypes)
+--          <$> introduceTVars (map dupeB varNamesWithTypeVars)
+--          <$> maybe id setFuncTypeSig name 
           <$> askTypeEnv  
   (infStmts, subst) <- withTypeEnv (const tenv) . withReturnType (JSTVar returnTypeName) . listenTSubst $ inferStatement stmts
-  returnInfer (LitFunc name argNames varNames infStmts) (mkJSFunc returnTypeName argTypeNames) subst
+  let updatedFuncType = fromType . substituteType subst $ toType funcType
+  subst' <- unifyExprs' updatedFuncType subst (JSTVar recursionFuncTypeName)
+  returnInfer (LitFunc name argNames varNames infStmts) updatedFuncType subst'
 
 unifyExprs' ::  JSType -> JSTSubst -> JSType -> Infer JSTSubst
-unifyExprs' elemType lastSubst curType = runEither $ unify lastSubst (toType elemType) (toType curType)
+unifyExprs' elemType lastSubst curType = runEither $ traceInfer "Unified: " $ unify lastSubst (traceInfer "unify lhs: " $ toType elemType) (traceInfer "unify rhs: " $ toType curType)
 
 inferArray :: [Expr a] -> Infer (Expr JSType)
 inferArray exprs = do
@@ -252,7 +264,7 @@ inferArray exprs = do
 
 
 inferStatement :: Statement (Expr a) -> Infer (Statement (Expr JSType))
-inferStatement Empty = return (Empty)
+inferStatement Empty = return Empty
 inferStatement (Expression expr) = inferExpr expr >>= \infExpr -> return (Expression infExpr)
 inferStatement (Block stmts) = do
   (infStmts, subst) <- accumInfer inferStatement stmts
@@ -274,7 +286,7 @@ inferStatement (While expr st) = do
   tellTSubst finalSubst
   return $ While expr' st'
 inferStatement (Return Nothing) = do
-  (returnType, sub) <- listenTSubst $ askReturnType
+  (returnType, sub) <- listenTSubst askReturnType
   case returnType of
     Nothing -> typeFail $ GenericTypeError "Return encountered outside a function"
     Just t -> do
@@ -282,7 +294,7 @@ inferStatement (Return Nothing) = do
       tellTSubst $ s0 `compose` sub
       return (Return Nothing)
 inferStatement (Return (Just expr)) = do
-  (returnType, s0) <- listenTSubst $ askReturnType
+  (returnType, s0) <- listenTSubst askReturnType
   case returnType of
     Nothing -> typeFail $ GenericTypeError "Return encountered outside a function"
     Just t -> do
