@@ -114,7 +114,7 @@ unify m (TVar name) t =
           substType = substituteType m t
 unify m t1@(TCons _ _) t2@(TVar _) = unify m t2 t1
 unify m t1@(TCons consName1 ts1) t2@(TCons consName2 ts2) =
-    if consName1 == consName2
+    if (consName1 == consName2) && (length ts1 == length ts2)
     then unifyl m (zip ts1 ts2)
     else Left $ TypeMismatch "TCons names do not match" t1 t2
 

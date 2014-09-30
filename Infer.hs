@@ -241,10 +241,10 @@ inferFunc name argNames varNames stmts = do
       varNamesWithTypeVars = zip varNames varTypeNames
       argNamesWithTypeVars = zip argNames argTypeNames
       monotypes = argNamesWithTypeVars ++ varNamesWithTypeVars 
-      dupeB (a, b) = ((a,b),[b])
-  tenv <- introduceMonomorph (maybe id ((:) . (, recursionFuncTypeName)) name monotypes)
+      --dupeB (a, b) = ((a,b),[b])
+  tenv <- introduceMonomorph monotypes
 --          <$> introduceTVars (map dupeB varNamesWithTypeVars)
---          <$> maybe id setFuncTypeSig name 
+          <$> maybe id setFuncTypeSig name 
           <$> askTypeEnv  
   (infStmts, subst) <- withTypeEnv (const tenv) . withReturnType (JSTVar returnTypeName) . listenTSubst $ inferStatement stmts
   let updatedFuncType = fromType . substituteType subst $ toType funcType
