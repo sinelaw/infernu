@@ -122,6 +122,19 @@ accumInfer' inferAct (ts, lastSub) argExpr = do
   (argType, newSub) <- listenTSubst $ withTypeEnv (substituteTE lastSub) (inferAct argExpr)
   return (argType : ts, newSub `compose` lastSub) 
 
+isValue :: Expr a -> Bool
+isValue (Expr body _) = 
+    case body of
+      LitFunc _ _ _ _ -> True
+      LitArray _ -> True
+      LitBoolean _ -> True
+      LitNumber _ -> True
+      LitRegex _ -> True
+      LitString _ -> True
+      LitObject _ -> True
+      Var _ -> True
+      _ -> False
+
 inferExpr :: Expr a -> Infer (Expr JSType)
 inferExpr (Expr body _) =
     case body of
@@ -174,7 +187,10 @@ inferAssign lval rval = do
   (rt, rs) <- listenTSubst $ inferExpr rval
   (lt, ls) <- listenTSubst $ withTypeEnv (substituteTE rs) $ inferExpr lval
   tenv <- askTypeEnv
-  rt' <- newInstance . traceInfer "generalized: " . generalize tenv . toType . exprData $ rt
+  -- value restriction:
+  rt' <- if isValue rval
+         then newInstance . traceInfer "generalized: " . generalize tenv . toType . exprData $ rt
+         else return . exprData $ rt
   subst' <- runEither $ unify ls (traceInfer "RHS: " $ toType rt') (traceInfer "LHS: " $ toType . exprData $ lt)
   let finalSubst = subst' `compose` ls `compose` rs
   returnInfer (Assign lt rt) (exprData rt) finalSubst
@@ -196,7 +212,8 @@ inferVar name = do
   tenv <- askTypeEnv
   case Map.lookup name tenv of
 --    Just tsig@(TypeSig _ (TCons JSConsFunc _)) -> Expr (Var name) <$> newInstance tsig
-    Just tsig@(TypeSig _ t) -> Expr (Var name) <$> newInstance tsig --(TypeSig [] t)
+    Just tsig@(TypeSig _ t) -> Expr (Var name) . traceInfer varDesc <$> newInstance tsig --(TypeSig [] t)
+        where varDesc = "var " ++ show name ++ " :: "
     Nothing -> typeFail $ GenericTypeError ("Unbound variable: " ++ name)
   
 inferCall :: Expr a -> [Expr a] -> Infer (Expr JSType)
@@ -241,11 +258,11 @@ inferFunc name argNames varNames stmts = do
       funcType = mkJSFunc returnTypeName argTypeNames
       varNamesWithTypeVars = zip varNames varTypeNames
       argNamesWithTypeVars = zip argNames argTypeNames
-      monotypes = argNamesWithTypeVars ++ varNamesWithTypeVars 
---      dupeB (a, b) = ((a,b),[b])
+      monotypes = argNamesWithTypeVars -- ++ varNamesWithTypeVars 
+      dupeB (a, b) = ((a,b),[b])
   tenv <- introduceMonomorph (maybe id ((:) . (, recursionFuncTypeName)) name monotypes)
---          <$> introduceTVars (map dupeB varNamesWithTypeVars)
---          <$> maybe id setFuncTypeSig name 
+          <$> introduceTVars (map dupeB varNamesWithTypeVars)
+        --  <$> maybe id setFuncTypeSig name 
           <$> askTypeEnv  
   (infStmts, subst) <- withTypeEnv (const tenv) . withReturnType (JSTVar returnTypeName) . listenTSubst $ inferStatement stmts
   let updatedFuncType = fromType . substituteType subst $ toType funcType
