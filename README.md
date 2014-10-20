@@ -2,16 +2,28 @@
 
 Safe JavaScript
 
-## TODO
+## Two approaches
 
-- [ ] add "module" primitive that allows vardecls, use it to map ES3 Scripts (should cause trivial.js to pass)
-- [ ] support all ES3 statement types (or reject them, but handle all)
-- [ ] preserve source code context info and use it for errors
-- [ ] support warnings
-- [ ] handle funcs with no return statement (should be same as return;)
-- [x] get fix.js to infer correctly
-- [ ] implement the type system described below
-- [ ] function return types should be like vars (use type sigs)
+There are two general approaches to implement type inference on a new syntax:
+
+1. Implement type inference directly on the given AST
+2. Map the AST to a simpler core language, and use well-understood algorithms to infer types on the core language. Finally, map the inferred types back to the original AST.
+
+Currently the (incomplete, buggy) code takes the first approach - it infers types directly on (a subset of) the JS syntax. However to make the code simpler and more robust, it may make more sense to take the translation approach.
+
+One advantage of the direct approach (no translation) is that it allows us to directly deal with language constructs such as while, for, if, return, and the quirks that come with them.
+
+### Mapping to a core language
+
+One possible target core language is Damas-Hindley-Milner (simply typed lambda calculus with parameteric polymorphism) plus row type polymorphism, reference cells, and with SML-style value restriction (which allows variables to be polymorphic when bound to expressions that are syntactic values only).
+
+The mapping will have to deal with statement sequences (function and if/while/for blocks), various statement types, etc. An example mapping is:
+
+- Statment sequences such as `st1; st2;` to `(\_ -> st2) st1`
+- `function f(a,b) { statements... }` to `\a -> \b -> ...`
+- `var x = 2; x = x + 1` to `let x = ref 2 in x := !x + 1`
+- and so on.
+
 
 ## Polymorphism and the value restriction
 
@@ -56,3 +68,14 @@ Examples:
     h = f('a'); // h has type [string] -- crucial point! function calls cause instantiation of type scheme
 
 
+
+## TODO
+
+- [ ] add "module" primitive that allows vardecls, use it to map ES3 Scripts (should cause trivial.js to pass)
+- [ ] support all ES3 statement types (or reject them, but handle all)
+- [ ] preserve source code context info and use it for errors
+- [ ] support warnings
+- [ ] handle funcs with no return statement (should be same as return;)
+- [x] get fix.js to infer correctly
+- [ ] implement the type system described below
+- [ ] function return types should be like vars (use type sigs)
