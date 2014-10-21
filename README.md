@@ -60,11 +60,12 @@ Here we have assigned a polymorphic function (of type `a -> a`) to the variable 
 Here again we make use of polymorphism. However, because we're assigning `g` from an expression that isn't a syntactic value (`f()` is a function invocation), languages such as SML will restrict `g` to a monotype and unify `g` to type `number -> number` after the call to `g(1)`. When designing our type system we must consider applying this limitation, to avoid other problems that the value restriction was designed to avoid.
 
     var x = 1;
-    var f = function(y) { var res = x; x = y; return res; }
-    var t1 = f('a');
-    var t2 = f(1);
+    var f = function(y) { var res = x; x = y; return res; } // should get type: number -> number
 
-The above example is a typical pathological case that the value restriction was designed to avoid. The second call to `f` will return a string.
+The above function, in pure (dynamically typed) JS will return the value that was passed "last time" the function was called, regardless of its type. With unmodified HM, the inferred type is `number -> number` because `x` has been assigned a number `1`, and everything is fine. What should happen when `x` is not assigned (only declared)?
+
+    var x;
+    var f = function(y) { var res = x; x = y; return res; } // type ???
 
 A variable's type can't be determined at declaration time (`var x;`). Only when the variable is assigned `x = expr` we can infer its type. The declaration serves simply to bind the variable's name to the current scope and to possibly shadow variables declared in outer scopes (a variable's scope in JS is always the nearest function, if any, or otherwise the global scope).
 
