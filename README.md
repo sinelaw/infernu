@@ -15,7 +15,7 @@ One advantage of the direct approach (no translation) is that it allows us to di
 
 ### Mapping to a core language
 
-One possible target core language is Damas-Hindley-Milner (simply typed lambda calculus with parameteric polymorphism) plus row type polymorphism, reference cells, and with SML-style value restriction (which allows variables to be polymorphic when bound to expressions that are syntactic values only).
+One possible target core language is Damas-Hindley-Milner (simply typed lambda calculus with parameteric polymorphism and let-bindings) plus row type polymorphism, reference cells, and something similar to SML-style value restriction.
 
 The mapping will have to deal with statement sequences (function and if/while/for blocks), various statement types, etc. An example mapping is:
 
@@ -27,18 +27,54 @@ The mapping will have to deal with statement sequences (function and if/while/fo
 
 ## Polymorphism and the value restriction
 
-Javascript variables are storage cells. If we compare JS to Standard ML, JS variables are equivalent to `ref a` values - they are not names bound by `let` expressions (a possibly confusing point is that the new version of Javascript, ES6, has a new `let` keyword for defining variables in a block scope. The new `let` also creates storage cells, and isn't equivalent to SML's `let`).
+Javascript variables are storage cells. If we compare JS to Standard ML, JS variables are equivalent to `ref a` values. JS variables are *not* names bound by `let` expressions. SML has the concept of value restriction: but it applies to let-bound names. Reference cells in SML are always monotypes. If we followed suit when inferring JS variable types, all our variables would be monotypes and we would lose all polymorphism. Consider the following examples:
 
-A variable's type can't be determined at declaration time (`var x;`). Only when the variable is assigned `x = expr` we can infer its type. The declaration serves simply to bind the variable's name to the current scope and to possibly shadow variables declared in outer scopes (a variable's scope in JS is always the nearest function, if any, or otherwise the global scope). The declare-then-assign situation is analogous to a reference cell in SML that is initialized to an empty list: at the point of the `let` binding, the SML variable bound to the ref cell has an unknown type (list of what?) because an empty list is ambiguous.
+    var x = 1;
+    x = 'a'; // should not type check
 
-The difference between JS variables and SML let bindings, is in the information about whether or not the name will be restricted to a monotype. In SML we know that in `let x = ref []`, the name `x` will be a monotype because the value restriction applies. Contrarily, in JS at declaration time `var x;` we don't yet know if this variable will be restricted to a monotype.
+Here we have assigned two types to the same variable (recall that variables are reference cells), which should not be allowed.
+
+    var x = [];
+    x = [1];
+    x = ['a']; // should not type check
+
+Here again we used two types. Unlike the previous example, we initially assign a value with unknown type (`[a]`, but we don't know what `a` is).
+
+    var x;
+    x = 1;
+    x = 'a'; // should not type check
+
+In the above example we have no information at all about `x`'s type at declaration time. There is no analogy for this in SML-like languages.
+
+    var f = function (x) { return x; }
+    var n = f(1);
+    var s = f('a'); // ok
+
+Here we have assigned a polymorphic function (of type `a -> a`) to the variable `f`. Later we invoke this function twice, using different types each time, which should be allowed. This is an example of desired polymorphism.
+
+    var f = function() { return function(x) { return x; } }
+    var g = f(); // g should also be polymorphic
+    var n = g(1);
+    var s = g('a'); // this is ok, but value restriction would not allow this to type check
+
+Here again we make use of polymorphism. However, because we're assigning `g` from an expression that isn't a syntactic value (`f()` is a function invocation), languages such as SML will restrict `g` to a monotype and unify `g` to type `number -> number` after the call to `g(1)`. When designing our type system we must consider applying this limitation, to avoid other problems that the value restriction was designed to avoid.
+
+    var x = 1;
+    var f = function(y) { var res = x; x = y; return res; }
+    var t1 = f('a');
+    var t2 = f(1);
+
+The above example is a typical pathological case that the value restriction was designed to avoid. The second call to `f` will return a string.
+
+A variable's type can't be determined at declaration time (`var x;`). Only when the variable is assigned `x = expr` we can infer its type. The declaration serves simply to bind the variable's name to the current scope and to possibly shadow variables declared in outer scopes (a variable's scope in JS is always the nearest function, if any, or otherwise the global scope).
 
 To solve this problem we must "wait" until the first assignment to the newly declared variable occurs. 
 
-## Outline (TODO)
+### Desired polymorphism
 
-- polymorphism: no variable polymorphism (variable assignments must have the same concrete type), but yes function polymorphism (function calls instantiate type schemes)
-- row type polymorphism (not implemented)
+- function polymorphism (function calls instantiate type schemes)
+- row type polymorphism
+
 
 Implementation options:
 
