@@ -33,68 +33,88 @@ A safe behavior for a JS variable can be either a monotype (`'a ref` in ML) or, 
 
 A mutable monotype variable has the same type as ocaml's `ref`, which is:
 
-    type 'a ref = { mutable content : 'a } ;;
-    
+```ocaml
+type 'a ref = { mutable content : 'a } ;;
+```
+
 Here's (in ocaml) a mutable variable that can only contain the polymorphic empty list. The inner record field has a `forall` quantifier on the type of the list item.
 
-    type t1 = { mutable v1 : 'a. 'a list } ;; (* notice the quantifier 'a. *)
-    
-    let x = { v1 = [] } ;;
-    x.v1 <- [] ;; (* not too many things we can put in there... *)
+```ocaml
+type t1 = { mutable v1 : 'a. 'a list } ;; (* notice the quantifier 'a. *)
+
+let x = { v1 = [] } ;;
+x.v1 <- [] ;; (* not too many things we can put in there... *)
+```
 
 More interesting is the type of a mutable variable that contains polymorphic functions of type `'a -> 'a list` (or `a -> [a]` if you prefer):
 
-    type t2 = { mutable v2 : 'a. 'a -> 'a list } ;;
-    
-    let y = { v2 = fun x -> [ x; x; ] };;
-    y.v2 3;; (* evaluates to [ 3; 3 ]*)
-    y.v2 'a';; (* [ 'a'; 'a' ] *)
-    
-    y.v2 <- fun x -> [ x; x; x; ] ;;
-    y.v2 3;; (* [ 3; 3; 3 ] *)
-    etc..
+```ocaml
+type t2 = { mutable v2 : 'a. 'a -> 'a list } ;;
+
+let y = { v2 = fun x -> [ x; x; ] };;
+y.v2 3;; (* evaluates to [ 3; 3 ]*)
+y.v2 'a';; (* [ 'a'; 'a' ] *)
+
+y.v2 <- fun x -> [ x; x; x; ] ;;
+y.v2 3;; (* [ 3; 3; 3 ] *)
+etc..
+```
 
 ### Examples
 
 Consider the following examples:
 
-    var x = 1;
-    x = 'a'; // should not type check
+```javascript
+var x = 1;
+x = 'a'; // should not type check
+```
 
 Here we have assigned two types to the same variable (recall that variables are reference cells), which should not be allowed.
 
-    var x = [];
-    x = [1];
-    x = ['a']; // should not type check
+```javascript
+var x = [];
+x = [1];
+x = ['a']; // should not type check
+```
 
 Here again we used two types. Unlike the previous example, we initially assign a value with unknown type (`[a]`, but we don't know what `a` is).
 
-    var x;
-    x = 1;
-    x = 'a'; // should not type check
+```javascript
+var x;
+x = 1;
+x = 'a'; // should not type check
+```
 
 In the above example we have no information at all about `x`'s type at declaration time. There is no analogy for this in SML-like languages.
 
-    var f = function (x) { return x; }
-    var n = f(1);
-    var s = f('a'); // ok
+```javascript
+var f = function (x) { return x; }
+var n = f(1);
+var s = f('a'); // ok
+```
 
 Here we have assigned a polymorphic function (of type `a -> a`) to the variable `f`. Later we invoke this function twice, using different types each time, which should be allowed. This is an example of desired polymorphism.
 
-    var f = function() { return function(x) { return x; } }
-    var g = f(); // g should also be polymorphic
-    var n = g(1);
-    var s = g('a'); // this is ok, but value restriction would not allow this to type check
+```javascript
+var f = function() { return function(x) { return x; } }
+var g = f(); // g should also be polymorphic
+var n = g(1);
+var s = g('a'); // this is ok, but value restriction would not allow this to type check
+```
 
 Here again we make use of polymorphism. However, because we're assigning `g` from an expression that isn't a syntactic value (`f()` is a function invocation), languages such as SML will restrict `g` to a monotype and unify `g` to type `number -> number` after the call to `g(1)`. When designing our type system we must consider applying this limitation, to avoid other problems that the value restriction was designed to avoid.
 
-    var x = 1;
-    var f = function(y) { var res = x; x = y; return res; } // should get type: number -> number
+```javascript
+var x = 1;
+var f = function(y) { var res = x; x = y; return res; } // should get type: number -> number
+```
 
 The above function, in pure (dynamically typed) JS will return the value that was passed "last time" the function was called, regardless of its type. With unmodified HM, the inferred type is `number -> number` because `x` has been assigned a number `1`, and everything is fine. What should happen when `x` is not assigned (only declared)?
 
-    var x;
-    var f = function(y) { var res = x; x = y; return res; } // type ???
+```javascript
+var x;
+var f = function(y) { var res = x; x = y; return res; } // type ???
+```
 
 A variable's type can't be determined at declaration time (`var x;`). Only when the variable is assigned `x = expr` we can infer its type. The declaration serves simply to bind the variable's name to the current scope and to possibly shadow variables declared in outer scopes (a variable's scope in JS is always the nearest function, if any, or otherwise the global scope).
 
