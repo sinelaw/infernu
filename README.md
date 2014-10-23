@@ -27,7 +27,36 @@ The mapping will have to deal with statement sequences (function and if/while/fo
 
 ## Polymorphism and the value restriction
 
-Javascript variables are storage cells. If we compare JS to Standard ML, JS variables are equivalent to `ref a` values. JS variables are *not* names bound by `let` expressions. SML has the concept of value restriction: but it applies to let-bound names. Reference cells in SML are always monotypes. If we followed suit when inferring JS variable types, all our variables would be monotypes and we would lose all polymorphism. Consider the following examples:
+Javascript variables are storage cells. If we compare JS to Standard ML, JS variables seem to be equivalent to `ref` values. SML has the concept of value restriction: but it applies to let-bound names, and `ref` variables in SML are *always* monotypes. If we followed suit when inferring JS variable types, all our variables would be monotypes and we would lose all polymorphism.
+
+A safe behavior for a JS variable can be either a monotype (`'a ref` in ML) or, when storing polymorphic values (such as an empty list or polymorphic functions), something more like an ocaml record with a mutable cell with a quantified type variable (forall).
+
+A mutable monotype variable has the same type as ocaml's `ref`, which is:
+
+    type 'a ref = { mutable content : 'a } ;;
+    
+Here's (in ocaml) a mutable variable that can only contain the polymorphic empty list. The inner record field has a `forall` quantifier on the type of the list item.
+
+    type t1 = { mutable v1 : 'a. 'a list } ;; (* notice the quantifier 'a. *)
+    
+    let x = { v1 = [] } ;;
+    x.v1 <- [] ;; (* not too many things we can put in there... *)
+
+More interesting is the type of a mutable variable that contains polymorphic functions of type `'a -> 'a list` (or `a -> [a]` if you prefer):
+
+    type t2 = { mutable v2 : 'a. 'a -> 'a list } ;;
+    
+    let y = { v2 = fun x -> [ x; x; ] };;
+    y.v2 3;; (* evaluates to [ 3; 3 ]*)
+    y.v2 'a';; (* [ 'a'; 'a' ] *)
+    
+    y.v2 <- fun x -> [ x; x; x; ] ;;
+    y.v2 3;; (* [ 3; 3; 3 ] *)
+    etc..
+
+### Examples
+
+Consider the following examples:
 
     var x = 1;
     x = 'a'; // should not type check
