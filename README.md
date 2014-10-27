@@ -60,6 +60,14 @@ y.v2 3;; (* [ 3; 3; 3 ] *)
 etc..
 ```
 
+### Possibly solutions to polymorphism of mutable variables
+
+1. Infer types, and allow full polymorphism of mutable variables, allowing even nonsense like `x = 'a'; x = 3;`, which makes this solution useless.
+2. Infer types, and disable polymorphism (treating JS vars like ML `ref`s). Variables are still allowed to be of types where **`a` is free** (such as `a -> a`), but not allowed to be of **closed types** (such as `forall a. a -> a`). 
+3. Don't infer types - require programmer to annotate code with type ascriptions. Interpret all type variables as universally quantified, e.g. `a` is interpreted as `forall a. a` (and no value can ever be assigned) or more usefully, `a -> [a]` will be interpreted as `forall a. a -> [a]` (and many list-constructing functions will inhabit this type). This approach is similar to ocaml's **mutable record fields**.
+4. Infer types, but allow polymorphism only in certain cases. **TODO: Which cases?**
+
+
 ### Examples
 
 Consider the following examples:
