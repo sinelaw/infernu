@@ -1,17 +1,21 @@
-{-# LANGUAGE DeriveGeneric, DeriveFunctor, DeriveFoldable, DeriveTraversable, FlexibleInstances #-}
+{-# LANGUAGE DeriveFoldable    #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Types2 where
 
-import Data.Functor((<$>))
-import Control.Monad.State(State, evalState, get, modify)
-import qualified Data.Map.Lazy as Map
-import Control.Monad(forM)
-import Data.Maybe(fromMaybe)
-import Data.List((\\))
+import           Control.Monad       (forM)
+import           Control.Monad.State (State, evalState, get, modify)
+import           Data.Functor        ((<$>))
+import           Data.List           ((\\))
+import qualified Data.Map.Lazy       as Map
+import           Data.Maybe          (fromMaybe)
 
 ----------------------------------------------------------------------
 
--- var x = 2;    --> let x = ref 2 in    | x :: a 
--- x = 3;        -->   x := 3            | 
+-- var x = 2;    --> let x = ref 2 in    | x :: a
+-- x = 3;        -->   x := 3            |
 
 -- var f = function (x) { return [x]; }    --> let f = ref (\x -> arr [x])  :: Ref (forall a. a -> [a])
 -- var g = f;                              -->     g = ref (!f)             :: Ref (forall a. a -> [a])
@@ -24,21 +28,21 @@ type EVarName = String
 
 data LitVal = LitNumber Double | LitBoolean Bool | LitString String
             deriving (Show, Eq, Ord)
- 
+
 data Exp = EVar EVarName
          | EApp Exp Exp
          | ELam EVarName Exp
          | ELet EVarName Exp Exp
          | ELit LitVal
          deriving (Show, Eq, Ord)
-                  
+
 ----------------------------------------------------------------------
 
 type TVarName = Int
 
- 
+
 data TBody = TVar TVarName
-            | TNumber | TBoolean | TString 
+            | TNumber | TBoolean | TString
             deriving (Show, Eq, Ord)
 
 data Type t = TBody t
@@ -47,7 +51,7 @@ data Type t = TBody t
 
 ----------------------------------------------------------------------
 
-class Types a where 
+class Types a where
   freeTypeVars :: a -> [TVarName]
 
 -- for convenience only:
@@ -69,7 +73,7 @@ data TScheme = TScheme [TVarName] (Type TBody)
 
 instance Types TScheme where
   freeTypeVars (TScheme qvars t) = freeTypeVars t \\ qvars
-  
+
 -- Used internally to generate fresh type variable names
 data NameSource = NameSource { lastName :: TVarName }
                 deriving (Show, Eq)
@@ -94,10 +98,10 @@ fresh = do
 -- For example:
 --
 -- >>> runInferWith (NameSource 2) . instantiate $ TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 1)))
--- TFunc (TBody (TVar 3)) (TBody (TVar 1))  
+-- TFunc (TBody (TVar 3)) (TBody (TVar 1))
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
--- 
+--
 instantiate :: TScheme -> Infer (Type TBody)
 instantiate (TScheme tvarNames t) = do
   allocNames <- forM tvarNames $ \tvName -> do
@@ -126,8 +130,8 @@ instance Types TypeEnv where
 -- >>> let tenv = Map.insert "x" t Map.empty
 -- >>> tenv
 -- fromList [("x",TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 1))))]
--- >>> generalize tenv (TFunc (TBody (TVar 1)) (TBody (TVar 2)))         
--- TScheme [2] (TFunc (TBody (TVar 1)) (TBody (TVar 2)))                  
+-- >>> generalize tenv (TFunc (TBody (TVar 1)) (TBody (TVar 2)))
+-- TScheme [2] (TFunc (TBody (TVar 1)) (TBody (TVar 2)))
 --
 -- In this example the steps were:
 --
@@ -136,7 +140,7 @@ instance Types TypeEnv where
 -- 2. generalize (1 -> 2)
 --
 -- 3. result: forall 2. 1 -> 2
--- 
+--
 generalize :: TypeEnv -> Type TBody -> TScheme
 generalize tenv t = TScheme (freeTypeVars t \\ freeTypeVars tenv) t
 
