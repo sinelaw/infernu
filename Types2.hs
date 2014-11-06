@@ -3,6 +3,8 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
+
 module Types2 where
 
 import           Control.Monad       (forM)
@@ -11,6 +13,11 @@ import           Data.Functor        ((<$>))
 import           Data.List           ((\\))
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (fromMaybe)
+
+-- import           Test.QuickCheck(choose)
+--import           Test.QuickCheck.All    
+-- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
+-- import           Data.DeriveTH
 
 ----------------------------------------------------------------------
 
@@ -49,15 +56,25 @@ data Type t = TBody t
             | TFunc (Type t) (Type t)
             deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
 
+
+type TSubst = Map.Map TVarName (Type TBody)
+
+
 ----------------------------------------------------------------------
 
 class Types a where
   freeTypeVars :: a -> [TVarName]
+  applySubst :: TSubst -> a -> a
 
 -- for convenience only:
 instance Types a => Types [a] where
   freeTypeVars = foldr ((++) . freeTypeVars) []
+  applySubst s = map (applySubst s)
 
+instance Types a => Types (Map.Map b a) where
+  freeTypeVars m = freeTypeVars . Map.elems $ m
+  applySubst s = Map.map (applySubst s)
+  
 ----------------------------------------------------------------------
 
 instance Types (Type TBody) where
@@ -65,6 +82,11 @@ instance Types (Type TBody) where
   freeTypeVars (TBody _) = []
   freeTypeVars (TFunc t1 t2) = freeTypeVars t1 ++ freeTypeVars t2
 
+  applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
+  applySubst _ t@(TBody _) = t
+  applySubst s (TFunc t1 t2) = TFunc (applySubst s t1) (applySubst s t2)
+  
+                                     
 ----------------------------------------------------------------------
 
 -- | Type scheme: a type expression with a "forall" over some type variables that may appear in it (universal quantification).
@@ -73,10 +95,35 @@ data TScheme = TScheme [TVarName] (Type TBody)
 
 instance Types TScheme where
   freeTypeVars (TScheme qvars t) = freeTypeVars t \\ qvars
+  applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
+
+
+----------------------------------------------------------------------
+
+-- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
+--
+-- Note: instance of Types 
+type TypeEnv = Map.Map EVarName TScheme
 
 -- Used internally to generate fresh type variable names
 data NameSource = NameSource { lastName :: TVarName }
                 deriving (Show, Eq)
+
+
+----------------------------------------------------------------------
+
+nullSubst :: TSubst
+nullSubst = Map.empty
+
+-- | composeSubst should obey the law:
+-- applySubst (composeSubst new old) t = applySubst new (applySubst old t)
+composeSubst :: TSubst -> TSubst -> TSubst
+composeSubst new old = applySubst new old `Map.union` new
+
+prop_composeSubst :: TSubst -> TSubst -> Type TBody -> Bool
+prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst new (applySubst old t)
+
+----------------------------------------------------------------------
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = State NameSource a
@@ -114,13 +161,6 @@ instantiate (TScheme tvarNames t) = do
   return $ fmap replaceVar t
 
 ----------------------------------------------------------------------
-
-type TypeEnv = Map.Map EVarName TScheme
-
-instance Types TypeEnv where
-  freeTypeVars = freeTypeVars . Map.elems
-
-
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
 --   type variables that are free in the given type, but are not free in the type environment.
 --
@@ -144,6 +184,9 @@ instance Types TypeEnv where
 generalize :: TypeEnv -> Type TBody -> TScheme
 generalize tenv t = TScheme (freeTypeVars t \\ freeTypeVars tenv) t
 
+----------------------------------------------------------------------
+--composeSubst new old = (Map.Map (apply old) new)
+
 -- addSubst :: TVarName -> TConsVal -> TSubst -> TSubst
 -- addSubst = Map.insert
 
@@ -152,3 +195,14 @@ generalize tenv t = TScheme (freeTypeVars t \\ freeTypeVars tenv) t
 
 --composeSubst :: TSubst -> TSubst -> TSubst
 --composeSubst outer inner = (Map.map applySubst
+
+----------------------------------------------------------------------
+-- Test runner
+
+--return []
+
+-- $( derive makeArbitrary ''TBody )
+-- $( derive makeArbitrary ''Type )
+
+--runAllTests = $(quickCheckAll)
+       
