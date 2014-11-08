@@ -39,7 +39,7 @@ data LitVal = LitNumber Double | LitBoolean Bool | LitString String
 
 data Exp = EVar EVarName
          | EApp Exp Exp
-         | ELam EVarName Exp
+         | EAbs EVarName Exp
          | ELet EVarName Exp Exp
          | ELit LitVal
          deriving (Show, Eq, Ord)
@@ -220,7 +220,7 @@ inferType _ (ELit lit) = return . (nullSubst,) $ TBody $ case lit of
 inferType env (EVar n) = case Map.lookup n env of
   Nothing -> throwError $ "Unbound variable: " ++ n
   Just ts -> (nullSubst,) <$> instantiate ts
-inferType env (ELam argName e2) =
+inferType env (EAbs argName e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
          env' = Map.insert argName (TScheme [] tvar) env
@@ -248,8 +248,22 @@ typeInference env e = do
   return $ applySubst s t
 
 
+e0 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
+e1 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
+e2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
+e3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
+e4 = ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
+e5 = EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
+e6 = EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
 
-
+test :: Exp -> IO ()
+test e =
+  do let t = runInfer $ typeInference Map.empty e
+     putStrLn $ show e ++ " :: " ++ show t ++ "\n"
+--     case res of
+--       Left err -> putStrLn $ show e ++ "\n " ++ err ++ "\n"
+--       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
+    
 ----------------------------------------------------------------------
 -- Test runner
 
