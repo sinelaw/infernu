@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
+{-# LANGUAGE TupleSections     #-}
 
 module Types2 where
 
@@ -120,6 +121,9 @@ nullSubst = Map.empty
 composeSubst :: TSubst -> TSubst -> TSubst
 composeSubst new old = applySubst new old `Map.union` new
 
+singletonSubst :: TVarName -> Type TBody -> TSubst
+singletonSubst = Map.singleton
+
 prop_composeSubst :: TSubst -> TSubst -> Type TBody -> Bool
 prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst new (applySubst old t)
 
@@ -139,6 +143,8 @@ fresh = do
   modify (\ns -> ns { lastName = lastName ns + 1 })
   lastName <$> get
 
+throwError :: String -> Infer a
+throwError = error
 
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
 --
@@ -185,16 +191,64 @@ generalize :: TypeEnv -> Type TBody -> TScheme
 generalize tenv t = TScheme (freeTypeVars t \\ freeTypeVars tenv) t
 
 ----------------------------------------------------------------------
---composeSubst new old = (Map.Map (apply old) new)
 
--- addSubst :: TVarName -> TConsVal -> TSubst -> TSubst
--- addSubst = Map.insert
+unify :: Type TBody -> Type TBody -> Infer TSubst
+unify (TBody (TVar n)) t = varBind n t
+unify t (TBody (TVar n)) = varBind n t
+unify (TBody x) (TBody y) = if x == y
+                            then return nullSubst
+                            else throwError $ "Could not unify: " ++ show x ++ " with " ++ show y
+unify t1@(TBody _) t2@(TFunc _ _) = throwError $ "Could not unify: " ++ show t1 ++ " with " ++ show t2
+unify t1@(TFunc _ _) t2@(TBody _) = unify t2 t1
+unify (TFunc t1 t2) (TFunc u1 u2) = do s1 <- unify t1 u1
+                                       s2 <- unify (applySubst s1 t2) (applySubst s1 u2)
+                                       return (s2 `composeSubst` s1)
+  
+varBind :: TVarName -> Type TBody -> Infer TSubst
+varBind n t | t == TBody (TVar n) = return nullSubst
+            | n `elem` freeTypeVars t = throwError $ "Occurs check failed: " ++ show n ++ " in " ++ show t
+            | otherwise = return $ singletonSubst n t
 
--- applySubst :: EVarName -> TypeEnv -> Maybe TScheme
--- applySubst = Map.lookup
+              
+----------------------------------------------------------------------
 
---composeSubst :: TSubst -> TSubst -> TSubst
---composeSubst outer inner = (Map.map applySubst
+inferType :: TypeEnv -> Exp -> Infer (TSubst, Type TBody)
+inferType _ (ELit lit) = return . (nullSubst,) $ TBody $ case lit of
+  LitNumber _ -> TNumber
+  LitBoolean _ -> TBoolean
+  LitString _ -> TString
+inferType env (EVar n) = case Map.lookup n env of
+  Nothing -> throwError $ "Unbound variable: " ++ n
+  Just ts -> (nullSubst,) <$> instantiate ts
+inferType env (ELam argName e2) =
+  do tvarName <- fresh
+     let tvar = TBody (TVar tvarName)
+         env' = Map.insert argName (TScheme [] tvar) env
+     (s1, t1) <- inferType env' e2
+     return (s1, TFunc (applySubst s1 tvar) t1)
+inferType env (EApp e1 e2) =
+  do tvarName <- fresh
+     let tvar = TBody (TVar tvarName)
+     (s1, t1) <- inferType env e1
+     (s2, t2) <- inferType (applySubst s1 env) e2
+     s3 <- unify (applySubst s2 t1) (TFunc t2 tvar)
+     return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
+inferType env (ELet n e1 e2) =
+  do (s1, t1) <- inferType env e1
+     let t' = generalize (applySubst s1 env) t1
+         env' = Map.insert n t' env
+     (s2, t2) <- inferType env' e2
+     return (s2 `composeSubst` s1, t2)
+
+
+
+typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
+typeInference env e = do
+  (s, t) <- inferType env e
+  return $ applySubst s t
+
+
+
 
 ----------------------------------------------------------------------
 -- Test runner
