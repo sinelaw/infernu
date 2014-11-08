@@ -267,6 +267,17 @@ instance Pretty Exp where
   pretty (ELet n e1 e2) = "(let " ++ pretty n ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
   pretty (ELit l) = pretty l
 
+instance Pretty TVarName where
+  pretty = show
+
+instance Pretty TBody where
+  pretty (TVar n) = pretty n
+  pretty x = show x
+
+instance Pretty t => Pretty (Type t) where
+  pretty (TBody t) = pretty t
+  pretty (TFunc t1 t2) = pretty t1 ++ " -> " ++ pretty t2
+  
 ----------------------------------------------------------------------
 
 te0 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
@@ -280,7 +291,7 @@ te6 = EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
 test :: Exp -> IO ()
 test e =
   do let t = runInfer $ typeInference Map.empty e
-     putStrLn $ show e ++ " :: " ++ show t ++ "\n"
+     putStrLn $ pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
 --       Left err -> putStrLn $ show e ++ "\n " ++ err ++ "\n"
 --       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
