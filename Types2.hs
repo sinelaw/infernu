@@ -247,14 +247,35 @@ typeInference env e = do
   (s, t) <- inferType env e
   return $ applySubst s t
 
+----------------------------------------------------------------------
 
-e0 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
-e1 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
-e2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
-e3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
-e4 = ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
-e5 = EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
-e6 = EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
+class Pretty a where
+  pretty :: a -> String
+
+instance Pretty LitVal where
+  pretty (LitNumber x) = show x
+  pretty (LitBoolean x) = show x
+  pretty (LitString x) = show x
+
+instance Pretty EVarName where
+  pretty x = x
+
+instance Pretty Exp where
+  pretty (EVar n) = pretty n
+  pretty (EApp e1 e2) = pretty e1 ++ " " ++ pretty e2
+  pretty (EAbs n e) = "(\\" ++ pretty n ++ " -> " ++ pretty e ++ ")"
+  pretty (ELet n e1 e2) = "(let " ++ pretty n ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
+  pretty (ELit l) = pretty l
+
+----------------------------------------------------------------------
+
+te0 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
+te1 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
+te2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
+te3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
+te4 = ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
+te5 = EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
+te6 = EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
 
 test :: Exp -> IO ()
 test e =
@@ -264,7 +285,7 @@ test e =
 --       Left err -> putStrLn $ show e ++ "\n " ++ err ++ "\n"
 --       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
     
-----------------------------------------------------------------------
+
 -- Test runner
 
 --return []
