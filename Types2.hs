@@ -19,7 +19,8 @@ import           Data.Maybe          (fromMaybe)
 --import           Test.QuickCheck.All    
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 -- import           Data.DeriveTH
-
+--import Debug.Trace(traceShowId)
+    
 ----------------------------------------------------------------------
 
 -- var x = 2;    --> let x = ref 2 in    | x :: a
@@ -42,6 +43,7 @@ data Exp = EVar EVarName
          | EAbs EVarName Exp
          | ELet EVarName Exp Exp
          | ELit LitVal
+         | EAssign EVarName Exp Exp
          deriving (Show, Eq, Ord)
 
 ----------------------------------------------------------------------
@@ -98,7 +100,11 @@ instance Types TScheme where
   freeTypeVars (TScheme qvars t) = freeTypeVars t \\ qvars
   applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
-
+alphaEquivalent :: TScheme -> TScheme -> Bool                                   
+alphaEquivalent ts1@(TScheme tvn1 _) (TScheme tvn2 t2) = ts1 == TScheme tvn1 ts2'
+    where TScheme _ ts2' = applySubst substVarNames (TScheme [] t2)
+          substVarNames = Map.fromList . map (\(old,new) -> (old, TBody $ TVar new)) $ zip tvn2 tvn1
+    
 ----------------------------------------------------------------------
 
 -- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
@@ -239,8 +245,14 @@ inferType env (ELet n e1 e2) =
          env' = Map.insert n t' env
      (s2, t2) <- inferType env' e2
      return (s2 `composeSubst` s1, t2)
-
-
+inferType env (EAssign n e1 e2) =
+  do (s1, t1) <- inferType env e1
+     let ts' = generalize (applySubst s1 env) t1
+     case Map.lookup n env of
+       Nothing -> throwError $ "Unboud variable: " ++ n
+       Just ts -> if ts `alphaEquivalent` ts'
+                  then inferType env e2
+                  else throwError $ "Polymorphic types do not match: Actual = " ++ show ts ++ ", Expected = " ++ show ts'
 
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
@@ -266,7 +278,8 @@ instance Pretty Exp where
   pretty (EAbs n e) = "(\\" ++ pretty n ++ " -> " ++ pretty e ++ ")"
   pretty (ELet n e1 e2) = "(let " ++ pretty n ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
   pretty (ELit l) = pretty l
-
+  pretty (EAssign n e1 e2) = pretty n ++ " := " ++ pretty e1 ++ "; " ++ pretty e2
+                             
 instance Pretty TVarName where
   pretty = show
 
@@ -280,7 +293,7 @@ instance Pretty t => Pretty (Type t) where
   
 ----------------------------------------------------------------------
 
-te0 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
+te0 = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
 te1 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
 te2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
 te3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
