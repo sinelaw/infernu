@@ -193,6 +193,9 @@ instantiate (TScheme tvarNames t) = do
 --
 -- 3. result: forall 2. 1 -> 2
 --
+-- >>> generalize Map.empty (TFunc (TBody (TVar 0)) (TBody (TVar 0)))
+-- TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 0)))
+--
 generalize :: TypeEnv -> Type TBody -> TScheme
 generalize tenv t = TScheme (freeTypeVars t \\ freeTypeVars tenv) t
 
