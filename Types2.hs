@@ -210,13 +210,13 @@ unify (TBody (TVar n)) t = varBind n t
 unify t (TBody (TVar n)) = varBind n t
 unify (TBody x) (TBody y) = if x == y
                             then return nullSubst
-                            else throwError $ "Could not unify: " ++ show x ++ " with " ++ show y
-unify t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ show t1 ++ " with " ++ show t2
+                            else throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
+unify t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ pretty t1 ++ " with " ++ pretty t2
 unify t1@(TCons _ _) t2@(TBody _) = unify t2 t1
 unify (TCons n1 ts1) (TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then unifyl nullSubst ts1 ts2
-    else throwError $ "TCons names or number of parameters do not match: " ++ show n1 ++ " /= " ++ show n2
+    else throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
 
 unifyl :: TSubst -> [Type TBody] -> [Type TBody] -> Infer TSubst
 unifyl initialSubst xs ys = foldM unifyl' initialSubst $ zip xs ys
@@ -226,7 +226,7 @@ unifyl initialSubst xs ys = foldM unifyl' initialSubst $ zip xs ys
 
 varBind :: TVarName -> Type TBody -> Infer TSubst
 varBind n t | t == TBody (TVar n) = return nullSubst
-            | n `Set.member` freeTypeVars t = throwError $ "Occurs check failed: " ++ show n ++ " in " ++ show t
+            | n `Set.member` freeTypeVars t = throwError $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
             | otherwise = return $ singletonSubst n t
 
 
@@ -268,12 +268,22 @@ inferType env (ELet n e1 e2) =
      return (s2 `composeSubst` s1, t2)
 inferType env (EAssign n e1 e2) =
   do (s1, t1) <- inferType env e1
-     let ts' = generalize (applySubst s1 env) t1
+     -- TODO fix.
+     -- TODO consider: let x = \y -> y in x := \y -> 0;
+     -- in the assignment, a -> Int will be unified with instance of forall a. a -> a (which is b -> b).
+     -- so b = a, and b = Int, and it will succeed unification, even though \y -> 0 is not as general as \y -> y
+     -- which shows that unification as above is not enough to avoid a bug.
+     -- TODO consider also: let x = \y -> 0 in x := \y -> y;
+     -- in this case, a -> Int is unified with b -> b (but the other way around) and
+     -- thus again b = a, b = Int. In this case we want the \y -> y to have type :: Int -> Int, otherwise
+     -- the types are wrong again.
+     let ts1 = generalize (applySubst s1 env) t1
      case Map.lookup n env of
-       Nothing -> throwError $ "Unboud variable: " ++ n
-       Just ts -> if ts `alphaEquivalent` ts'
-                  then inferType env e2
-                  else throwError $ "Polymorphic types do not match: Actual = " ++ pretty ts ++ ", Expected = " ++ pretty ts'
+       Nothing -> throwError $ "Unbound variable: " ++ n
+       Just ts2 -> do t2 <- instantiate ts2
+                      s2 <- unify t1 (applySubst s1 t2)
+                      inferType (applySubst (s2 `composeSubst` s1) env) e2
+                      
 inferType env (EArray exprs) =
   do tvName <- fresh
      let tv = TBody $ TVar tvName
@@ -316,6 +326,9 @@ instance Pretty TBody where
   pretty (TVar n) = pretty n
   pretty x = show x
 
+instance Pretty TConsName where
+  pretty = show
+            
 instance Pretty t => Pretty (Type t) where
   pretty (TBody t) = pretty t
   pretty (TCons TFunc [t1, t2]) = pretty t1 ++ " -> " ++ pretty t2
@@ -338,6 +351,7 @@ tarrOk2 = ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (E
 tarrPolyOk = ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
 tarrBad = ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
 te2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
+tarrFunc = ELet "ar" (EArray [te0, te0, te2]) (EVar "ar")
 te3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
 te4 = ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
 te5 = EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
