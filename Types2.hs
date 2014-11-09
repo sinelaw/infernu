@@ -291,12 +291,11 @@ instance Pretty t => Pretty (Type t) where
   pretty (TBody t) = pretty t
   pretty (TFunc t1 t2) = pretty t1 ++ " -> " ++ pretty t2
 
-instance Pretty [TVarName] where
-  pretty xs = "[" ++ (intercalate "," $ map pretty xs) ++ "]"
-              
 instance Pretty TScheme where
-  pretty (TScheme vars t) = "forall " ++ pretty vars ++ ". " ++ pretty t
-                            
+  pretty (TScheme vars t) = forall ++ pretty t
+      where forall = if null vars then "" else "forall " ++ intercalate " " (map pretty vars) ++ ". "
+
+
 ----------------------------------------------------------------------
 
 te0 = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
