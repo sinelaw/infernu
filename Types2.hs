@@ -11,10 +11,11 @@ module Types2 where
 import           Control.Monad       (forM)
 import           Control.Monad.State (State, evalState, get, modify)
 import           Data.Functor        ((<$>))
-import           Data.List           ((\\), intercalate)
+import           Data.List           ((\\))
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (fromMaybe)
-
+import qualified Data.Set            as Set
+    
 -- import           Test.QuickCheck(choose)
 --import           Test.QuickCheck.All    
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
@@ -66,12 +67,12 @@ type TSubst = Map.Map TVarName (Type TBody)
 ----------------------------------------------------------------------
 
 class Types a where
-  freeTypeVars :: a -> [TVarName]
+  freeTypeVars :: a -> Set.Set TVarName
   applySubst :: TSubst -> a -> a
 
 -- for convenience only:
 instance Types a => Types [a] where
-  freeTypeVars = foldr ((++) . freeTypeVars) []
+  freeTypeVars = Set.unions . map freeTypeVars
   applySubst s = map (applySubst s)
 
 instance Types a => Types (Map.Map b a) where
@@ -81,9 +82,9 @@ instance Types a => Types (Map.Map b a) where
 ----------------------------------------------------------------------
 
 instance Types (Type TBody) where
-  freeTypeVars (TBody (TVar n)) = [n]
-  freeTypeVars (TBody _) = []
-  freeTypeVars (TFunc t1 t2) = freeTypeVars t1 ++ freeTypeVars t2
+  freeTypeVars (TBody (TVar n)) = Set.singleton n
+  freeTypeVars (TBody _) = Set.empty
+  freeTypeVars (TFunc t1 t2) = freeTypeVars t1 `Set.union` freeTypeVars t2
 
   applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
   applySubst _ t@(TBody _) = t
@@ -97,7 +98,7 @@ data TScheme = TScheme [TVarName] (Type TBody)
              deriving (Show, Eq)
 
 instance Types TScheme where
-  freeTypeVars (TScheme qvars t) = freeTypeVars t \\ qvars
+  freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` (Set.fromList qvars)
   applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 alphaEquivalent :: TScheme -> TScheme -> Bool                                   
@@ -197,7 +198,7 @@ instantiate (TScheme tvarNames t) = do
 -- TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 0)))
 --
 generalize :: TypeEnv -> Type TBody -> TScheme
-generalize tenv t = TScheme (freeTypeVars t \\ freeTypeVars tenv) t
+generalize tenv t = TScheme (Set.toList (freeTypeVars t `Set.difference` freeTypeVars tenv)) t
 
 ----------------------------------------------------------------------
 
@@ -215,7 +216,7 @@ unify (TFunc t1 t2) (TFunc u1 u2) = do s1 <- unify t1 u1
   
 varBind :: TVarName -> Type TBody -> Infer TSubst
 varBind n t | t == TBody (TVar n) = return nullSubst
-            | n `elem` freeTypeVars t = throwError $ "Occurs check failed: " ++ show n ++ " in " ++ show t
+            | n `Set.member` freeTypeVars t = throwError $ "Occurs check failed: " ++ show n ++ " in " ++ show t
             | otherwise = return $ singletonSubst n t
 
               
@@ -296,7 +297,7 @@ instance Pretty t => Pretty (Type t) where
 
 instance Pretty TScheme where
   pretty (TScheme vars t) = forall ++ pretty t
-      where forall = if null vars then "" else "forall " ++ intercalate " " (map pretty vars) ++ ". "
+      where forall = if null vars then "" else "forall " ++ unwords (map pretty vars) ++ ". "
 
 
 ----------------------------------------------------------------------
