@@ -11,7 +11,7 @@ module Types2 where
 import           Control.Monad       (forM)
 import           Control.Monad.State (State, evalState, get, modify)
 import           Data.Functor        ((<$>))
-import           Data.List           ((\\))
+import           Data.List           ((\\), intercalate)
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (fromMaybe)
 
@@ -252,7 +252,7 @@ inferType env (EAssign n e1 e2) =
        Nothing -> throwError $ "Unboud variable: " ++ n
        Just ts -> if ts `alphaEquivalent` ts'
                   then inferType env e2
-                  else throwError $ "Polymorphic types do not match: Actual = " ++ show ts ++ ", Expected = " ++ show ts'
+                  else throwError $ "Polymorphic types do not match: Actual = " ++ pretty ts ++ ", Expected = " ++ pretty ts'
 
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
@@ -290,11 +290,19 @@ instance Pretty TBody where
 instance Pretty t => Pretty (Type t) where
   pretty (TBody t) = pretty t
   pretty (TFunc t1 t2) = pretty t1 ++ " -> " ++ pretty t2
-  
+
+instance Pretty [TVarName] where
+  pretty xs = "[" ++ (intercalate "," $ map pretty xs) ++ "]"
+              
+instance Pretty TScheme where
+  pretty (TScheme vars t) = "forall " ++ pretty vars ++ ". " ++ pretty t
+                            
 ----------------------------------------------------------------------
 
 te0 = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
-te1 = ELet "id" (EAbs "x" (EVar "x")) (EVar "id")
+te0bad = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
+litOk = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
+litBad = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
 te2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
 te3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
 te4 = ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
