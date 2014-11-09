@@ -8,10 +8,10 @@
 
 module Types2 where
 
-import           Control.Monad       (forM)
+import           Control.Monad       (forM, foldM)
 import           Control.Monad.State (State, evalState, get, modify)
 import           Data.Functor        ((<$>))
-import           Data.List           ((\\))
+import           Data.List           (intercalate)
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (fromMaybe)
 import qualified Data.Set            as Set
@@ -45,6 +45,7 @@ data Exp = EVar EVarName
          | ELet EVarName Exp Exp
          | ELit LitVal
          | EAssign EVarName Exp Exp
+         | EArray [Exp]
          deriving (Show, Eq, Ord)
 
 ----------------------------------------------------------------------
@@ -56,8 +57,11 @@ data TBody = TVar TVarName
             | TNumber | TBoolean | TString
             deriving (Show, Eq, Ord)
 
+data TConsName = TFunc | TArray
+            deriving (Show, Eq, Ord)
+               
 data Type t = TBody t
-            | TFunc (Type t) (Type t)
+            | TCons TConsName [Type t]
             deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
 
 
@@ -84,12 +88,11 @@ instance Types a => Types (Map.Map b a) where
 instance Types (Type TBody) where
   freeTypeVars (TBody (TVar n)) = Set.singleton n
   freeTypeVars (TBody _) = Set.empty
-  freeTypeVars (TFunc t1 t2) = freeTypeVars t1 `Set.union` freeTypeVars t2
+  freeTypeVars (TCons _ ts) = Set.unions $ map freeTypeVars ts
 
   applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
   applySubst _ t@(TBody _) = t
-  applySubst s (TFunc t1 t2) = TFunc (applySubst s t1) (applySubst s t2)
-  
+  applySubst s (TCons n ts) = TCons n (applySubst s ts)
                                      
 ----------------------------------------------------------------------
 
@@ -98,7 +101,7 @@ data TScheme = TScheme [TVarName] (Type TBody)
              deriving (Show, Eq)
 
 instance Types TScheme where
-  freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` (Set.fromList qvars)
+  freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
   applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 alphaEquivalent :: TScheme -> TScheme -> Bool                                   
@@ -208,19 +211,33 @@ unify t (TBody (TVar n)) = varBind n t
 unify (TBody x) (TBody y) = if x == y
                             then return nullSubst
                             else throwError $ "Could not unify: " ++ show x ++ " with " ++ show y
-unify t1@(TBody _) t2@(TFunc _ _) = throwError $ "Could not unify: " ++ show t1 ++ " with " ++ show t2
-unify t1@(TFunc _ _) t2@(TBody _) = unify t2 t1
-unify (TFunc t1 t2) (TFunc u1 u2) = do s1 <- unify t1 u1
-                                       s2 <- unify (applySubst s1 t2) (applySubst s1 u2)
-                                       return (s2 `composeSubst` s1)
-  
+unify t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ show t1 ++ " with " ++ show t2
+unify t1@(TCons _ _) t2@(TBody _) = unify t2 t1
+unify (TCons n1 ts1) (TCons n2 ts2) =
+    if (n1 == n2) && (length ts1 == length ts2)
+    then unifyl nullSubst ts1 ts2
+    else throwError $ "TCons names or number of parameters do not match: " ++ show n1 ++ " /= " ++ show n2
+
+unifyl :: TSubst -> [Type TBody] -> [Type TBody] -> Infer TSubst
+unifyl initialSubst xs ys = foldM unifyl' initialSubst $ zip xs ys
+    where unifyl' s (x, y) = do
+            s' <- unify (applySubst s x) (applySubst s y)
+            return $ s' `composeSubst` s
+
 varBind :: TVarName -> Type TBody -> Infer TSubst
 varBind n t | t == TBody (TVar n) = return nullSubst
             | n `Set.member` freeTypeVars t = throwError $ "Occurs check failed: " ++ show n ++ " in " ++ show t
             | otherwise = return $ singletonSubst n t
 
-              
+
+                          
 ----------------------------------------------------------------------
+
+accumInfer :: TypeEnv -> [Exp] -> Infer (TSubst, TypeEnv, [Type TBody])
+accumInfer env = foldM accumInfer' (nullSubst, env, [])
+    where accumInfer' (subst, env', types) expr = do
+            (subst', t) <- inferType env' expr
+            return (subst' `composeSubst` subst, applySubst subst' env, t:types)
 
 inferType :: TypeEnv -> Exp -> Infer (TSubst, Type TBody)
 inferType _ (ELit lit) = return . (nullSubst,) $ TBody $ case lit of
@@ -235,13 +252,13 @@ inferType env (EAbs argName e2) =
      let tvar = TBody (TVar tvarName)
          env' = Map.insert argName (TScheme [] tvar) env
      (s1, t1) <- inferType env' e2
-     return (s1, TFunc (applySubst s1 tvar) t1)
+     return (s1, TCons TFunc [applySubst s1 tvar, t1])
 inferType env (EApp e1 e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
      (s1, t1) <- inferType env e1
      (s2, t2) <- inferType (applySubst s1 env) e2
-     s3 <- unify (applySubst s2 t1) (TFunc t2 tvar)
+     s3 <- unify (applySubst s2 t1) (TCons TFunc [t2, tvar])
      return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
 inferType env (ELet n e1 e2) =
   do (s1, t1) <- inferType env e1
@@ -257,7 +274,14 @@ inferType env (EAssign n e1 e2) =
        Just ts -> if ts `alphaEquivalent` ts'
                   then inferType env e2
                   else throwError $ "Polymorphic types do not match: Actual = " ++ pretty ts ++ ", Expected = " ++ pretty ts'
+inferType env (EArray exprs) =
+  do tvName <- fresh
+     let tv = TBody $ TVar tvName
+     (subst, _, types) <- accumInfer env exprs
+     subst' <- unifyl subst (tv:types) types
+     return (subst', TCons TArray [applySubst subst' $ TBody $ TVar tvName])
 
+    
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
   (s, t) <- inferType env e
@@ -283,7 +307,8 @@ instance Pretty Exp where
   pretty (ELet n e1 e2) = "(let " ++ pretty n ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
   pretty (ELit l) = pretty l
   pretty (EAssign n e1 e2) = pretty n ++ " := " ++ pretty e1 ++ "; " ++ pretty e2
-                             
+  pretty (EArray es) = "[" ++ intercalate ", " (map pretty es) ++ "]"
+                       
 instance Pretty TVarName where
   pretty = show
 
@@ -293,8 +318,10 @@ instance Pretty TBody where
 
 instance Pretty t => Pretty (Type t) where
   pretty (TBody t) = pretty t
-  pretty (TFunc t1 t2) = pretty t1 ++ " -> " ++ pretty t2
-
+  pretty (TCons TFunc [t1, t2]) = pretty t1 ++ " -> " ++ pretty t2
+  pretty (TCons TArray [t]) = "[" ++ pretty t ++ "]"
+  pretty _ = error "Unknown type for pretty"
+             
 instance Pretty TScheme where
   pretty (TScheme vars t) = forall ++ pretty t
       where forall = if null vars then "" else "forall " ++ unwords (map pretty vars) ++ ". "
@@ -304,8 +331,11 @@ instance Pretty TScheme where
 
 te0 = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
 te0bad = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
-litOk = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
-litBad = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
+tlitOk = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
+tlitBad = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
+tarrOk = ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
+tarrOk2 = ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (EVar "x")
+tarrBad = ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
 te2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
 te3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
 te4 = ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
