@@ -345,48 +345,47 @@ instance Pretty TScheme where
 -- | 'test' is a utility function for running the following tests:
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
--- (let id = (\x -> x) in id := (\x -> x); id) :: 4 -> 4
+-- TCons TFunc [TBody (TVar 4),TBody (TVar 4)]
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
--- (let id = (\x -> x) in id := True; id) :: *** Exception: Could not unify: TBoolean with 2 -> 2
+-- TCons TFunc [*** Exception: Could not unify: TBoolean with 2 -> 2
+--
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
--- (let x = True in x := False; x) :: TBoolean
+-- TBody TBoolean
 --
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
--- (let x = True in x := 3.0; x) :: TBoolean
+-- TBody TBoolean
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
--- (let x = [True] in x) :: [TBoolean]
+-- TCons TArray [TBody TBoolean]
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (EVar "x")
--- (let x = [True, False] in x) :: [TBoolean]
+-- TCons TArray [TBody TBoolean]
 --
 -- >>> test $ ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
--- (let x = [] in x := []; x) :: [4]
+-- TCons TArray [TBody (TVar 4)]
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
--- (let x = [True, 2.0] in x) :: [*** Exception: Could not unify: TNumber with TBoolean
--- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
--- (let id = (\x -> (let y = x in y)) in id id) :: 4 -> 4
+-- TCons TArray [*** Exception: Could not unify: TNumber with TBoolean
 --
--- >>> test $ ELet "ar" (EArray [te0, te0, te2]) (EVar "ar")
--- (let ar = [(let id = (\x -> x) in id := (\x -> x); id), (let id = (\x -> x) in id := (\x -> x); id), (let id = (\x -> (let y = x in y)) in id id)] in ar) :: [14 -> 14]
+-- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
+-- TCons TFunc [TBody (TVar 4),TBody (TVar 4)]
 --
 -- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
--- (let id = (\x -> (let y = x in y)) in id id 2.0) :: TNumber
+-- TBody TNumber
 --
 -- >>> test $ ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
--- (let id = (\x -> x x) in id) :: *** Exception: Occurs check failed: 1 in 1 -> 2
+-- TCons TFunc [*** Exception: Occurs check failed: 1 in 1 -> 2
+--
 -- >>> test $ EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
--- (\m -> (let y = m in (let x = y True in x))) :: TBoolean -> 2 -> 2
+-- TCons TFunc [TCons TFunc [TBody TBoolean,TBody (TVar 2)],TBody (TVar 2)]
 --
 -- >>> test $ EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
--- 2.0 2.0 :: *** Exception: Could not unify: TNumber with TNumber -> 1
+-- *** Exception: Could not unify: TNumber with TNumber -> 1
 --
-test :: Exp -> IO ()
-test e =
-  do let t = runInfer $ typeInference Map.empty e
-     putStrLn $ pretty e ++ " :: " ++ pretty t ++ "\n"
+test :: Exp -> Type TBody
+test e = runInfer $ typeInference Map.empty e
+         --in pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
 --       Left err -> putStrLn $ show e ++ "\n " ++ err ++ "\n"
 --       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
