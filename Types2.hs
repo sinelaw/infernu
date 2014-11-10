@@ -344,7 +344,7 @@ instance Pretty TScheme where
 
 -- | 'test' is a utility function for running the following tests:
 --
--- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
+-- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
 -- TCons TFunc [TBody (TVar 4),TBody (TVar 4)]
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
@@ -382,6 +382,12 @@ instance Pretty TScheme where
 --
 -- >>> test $ EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
 -- *** Exception: Could not unify: TNumber with TNumber -> 1
+--
+-- >>> test $ ELet "x" (EAbs "y" (ELit (LitNumber 0))) (EAssign "x" (EAbs "y" (EVar "y")) (EVar "x"))
+-- TCons TFunc [TBody TNumber,TBody TNumber]
+--
+-- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (EVar "x"))
+-- TCons TFunc [TBody (TVar 4),TBody TNumber]
 --
 test :: Exp -> Type TBody
 test e = runInfer $ typeInference Map.empty e
