@@ -160,8 +160,8 @@ throwError = error
 --
 -- For example:
 --
--- >>> runInferWith (NameSource 2) . instantiate $ TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 1)))
--- TFunc (TBody (TVar 3)) (TBody (TVar 1))
+-- >>> runInferWith (NameSource 2) . instantiate $ TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
+-- TCons TFunc [TBody (TVar 3),TBody (TVar 1)]
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
 --
@@ -182,12 +182,12 @@ instantiate (TScheme tvarNames t) = do
 --
 -- Example:
 --
--- >>> let t = TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 1)))
+-- >>> let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
 -- >>> let tenv = Map.insert "x" t Map.empty
 -- >>> tenv
--- fromList [("x",TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 1))))]
--- >>> generalize tenv (TFunc (TBody (TVar 1)) (TBody (TVar 2)))
--- TScheme [2] (TFunc (TBody (TVar 1)) (TBody (TVar 2)))
+-- fromList [("x",TScheme [0] (TCons TFunc [TBody (TVar 0),TBody (TVar 1)]))]
+-- >>> generalize tenv (TCons TFunc [TBody (TVar 1), TBody (TVar 2)])
+-- TScheme [2] (TCons TFunc [TBody (TVar 1),TBody (TVar 2)])
 --
 -- In this example the steps were:
 --
@@ -197,8 +197,8 @@ instantiate (TScheme tvarNames t) = do
 --
 -- 3. result: forall 2. 1 -> 2
 --
--- >>> generalize Map.empty (TFunc (TBody (TVar 0)) (TBody (TVar 0)))
--- TScheme [0] (TFunc (TBody (TVar 0)) (TBody (TVar 0)))
+-- >>> generalize Map.empty (TCons TFunc [TBody (TVar 0), TBody (TVar 0)])
+-- TScheme [0] (TCons TFunc [TBody (TVar 0),TBody (TVar 0)])
 --
 generalize :: TypeEnv -> Type TBody -> TScheme
 generalize tenv t = TScheme (Set.toList (freeTypeVars t `Set.difference` freeTypeVars tenv)) t
@@ -342,21 +342,47 @@ instance Pretty TScheme where
 
 ----------------------------------------------------------------------
 
-te0 = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
-te0bad = ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
-tlitOk = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
-tlitBad = ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
-tarrOk = ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
-tarrOk2 = ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (EVar "x")
-tarrPolyOk = ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
-tarrBad = ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
-te2 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
-tarrFunc = ELet "ar" (EArray [te0, te0, te2]) (EVar "ar")
-te3 = ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
-te4 = ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
-te5 = EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
-te6 = EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
-
+-- | 'test' is a utility function for running the following tests:
+--
+-- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "x" (EVar "x")) (EVar "id"))
+-- (let id = (\x -> x) in id := (\x -> x); id) :: 4 -> 4
+--
+-- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
+-- (let id = (\x -> x) in id := True; id) :: *** Exception: Could not unify: TBoolean with 2 -> 2
+-- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
+-- (let x = True in x := False; x) :: TBoolean
+--
+-- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
+-- (let x = True in x := 3.0; x) :: TBoolean
+--
+-- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
+-- (let x = [True] in x) :: [TBoolean]
+--
+-- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (EVar "x")
+-- (let x = [True, False] in x) :: [TBoolean]
+--
+-- >>> test $ ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
+-- (let x = [] in x := []; x) :: [4]
+--
+-- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
+-- (let x = [True, 2.0] in x) :: [*** Exception: Could not unify: TNumber with TBoolean
+-- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
+-- (let id = (\x -> (let y = x in y)) in id id) :: 4 -> 4
+--
+-- >>> test $ ELet "ar" (EArray [te0, te0, te2]) (EVar "ar")
+-- (let ar = [(let id = (\x -> x) in id := (\x -> x); id), (let id = (\x -> x) in id := (\x -> x); id), (let id = (\x -> (let y = x in y)) in id id)] in ar) :: [14 -> 14]
+--
+-- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
+-- (let id = (\x -> (let y = x in y)) in id id 2.0) :: TNumber
+--
+-- >>> test $ ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
+-- (let id = (\x -> x x) in id) :: *** Exception: Occurs check failed: 1 in 1 -> 2
+-- >>> test $ EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
+-- (\m -> (let y = m in (let x = y True in x))) :: TBoolean -> 2 -> 2
+--
+-- >>> test $ EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
+-- 2.0 2.0 :: *** Exception: Could not unify: TNumber with TNumber -> 1
+--
 test :: Exp -> IO ()
 test e =
   do let t = runInfer $ typeInference Map.empty e
