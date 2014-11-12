@@ -23,7 +23,8 @@ fromStatement (ES3.IfStmt _ pred' thenS elseS) = \n -> ELet "if" (fromExpression
 fromStatement (ES3.VarDeclStmt _ decls) = \n -> chain decls n
     where chain [(ES3.VarDecl _ (ES3.Id _ name) (Just v))] n = ELet name (fromExpression v) n
           chain ((ES3.VarDecl _ (ES3.Id _ name) (Just v)):xs) n = ELet name (fromExpression v) (chain xs n)
-fromStatement (ES3.FunctionStmt _ name args stmts) = ELet (ES3.unId name) (EAbs (ES3.unId . head $ args) $ foldStmts stmts empty) 
+fromStatement (ES3.FunctionStmt _ name args stmts) = ELet (ES3.unId name) (EAbs (ES3.unId . head $ args) $ foldStmts stmts empty)
+-- TODO: return statements must be added to the core language to be handled correctly.                                                     
 fromStatement (ES3.ReturnStmt _ x) = \n -> maybe (EVar "_") fromExpression x
 fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPrint s)
                  
