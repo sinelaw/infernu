@@ -9,19 +9,22 @@ import qualified Language.ECMAScript3.Parser as ES3Parser
 
 import Infer
 
-foldStmts :: [ES3.Statement a] -> Exp
-foldStmts stmts = foldr (ELet "") (EVar "") (map fromStatement stmts)
+empty = ELet "" (ELit $ LitBoolean False) (EVar "")
+        
+foldStmts :: [ES3.Statement a] -> Exp -> Exp
+foldStmts [x] n = fromStatement x n
+foldStmts (x:xs) n = (fromStatement x (foldStmts xs n))
                   
-fromStatement :: ES3.Statement a -> Exp
+fromStatement :: ES3.Statement a -> Exp -> Exp
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
-fromStatement (ES3.EmptyStmt _) = ELet "" (EVar "") (EVar "")
-fromStatement (ES3.ExprStmt _ e) = fromExpression e
-fromStatement (ES3.IfStmt _ pred' thenS elseS) = ELet "" (fromExpression pred') (foldStmts [thenS, elseS])
-fromStatement (ES3.VarDeclStmt _ decls) = chain (EVar "")
-    where chain = foldr loop (ELet "" (EVar "")) decls
-          loop = (\(ES3.VarDecl _ (ES3.Id _ name) (Just v)) rest -> rest . ELet name (fromExpression v))
-fromStatement (ES3.FunctionStmt _ name args stmts) = ELet (ES3.unId name) (EAbs (ES3.unId . head $ args) $ foldStmts stmts) (EVar (ES3.unId name))
-fromStatement (ES3.ReturnStmt _ x) = maybe (EVar "") fromExpression x
+fromStatement (ES3.EmptyStmt _) = id 
+fromStatement (ES3.ExprStmt _ e) = ELet "" (fromExpression e)
+fromStatement (ES3.IfStmt _ pred' thenS elseS) = \n -> ELet "if" (fromExpression pred') (foldStmts [thenS, elseS] n)
+fromStatement (ES3.VarDeclStmt _ decls) = \n -> chain decls n
+    where chain [(ES3.VarDecl _ (ES3.Id _ name) (Just v))] n = ELet name (fromExpression v) n
+          chain ((ES3.VarDecl _ (ES3.Id _ name) (Just v)):xs) n = ELet name (fromExpression v) (chain xs n)
+fromStatement (ES3.FunctionStmt _ name args stmts) = ELet (ES3.unId name) (EAbs (ES3.unId . head $ args) $ foldStmts stmts empty) 
+fromStatement (ES3.ReturnStmt _ x) = \n -> maybe (EVar "") fromExpression x
 fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPrint s)
                  
 fromExpression :: ES3.Expression a -> Exp
@@ -35,9 +38,11 @@ parseFile :: String -> IO ()
 parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
   putStrLn . show $ js
-  forM_ (map fromStatement $ ES3.unJavaScript js) $ \expr -> do
-                  putStrLn . pretty $ expr
-                  putStrLn . pretty $ test expr
+  let expr = (foldStmts $ ES3.unJavaScript js)  empty
+  putStrLn "--"
+  putStrLn . show $ expr
+  putStrLn . pretty $ expr
+  putStrLn . pretty $ test expr
                            
 
 -- ex :: Body (Expr ()) -> Expr ()

@@ -372,7 +372,7 @@ inferType env (EAssign n e1 e2) =
   do (s1, t1) <- inferType env e1
      -- TODO use something like hoistEither (but for Maybe)
      case Map.lookup n env of
-       Nothing -> throwError $ "Unbound variable: " ++ n
+       Nothing -> throwError $ "Unbound variable: " ++ n ++ " in assignment " ++ pretty e1
        Just varInfo ->
            do t2 <- instantiate . scheme $ varInfo
               s2 <- unify t1 $ applySubst s1 t2
