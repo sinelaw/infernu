@@ -8,7 +8,7 @@
 
 module Types2 where
 
-import           Control.Monad       (forM, foldM)
+import           Control.Monad       (forM, foldM, forM_)
 --import           Control.Monad.State (State, evalState, get, modify)
 import           Data.Functor.Identity(Identity(..), runIdentity)
 import           Control.Monad.Trans(lift)
@@ -24,7 +24,7 @@ import qualified Data.Set            as Set
 --import           Test.QuickCheck.All    
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 -- import           Data.DeriveTH
-import Debug.Trace(traceShowId)
+import Debug.Trace(traceShowId, trace)
     
 ----------------------------------------------------------------------
 
@@ -84,6 +84,10 @@ instance Types a => Types [a] where
   freeTypeVars = Set.unions . map freeTypeVars
   applySubst s = map (applySubst s)
 
+instance (Ord a, Types a) => Types (Set.Set a) where
+  freeTypeVars = Set.foldr Set.union Set.empty . Set.map freeTypeVars
+  applySubst s = Set.map (applySubst s)
+                   
 instance Types a => Types (Map.Map b a) where
   freeTypeVars m = freeTypeVars . Map.elems $ m
   applySubst s = Map.map (applySubst s)
@@ -116,11 +120,27 @@ alphaEquivalent ts1@(TScheme tvn1 _) (TScheme tvn2 t2) = ts1 == TScheme tvn1 ts2
     
 ----------------------------------------------------------------------
 
+type VarId = TVarName
+    
+data VarInfo = VarInfo { scheme :: TScheme, varId :: VarId }
+               deriving (Show, Eq)
+                        
+singletonVarInfo :: VarId -> TScheme -> VarInfo
+singletonVarInfo n s = VarInfo { scheme = s, varId = n }
+                     
+instance Types VarInfo where
+    freeTypeVars v = freeTypeVars $ scheme v
+    applySubst s v = v { scheme = applySubst s $ scheme v }
+                     
 -- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
 --
 -- Note: instance of Types 
-type TypeEnv = Map.Map EVarName TScheme
+type TypeEnv = Map.Map EVarName VarInfo
 
+
+getVarId :: EVarName -> TypeEnv -> Maybe VarId
+getVarId n env = fmap varId $ Map.lookup n env
+                 
 -- Used internally to generate fresh type variable names
 data NameSource = NameSource { lastName :: TVarName }
                 deriving (Show, Eq)
@@ -144,19 +164,62 @@ prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst 
 
 ----------------------------------------------------------------------
 
--- | Inference monad. Used as a stateful context for generating fresh type variable names.
-type Infer a = StateT NameSource (EitherT String Identity) a
+-- | Adds an element to the value set of a map: key -> value set
+--
+-- >>> let m1 = addToMappedSet 1 2 (Map.empty)
+-- >>> m1
+-- fromList [(1,fromList [2])]
+-- >>> addToMappedSet 1 3 m1
+-- fromList [(1,fromList [2,3])]
+addToMappedSet :: (Ord a, Ord b) => a -> b -> (Map.Map a (Set.Set b)) -> (Map.Map a (Set.Set b))
+addToMappedSet k v m = Map.insert k (Set.insert v set) m
+    where set = case Map.lookup k m of
+                  Nothing -> Set.empty
+                  Just vs -> vs 
 
-runInferWith :: NameSource -> Infer a -> Either String a
+data InferState = InferState { nameSource :: NameSource, varInstances :: Map.Map TVarName (Set.Set (Type TBody)) }
+                  deriving (Show, Eq)
+
+instance Types InferState where
+    freeTypeVars = freeTypeVars . varInstances
+    applySubst s is = is { varInstances = applySubst s (varInstances is) }
+                      
+-- | Inference monad. Used as a stateful context for generating fresh type variable names.
+type Infer a = StateT InferState (EitherT String Identity) a
+
+runInferWith :: InferState -> Infer a -> Either String a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either String a
-runInfer = runInferWith NameSource { lastName = 0 }
+runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty }
 
+addInstance :: VarId -> Type TBody -> Infer ()
+addInstance varId' t = modify (\is -> is { varInstances = addToMappedSet varId' t $ varInstances is })
+
+getInstances :: TypeEnv -> EVarName -> Infer (Set.Set (Type TBody))
+getInstances env n = do
+  let varId' = getVarId n env
+  case varId' of
+    Nothing -> return Set.empty
+    Just varId'' ->
+        do res <- Map.lookup varId'' . varInstances <$> get
+           case res of
+             Nothing -> return Set.empty
+             Just types -> return types
+
+-- | Applies the given subst to the set of instances saved in the set; for convience, returns the same argument it got.
+substInstances :: Infer TSubst -> Infer TSubst
+substInstances inf = do s <- inf
+                        substInstances' s
+                        return s
+                               
+substInstances' :: TSubst -> Infer ()
+substInstances' s = modify (applySubst s)
+                           
 fresh :: Infer TVarName
 fresh = do
-  modify (\ns -> ns { lastName = lastName ns + 1 })
-  lastName <$> get
+  modify (\is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } })
+  lastName . nameSource <$> get
 
 throwError :: String -> Infer a
 throwError = lift . left
@@ -165,7 +228,7 @@ throwError = lift . left
 --
 -- For example:
 --
--- >>> runInferWith (NameSource 2) . instantiate $ TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
+-- >>> runInferWith (InferState { nameSource = NameSource 2, varInstances = Map.empty }) . instantiate $ TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
 -- Right (TCons TFunc [TBody (TVar 3),TBody (TVar 1)])
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
@@ -188,9 +251,9 @@ instantiate (TScheme tvarNames t) = do
 -- Example:
 --
 -- >>> let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
--- >>> let tenv = Map.insert "x" t Map.empty
+-- >>> let tenv = Map.insert "x" (singletonVarInfo 2 t) Map.empty
 -- >>> tenv
--- fromList [("x",TScheme [0] (TCons TFunc [TBody (TVar 0),TBody (TVar 1)]))]
+-- fromList [("x",VarInfo {scheme = TScheme [0] (TCons TFunc [TBody (TVar 0),TBody (TVar 1)]), varId = 2})]
 -- >>> generalize tenv (TCons TFunc [TBody (TVar 1), TBody (TVar 2)])
 -- TScheme [2] (TCons TFunc [TBody (TVar 1),TBody (TVar 2)])
 --
@@ -211,20 +274,20 @@ generalize tenv t = TScheme (Set.toList (freeTypeVars t `Set.difference` freeTyp
 ----------------------------------------------------------------------
 
 unify :: Type TBody -> Type TBody -> Infer TSubst
-unify (TBody (TVar n)) t = varBind n t
-unify t (TBody (TVar n)) = varBind n t
+unify (TBody (TVar n)) t = substInstances $ varBind n t
+unify t (TBody (TVar n)) = substInstances $ varBind n t
 unify (TBody x) (TBody y) = if x == y
                             then return nullSubst
                             else throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
 unify t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ pretty t1 ++ " with " ++ pretty t2
-unify t1@(TCons _ _) t2@(TBody _) = unify t2 t1
+unify t1@(TCons _ _) t2@(TBody _) = substInstances $ unify t2 t1
 unify (TCons n1 ts1) (TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then unifyl nullSubst ts1 ts2
     else throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
 
 unifyl :: TSubst -> [Type TBody] -> [Type TBody] -> Infer TSubst
-unifyl initialSubst xs ys = foldM unifyl' initialSubst $ zip xs ys
+unifyl initialSubst xs ys = substInstances $ foldM unifyl' initialSubst $ zip xs ys
     where unifyl' s (x, y) = do
             s' <- unify (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
@@ -252,11 +315,14 @@ inferType _ (ELit lit) = return . (nullSubst,) $ TBody $ case lit of
   LitString _ -> TString
 inferType env (EVar n) = case Map.lookup n env of
   Nothing -> throwError $ "Unbound variable: " ++ n
-  Just ts -> (nullSubst,) <$> instantiate ts
+  Just varInfo -> do
+    t <- instantiate . scheme $ varInfo
+    addInstance (varId varInfo) t
+    return (nullSubst, t)
 inferType env (EAbs argName e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
-         env' = Map.insert argName (TScheme [] tvar) env
+         env' = Map.insert argName (singletonVarInfo tvarName $ TScheme [] tvar) env
      (s1, t1) <- inferType env' e2
      return (s1, TCons TFunc [applySubst s1 tvar, t1])
 inferType env (EApp e1 e2) =
@@ -268,36 +334,58 @@ inferType env (EApp e1 e2) =
      return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
 inferType env (ELet n e1 e2) =
   do (s1, t1) <- inferType env e1
+     varId' <- fresh
      let t' = generalize (applySubst s1 env) t1
-         env' = Map.insert n t' env
+         env' = Map.insert n (singletonVarInfo varId' t') env
      (s2, t2) <- inferType env' e2
      return (s2 `composeSubst` s1, t2)
+-- | Handling of mutable variable assignment.
+-- We keep track of how the var's type schema looks by unifying schemas every assignment.
+--
+-- TODO: missing - on every instantiation (during EVar reads) keep track also of what specific types
+-- were used for the var. Then, during EAssign make sure that the instantiated schema can unify with
+-- all the specific types that were encountered - in case our schema has just collapsed into a
+-- too-specific type.
+--
+-- Example:
+--
+-- > x := \y -> y; z = [x 1, x False]; x := \y -> 0
+--
+-- In the first assignment, x :: forall a. a -> a
+--
+-- Then, z is succesfully inferred to be of type [number, bool] because x is polymorphic.
+--
+-- Lastly, we discover that x must actually be more specific: forall a. a -> Int and thus, our usage
+-- of "x" in "z" was wrong and a type error should be raised.
+--
+-- The "greatest common denominator" part is implemented as follows:
+--
+-- Every time an EVar expression is encountered, the type scheme for the variable is instantiated
+-- and the resulting type is used for that occurance, and is also added to a list of "type schema
+-- instances for this variable".
+--
+-- Then, when an EAssign is encountered, we ensure that all previously encountered instances can be
+-- instantiated from the current assignment's generalized type. We do this by unifying with each of
+-- the previously instantiated types.
+--
 inferType env (EAssign n e1 e2) =
   do (s1, t1) <- inferType env e1
-     -- Handling of mutable variable assignment.
-     -- We keep track of how the var's type schema looks by unifying schemas every assignment.
-     --
-     -- TODO: missing - on every instantiation (during EVar reads) keep track also of what specific
-     -- types were used for the var. Then, during EAssign make sure that the instantiated schema can unify
-     -- with all the specific types that were encountered - in case our schema has just collapsed into a too-specific type.
-     --
-     -- Example:
-     --
-     -- > x := \y -> y; z = [x 1, x False]; x := \y -> 0
-     --
-     -- In the first assignment, x :: forall a. a -> a
-     -- Then, z is succesfully inferred to be of type [number, bool] because x is polymorphic.
-     -- Lastly, we discover that x must actually be more specific: forall a. a -> Int
-     -- and thus, our usage of "x" in "z" was wrong and a type error should be raised.
-     -- 
+     -- TODO use something like hoistEither (but for Maybe)
      case Map.lookup n env of
        Nothing -> throwError $ "Unbound variable: " ++ n
-       Just ts2 -> do t2 <- instantiate ts2
-                      s2 <- unify t1 $ applySubst s1 t2
-                      let s3 = s2 `composeSubst` s1
-                          env' = applySubst s3 env
-                          env'' = Map.insert n (generalize env' $ applySubst s3 t1) env'
-                      inferType env'' e2
+       Just varInfo ->
+           do t2 <- instantiate . scheme $ varInfo
+              s2 <- unify t1 $ applySubst s1 t2
+              existingInstances <- getInstances env n
+              let s3 = s2 `composeSubst` s1
+                  env' = applySubst s3 env
+                  env'' = Map.insert n (varInfo { scheme = generalize env' $ applySubst s3 t1 }) env'
+              let unifyInstances = foldM unifyInstances' s3 $ Set.toList existingInstances
+                      where unifyInstances' s i = do
+                              s' <- unify (applySubst s i) (applySubst s t2)
+                              return $ s' `composeSubst` s
+              res <- unifyInstances 
+              inferType env'' e2
                       
 inferType env (EArray exprs) =
   do tvName <- fresh
@@ -363,6 +451,27 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
     pretty (Right x) = pretty x
 
 ----------------------------------------------------------------------
+--
+-- | Mutable variable being assigned incompatible types:
+-- 
+-- x is known to have type forall a. a -> a, and to have been used in a context requiring bool -> bool (e.g. `x True`)
+--
+-- we now try to assign x := \y -> 2
+--
+-- This should fail because it "collapses" x to be Number -> Number which is not compatible with bool -> bool
+--
+-- >> let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 0)])
+-- >> let tenv = Map.singleton "x" (VarInfo { scheme = t, varId = 1 })
+-- >> runInfer . typeInference tenv $ EAssign "x" (EAbs "y" (ELit (LitNumber 2))) (EVar "x")
+-- Left "Could not unify: TBoolean with TNumber"
+--
+
+-- | Standalone test (no hard coded env):
+--
+-- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (ETuple [EVar "x", EVar "y"])))
+-- Left "Could not unify: TBoolean with TNumber"
+--
+
 
 -- | 'test' is a utility function for running the following tests:
 --
@@ -370,10 +479,10 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Right (TCons TTuple [TBody TBoolean,TBody TNumber])
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
--- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
+-- Right (TCons TFunc [TBody (TVar 5),TBody (TVar 5)])
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
--- Left "Could not unify: TBoolean with 2 -> 2"
+-- Left "Could not unify: TBoolean with 3 -> 3"
 --
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
 -- Right (TBody TBoolean)
@@ -388,13 +497,13 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Right (TCons TArray [TBody TBoolean])
 --
 -- >>> test $ ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
--- Right (TCons TArray [TBody (TVar 4)])
+-- Right (TCons TArray [TBody (TVar 5)])
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
 -- Left "Could not unify: TNumber with TBoolean"
 --
 -- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
--- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
+-- Right (TCons TFunc [TBody (TVar 6),TBody (TVar 6)])
 --
 -- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
 -- Right (TBody TNumber)
@@ -403,7 +512,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Left "Occurs check failed: 1 in 1 -> 2"
 --
 -- >>> test $ EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
--- Right (TCons TFunc [TCons TFunc [TBody TBoolean,TBody (TVar 2)],TBody (TVar 2)])
+-- Right (TCons TFunc [TCons TFunc [TBody TBoolean,TBody (TVar 3)],TBody (TVar 3)])
 --
 -- >>> test $ EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
 -- Left "Could not unify: TNumber with TNumber -> 1"
@@ -418,10 +527,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Right (TCons TTuple [TBody TNumber,TBody TBoolean])
 --
 -- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EApp (EVar "x") (EVar "x"))
--- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
---
--- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (ETuple [EVar "x", EVar "y"])))
--- Left "some error about "x"s type must being either: forall a. a -> a  or Number -> Number, but it was used with a bool arg
+-- Right (TCons TFunc [TBody (TVar 5),TBody (TVar 5)])
 --
 test :: Exp -> Either String (Type TBody)
 test e = runInfer $ typeInference Map.empty e
