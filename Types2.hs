@@ -470,6 +470,11 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "z1" (EVar "z1")) (ETuple [EVar "x", EVar "y"])))
 -- Right (TCons TTuple [TCons TFunc [TBody (TVar 12),TBody (TVar 12)],TCons TTuple [TBody TNumber,TBody TBoolean]])
 --
+-- The following should also succeed because "x" is only ever used like this: (x True). The second assignment to x is: x := \z1 -> False, which is specific but matches the usage. Note that x's type is collapsed to: Boolean -> Boolean.
+--
+-- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (EApp (EVar "x") (ELit (LitBoolean True))) (EAssign "x" (EAbs "z1" (ELit (LitBoolean False))) (ETuple [EVar "x", EVar "y"])))
+-- Right (TCons TTuple [TCons TFunc [TBody TBoolean,TBody TBoolean],TBody TBoolean])
+--
 
 
 -- | 'test' is a utility function for running the following tests:
