@@ -274,16 +274,22 @@ inferType env (ELet n e1 e2) =
      return (s2 `composeSubst` s1, t2)
 inferType env (EAssign n e1 e2) =
   do (s1, t1) <- inferType env e1
-     -- TODO fix.
-     -- TODO consider: let x = \y -> y in x := \y -> 0;
-     -- in the assignment, a -> Int will be unified with instance of forall a. a -> a (which is b -> b).
-     -- so b = a, and b = Int, and it will succeed unification, even though \y -> 0 is not as general as \y -> y
-     -- which shows that unification as above is not enough to avoid a bug.
-     -- TODO consider also: let x = \y -> 0 in x := \y -> y;
-     -- in this case, a -> Int is unified with b -> b (but the other way around) and
-     -- thus again b = a, b = Int. In this case we want the \y -> y to have type :: Int -> Int, otherwise
-     -- the types are wrong again.
-     --let ts1 = generalize (applySubst s1 env) t1
+     -- Handling of mutable variable assignment.
+     -- We keep track of how the var's type schema looks by unifying schemas every assignment.
+     --
+     -- TODO: missing - on every instantiation (during EVar reads) keep track also of what specific
+     -- types were used for the var. Then, during EAssign make sure that the instantiated schema can unify
+     -- with all the specific types that were encountered - in case our schema has just collapsed into a too-specific type.
+     --
+     -- Example:
+     --
+     -- > x := \y -> y; z = [x 1, x False]; x := \y -> 0
+     --
+     -- In the first assignment, x :: forall a. a -> a
+     -- Then, z is succesfully inferred to be of type [number, bool] because x is polymorphic.
+     -- Lastly, we discover that x must actually be more specific: forall a. a -> Int
+     -- and thus, our usage of "x" in "z" was wrong and a type error should be raised.
+     -- 
      case Map.lookup n env of
        Nothing -> throwError $ "Unbound variable: " ++ n
        Just ts2 -> do t2 <- instantiate ts2
