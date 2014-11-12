@@ -9,7 +9,11 @@
 module Types2 where
 
 import           Control.Monad       (forM, foldM)
-import           Control.Monad.State (State, evalState, get, modify)
+--import           Control.Monad.State (State, evalState, get, modify)
+import           Data.Functor.Identity(Identity(..), runIdentity)
+import           Control.Monad.Trans(lift)
+import           Control.Monad.Trans.State (StateT(..), evalStateT, get, modify) --, EitherT(..))
+import           Control.Monad.Trans.Either (EitherT(..), runEitherT, left)
 import           Data.Functor        ((<$>))
 import           Data.List           (intercalate)
 import qualified Data.Map.Lazy       as Map
@@ -20,7 +24,7 @@ import qualified Data.Set            as Set
 --import           Test.QuickCheck.All    
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 -- import           Data.DeriveTH
---import Debug.Trace(traceShowId)
+import Debug.Trace(traceShowId)
     
 ----------------------------------------------------------------------
 
@@ -140,12 +144,12 @@ prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst 
 ----------------------------------------------------------------------
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
-type Infer a = State NameSource a
+type Infer a = StateT NameSource (EitherT String Identity) a
 
-runInferWith :: NameSource -> Infer a -> a
-runInferWith ns inf = evalState inf ns
+runInferWith :: NameSource -> Infer a -> Either String a
+runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
-runInfer :: Infer a -> a
+runInfer :: Infer a -> Either String a
 runInfer = runInferWith NameSource { lastName = 0 }
 
 fresh :: Infer TVarName
@@ -154,14 +158,14 @@ fresh = do
   lastName <$> get
 
 throwError :: String -> Infer a
-throwError = error
+throwError = lift . left
 
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
 --
 -- For example:
 --
 -- >>> runInferWith (NameSource 2) . instantiate $ TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
--- TCons TFunc [TBody (TVar 3),TBody (TVar 1)]
+-- Right (TCons TFunc [TBody (TVar 3),TBody (TVar 1)])
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
 --
@@ -277,12 +281,15 @@ inferType env (EAssign n e1 e2) =
      -- in this case, a -> Int is unified with b -> b (but the other way around) and
      -- thus again b = a, b = Int. In this case we want the \y -> y to have type :: Int -> Int, otherwise
      -- the types are wrong again.
-     let ts1 = generalize (applySubst s1 env) t1
+     --let ts1 = generalize (applySubst s1 env) t1
      case Map.lookup n env of
        Nothing -> throwError $ "Unbound variable: " ++ n
        Just ts2 -> do t2 <- instantiate ts2
-                      s2 <- unify t1 (applySubst s1 t2)
-                      inferType (applySubst (s2 `composeSubst` s1) env) e2
+                      s2 <- unify t1 $ applySubst s1 t2
+                      let s3 = s2 `composeSubst` s1
+                          env' = applySubst s3 env
+                          env'' = Map.insert n (generalize env' $ applySubst s3 t1) env'
+                      inferType env'' e2
                       
 inferType env (EArray exprs) =
   do tvName <- fresh
@@ -345,51 +352,51 @@ instance Pretty TScheme where
 -- | 'test' is a utility function for running the following tests:
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
--- TCons TFunc [TBody (TVar 4),TBody (TVar 4)]
+-- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
--- TCons TFunc [*** Exception: Could not unify: TBoolean with 2 -> 2
+-- Left "Could not unify: TBoolean with 2 -> 2"
 --
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
--- TBody TBoolean
+-- Right (TBody TBoolean)
 --
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
--- TBody TBoolean
+-- Left "Could not unify: TNumber with TBoolean"
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
--- TCons TArray [TBody TBoolean]
+-- Right (TCons TArray [TBody TBoolean])
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (EVar "x")
--- TCons TArray [TBody TBoolean]
+-- Right (TCons TArray [TBody TBoolean])
 --
 -- >>> test $ ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
--- TCons TArray [TBody (TVar 4)]
+-- Right (TCons TArray [TBody (TVar 4)])
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
--- TCons TArray [*** Exception: Could not unify: TNumber with TBoolean
+-- Left "Could not unify: TNumber with TBoolean"
 --
 -- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
--- TCons TFunc [TBody (TVar 4),TBody (TVar 4)]
+-- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
 --
 -- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
--- TBody TNumber
+-- Right (TBody TNumber)
 --
 -- >>> test $ ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
--- TCons TFunc [*** Exception: Occurs check failed: 1 in 1 -> 2
+-- Left "Occurs check failed: 1 in 1 -> 2"
 --
 -- >>> test $ EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
--- TCons TFunc [TCons TFunc [TBody TBoolean,TBody (TVar 2)],TBody (TVar 2)]
+-- Right (TCons TFunc [TCons TFunc [TBody TBoolean,TBody (TVar 2)],TBody (TVar 2)])
 --
 -- >>> test $ EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
--- *** Exception: Could not unify: TNumber with TNumber -> 1
+-- Left "Could not unify: TNumber with TNumber -> 1"
 --
 -- >>> test $ ELet "x" (EAbs "y" (ELit (LitNumber 0))) (EAssign "x" (EAbs "y" (EVar "y")) (EVar "x"))
--- TCons TFunc [TBody TNumber,TBody TNumber]
+-- Right (TCons TFunc [TBody TNumber,TBody TNumber])
 --
 -- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (EVar "x"))
--- TCons TFunc [TBody (TVar 4),TBody TNumber]
+-- Right (TCons TFunc [TBody TNumber,TBody TNumber])
 --
-test :: Exp -> Type TBody
+test :: Exp -> Either String (Type TBody)
 test e = runInfer $ typeInference Map.empty e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
