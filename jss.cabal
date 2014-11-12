@@ -16,27 +16,28 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Infer, Pretty, Types, Parse, Test
+  exposed-modules:     Types2
   -- other-modules:       
-  other-extensions:    DeriveGeneric
-  build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive
+--  other-extensions:    DeriveGeneric
+  build-depends:       base >=4.7 && <4.8, mtl, containers
+--, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive
   --hs-source-dirs:      
   default-language:    Haskell2010
   ghc-options: -Wall
 
-executable sjs-demo
-  main-is: Demo.hs
-  other-extensions:    DeriveGeneric
-  build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive
-  --hs-source-dirs:      
-  default-language:    Haskell2010
-  ghc-options: -Wall
+-- executable sjs-demo
+--   main-is: Demo.hs
+--   other-extensions:    DeriveGeneric
+--   build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive
+--   --hs-source-dirs:      
+--   default-language:    Haskell2010
+--   ghc-options: -Wall
 
-executable sjs-test
-  main-is: Main.hs
-  other-extensions:    DeriveGeneric
-  build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive, test-framework-th, test-framework-quickcheck2, derive
-  hs-source-dirs:      ., test
-  default-language:    Haskell2010
-  ghc-options: -Wall
+-- executable sjs-test
+--   main-is: Main.hs
+--   other-extensions:    DeriveGeneric
+--   build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive, test-framework-th, test-framework-quickcheck2, derive
+--   hs-source-dirs:      ., test
+--   default-language:    Haskell2010
+--   ghc-options: -Wall
 

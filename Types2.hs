@@ -50,6 +50,7 @@ data Exp = EVar EVarName
          | ELit LitVal
          | EAssign EVarName Exp Exp
          | EArray [Exp]
+         | ETuple [Exp]
          deriving (Show, Eq, Ord)
 
 ----------------------------------------------------------------------
@@ -61,7 +62,7 @@ data TBody = TVar TVarName
             | TNumber | TBoolean | TString
             deriving (Show, Eq, Ord)
 
-data TConsName = TFunc | TArray
+data TConsName = TFunc | TArray | TTuple
             deriving (Show, Eq, Ord)
                
 data Type t = TBody t
@@ -297,7 +298,9 @@ inferType env (EArray exprs) =
      (subst, _, types) <- accumInfer env exprs
      subst' <- unifyl subst (tv:types) types
      return (subst', TCons TArray [applySubst subst' $ TBody $ TVar tvName])
-
+inferType env (ETuple exprs) =
+  do (subst, _, types) <- accumInfer env exprs
+     return (subst, TCons TTuple types)
     
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
@@ -325,6 +328,7 @@ instance Pretty Exp where
   pretty (ELit l) = pretty l
   pretty (EAssign n e1 e2) = pretty n ++ " := " ++ pretty e1 ++ "; " ++ pretty e2
   pretty (EArray es) = "[" ++ intercalate ", " (map pretty es) ++ "]"
+  pretty (ETuple es) = "(" ++ intercalate ", " (map pretty es) ++ ")"
                        
 instance Pretty TVarName where
   pretty = show
@@ -340,16 +344,23 @@ instance Pretty t => Pretty (Type t) where
   pretty (TBody t) = pretty t
   pretty (TCons TFunc [t1, t2]) = pretty t1 ++ " -> " ++ pretty t2
   pretty (TCons TArray [t]) = "[" ++ pretty t ++ "]"
+  pretty (TCons TTuple ts) = "(" ++ intercalate ", " (map pretty ts) ++ ")"
   pretty _ = error "Unknown type for pretty"
              
 instance Pretty TScheme where
   pretty (TScheme vars t) = forall ++ pretty t
       where forall = if null vars then "" else "forall " ++ unwords (map pretty vars) ++ ". "
 
+instance (Pretty a, Pretty b) => Pretty (Either a b) where
+    pretty (Left x) = "Error: " ++ pretty x
+    pretty (Right x) = pretty x
 
 ----------------------------------------------------------------------
 
 -- | 'test' is a utility function for running the following tests:
+--
+-- >>> test $ ETuple [ELit (LitBoolean True), ELit (LitNumber 2)]
+-- Right (TCons TTuple [TBody TNumber,TBody TBoolean])
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
 -- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
@@ -395,6 +406,9 @@ instance Pretty TScheme where
 --
 -- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (EVar "x"))
 -- Right (TCons TFunc [TBody TNumber,TBody TNumber])
+--
+-- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))])
+-- Right (TCons TTuple [TBody TBoolean,TBody TNumber])
 --
 test :: Exp -> Either String (Type TBody)
 test e = runInfer $ typeInference Map.empty e

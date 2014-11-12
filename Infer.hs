@@ -59,7 +59,7 @@ substStatement subst stmt = f stmt
           substituteType' x = case substituteType subst x of
                                 t@(TVar _) -> if t == x then t else substituteType' t
                                 TCons name ys -> TCons name $ map substituteType' ys
-                                TRow props -> TRow $ map (\(n,t) -> (n, substituteType' t)) props
+                                --TRow props -> TRow $ map (\(n,t) -> (n, substituteType' t)) props
 
 typeInference :: Statement (Expr a) -> Either JSTypeError (Statement (Expr JSType))
 typeInference stmt = runIdentity 
