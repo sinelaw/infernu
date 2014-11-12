@@ -380,9 +380,11 @@ inferType env (EAssign n e1 e2) =
               let s3 = s2 `composeSubst` s1
                   env' = applySubst s3 env
                   env'' = Map.insert n (varInfo { scheme = generalize env' $ applySubst s3 t1 }) env'
+                  newTypeScheme = generalize env'' . applySubst s3 $ t1
               let unifyInstances = foldM unifyInstances' s3 $ Set.toList existingInstances
                       where unifyInstances' s i = do
-                              s' <- unify (applySubst s i) (applySubst s t2)
+                              tempType <- instantiate newTypeScheme
+                              s' <- unify (applySubst s i) (applySubst s tempType)
                               return $ s' `composeSubst` s
               res <- unifyInstances 
               inferType env'' e2
@@ -460,16 +462,13 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 --
 -- This should fail because it "collapses" x to be Number -> Number which is not compatible with bool -> bool
 --
--- >> let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 0)])
--- >> let tenv = Map.singleton "x" (VarInfo { scheme = t, varId = 1 })
--- >> runInfer . typeInference tenv $ EAssign "x" (EAbs "y" (ELit (LitNumber 2))) (EVar "x")
--- Left "Could not unify: TBoolean with TNumber"
---
-
--- | Standalone test (no hard coded env):
---
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (ETuple [EVar "x", EVar "y"])))
 -- Left "Could not unify: TBoolean with TNumber"
+--
+-- The following should succeed because the second assignment to x is: x := \z1 -> z1, which is still general enough to satisfy both (x 1) and (x True)
+--
+-- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "z1" (EVar "z1")) (ETuple [EVar "x", EVar "y"])))
+-- Right (TCons TTuple [TCons TFunc [TBody (TVar 12),TBody (TVar 12)],TCons TTuple [TBody TNumber,TBody TBoolean]])
 --
 
 
