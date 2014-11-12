@@ -1,9 +1,10 @@
 module Parse where
 
 import Control.Arrow((***))
-
+import Control.Monad(forM_)
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax as ES3
+import qualified Language.ECMAScript3.Parser as ES3Parser
 
 
 import Infer
@@ -20,12 +21,24 @@ fromStatement (ES3.VarDeclStmt _ decls) = chain (EVar "")
     where chain = foldr loop (ELet "" (EVar "")) decls
           loop = (\(ES3.VarDecl _ (ES3.Id _ name) (Just v)) rest -> rest . ELet name (fromExpression v))
 fromStatement (ES3.FunctionStmt _ name args stmts) = ELet (ES3.unId name) (EAbs (ES3.unId . head $ args) $ foldStmts stmts) (EVar (ES3.unId name))
+fromStatement (ES3.ReturnStmt _ x) = maybe (EVar "") fromExpression x
 fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPrint s)
                  
 fromExpression :: ES3.Expression a -> Exp
 fromExpression (ES3.StringLit _ s) = ELit (LitString s)
-
+fromExpression (ES3.BoolLit _ s) = ELit (LitBoolean s)
+fromExpression (ES3.VarRef _ name) = EVar $ ES3.unId name
+fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
+
+parseFile :: String -> IO ()
+parseFile arg = do
+  js <- ES3Parser.parseFromFile arg 
+  putStrLn . show $ js
+  forM_ (map fromStatement $ ES3.unJavaScript js) $ \expr -> do
+                  putStrLn . pretty $ expr
+                  putStrLn . pretty $ test expr
+                           
 
 -- ex :: Body (Expr ()) -> Expr ()
 -- ex expr = Expr expr ()

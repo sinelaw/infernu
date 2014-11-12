@@ -5,8 +5,8 @@ import Text.PrettyPrint.GenericPretty(pp, Out(..))
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Language.ECMAScript3.Parser as ES3Parser
 
-import Types
-import Pretty
+--import Types
+--import Pretty
 import Infer
 import Parse
 
