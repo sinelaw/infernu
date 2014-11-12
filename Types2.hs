@@ -238,6 +238,7 @@ varBind n t | t == TBody (TVar n) = return nullSubst
                           
 ----------------------------------------------------------------------
 
+-- For efficiency reasons, types list is returned in reverse order.
 accumInfer :: TypeEnv -> [Exp] -> Infer (TSubst, TypeEnv, [Type TBody])
 accumInfer env = foldM accumInfer' (nullSubst, env, [])
     where accumInfer' (subst, env', types) expr = do
@@ -300,7 +301,7 @@ inferType env (EArray exprs) =
      return (subst', TCons TArray [applySubst subst' $ TBody $ TVar tvName])
 inferType env (ETuple exprs) =
   do (subst, _, types) <- accumInfer env exprs
-     return (subst, TCons TTuple types)
+     return (subst, TCons TTuple $ reverse types)
     
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
@@ -360,7 +361,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- | 'test' is a utility function for running the following tests:
 --
 -- >>> test $ ETuple [ELit (LitBoolean True), ELit (LitNumber 2)]
--- Right (TCons TTuple [TBody TNumber,TBody TBoolean])
+-- Right (TCons TTuple [TBody TBoolean,TBody TNumber])
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
 -- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
@@ -408,7 +409,13 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Right (TCons TFunc [TBody TNumber,TBody TNumber])
 --
 -- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))])
--- Right (TCons TTuple [TBody TBoolean,TBody TNumber])
+-- Right (TCons TTuple [TBody TNumber,TBody TBoolean])
+--
+-- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EApp (EVar "x") (EVar "x"))
+-- Right (TCons TFunc [TBody (TVar 4),TBody (TVar 4)])
+--
+-- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (ETuple [EVar "x", EVar "y"])))
+-- Left "some error about "x"s type must being either: forall a. a -> a  or Number -> Number, but it was used with a bool arg
 --
 test :: Exp -> Either String (Type TBody)
 test e = runInfer $ typeInference Map.empty e
