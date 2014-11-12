@@ -6,7 +6,7 @@
 {-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
 {-# LANGUAGE TupleSections     #-}
 
-module Types2 where
+module Infer where
 
 import           Control.Monad       (forM, foldM, forM_)
 --import           Control.Monad.State (State, evalState, get, modify)
