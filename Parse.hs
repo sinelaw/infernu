@@ -34,6 +34,11 @@ fromExpression (ES3.VarRef _ name) = EVar $ ES3.unId name
 fromExpression (ES3.CallExpr _ expr argExprs) = chainApp argExprs
     where chainApp [x] = EApp (fromExpression expr) (fromExpression x)
           chainApp (x:xs) = EApp (chainApp xs) (fromExpression x)
+fromExpression (ES3.AssignExpr _ ES3.OpAssign (ES3.LVar _ name) expr) = EAssign name (fromExpression expr) (EVar name)
+fromExpression (ES3.FuncExpr _ Nothing argNames stmts) = chainAbs . reverse $ map ES3.unId argNames
+    where chainAbs [x] = EAbs x (foldStmts stmts empty)
+          chainAbs (x:xs) = EAbs x (chainAbs xs)
+--           where funcBody = Block $ map fromStatement stmts 
 fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
 
