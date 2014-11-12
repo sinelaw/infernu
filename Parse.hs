@@ -9,7 +9,7 @@ import qualified Language.ECMAScript3.Parser as ES3Parser
 
 import Infer
 
-empty = ELet "" (ELit $ LitBoolean False) (EVar "")
+empty = (EVar "_")
         
 foldStmts :: [ES3.Statement a] -> Exp -> Exp
 foldStmts [x] n = fromStatement x n
@@ -18,19 +18,22 @@ foldStmts (x:xs) n = (fromStatement x (foldStmts xs n))
 fromStatement :: ES3.Statement a -> Exp -> Exp
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id 
-fromStatement (ES3.ExprStmt _ e) = ELet "" (fromExpression e)
+fromStatement (ES3.ExprStmt _ e) = ELet "_" (fromExpression e)
 fromStatement (ES3.IfStmt _ pred' thenS elseS) = \n -> ELet "if" (fromExpression pred') (foldStmts [thenS, elseS] n)
 fromStatement (ES3.VarDeclStmt _ decls) = \n -> chain decls n
     where chain [(ES3.VarDecl _ (ES3.Id _ name) (Just v))] n = ELet name (fromExpression v) n
           chain ((ES3.VarDecl _ (ES3.Id _ name) (Just v)):xs) n = ELet name (fromExpression v) (chain xs n)
 fromStatement (ES3.FunctionStmt _ name args stmts) = ELet (ES3.unId name) (EAbs (ES3.unId . head $ args) $ foldStmts stmts empty) 
-fromStatement (ES3.ReturnStmt _ x) = \n -> maybe (EVar "") fromExpression x
+fromStatement (ES3.ReturnStmt _ x) = \n -> maybe (EVar "_") fromExpression x
 fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPrint s)
                  
 fromExpression :: ES3.Expression a -> Exp
 fromExpression (ES3.StringLit _ s) = ELit (LitString s)
 fromExpression (ES3.BoolLit _ s) = ELit (LitBoolean s)
 fromExpression (ES3.VarRef _ name) = EVar $ ES3.unId name
+fromExpression (ES3.CallExpr _ expr argExprs) = chainApp argExprs
+    where chainApp [x] = EApp (fromExpression expr) (fromExpression x)
+          chainApp (x:xs) = EApp (chainApp xs) (fromExpression x)
 fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
 
