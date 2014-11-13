@@ -478,7 +478,18 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (EApp (EVar "x") (ELit (LitBoolean True))) (EAssign "x" (EAbs "z1" (ELit (LitBoolean False))) (ETuple [EVar "x", EVar "y"])))
 -- Right (TCons TTuple [TCons TFunc [TBody TBoolean,TBody TBoolean],TBody TBoolean])
 --
-
+-- >>> :{
+-- >>> test $ ELet
+-- >>> "x" (EAbs "a" (EVar "a"))
+-- >>> (ELet "setX"
+-- >>>    (EAbs "v"
+-- >>>             (ELet
+-- >>>          "_" (EAssign "x" (EVar "v") (EVar "x")) (ELit (LitBoolean False))))
+-- >>>    (ELet
+-- >>>       "_" (EApp (EVar "setX") (EAbs "a" (ELit (LitString "a"))))
+-- >>>       (EApp (EVar "x") (ELit (LitBoolean True)))))
+-- >>> :}
+-- Left "Could not unify: TBoolean with TString"
 
 -- | 'test' is a utility function for running the following tests:
 --
