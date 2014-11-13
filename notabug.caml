@@ -1,0 +1,9 @@
+let x = ref None ;;
+let setX v = x := Some v ;;
+let y = setX (fun b -> b) ;;
+let z = setX (fun _ -> "a") ;;
+let z' = match !x with
+    Some f -> f 2;;
+
+
+  
