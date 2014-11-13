@@ -8,7 +8,7 @@
 
 module Infer where
 
-import           Control.Monad       (forM, foldM, forM_)
+import           Control.Monad       (forM, foldM)
 --import           Control.Monad.State (State, evalState, get, modify)
 import           Data.Functor.Identity(Identity(..), runIdentity)
 import           Control.Monad.Trans(lift)
@@ -24,8 +24,10 @@ import qualified Data.Set            as Set
 --import           Test.QuickCheck.All    
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 -- import           Data.DeriveTH
-import Debug.Trace(traceShowId, trace)
-    
+--import Debug.Trace(traceShowId, trace)
+
+--trace' prefix x = trace (prefix ++ " " ++ show x) x
+                  
 ----------------------------------------------------------------------
 
 -- var x = 2;    --> let x = ref 2 in    | x :: a
@@ -369,24 +371,24 @@ inferType env (ELet n e1 e2) =
 -- the previously instantiated types.
 --
 inferType env (EAssign n e1 e2) =
-  do (s1, t1) <- inferType env e1
+  do (s1, rvalueT) <- inferType env e1
      -- TODO use something like hoistEither (but for Maybe)
      case Map.lookup n env of
        Nothing -> throwError $ "Unbound variable: " ++ n ++ " in assignment " ++ pretty e1
        Just varInfo ->
            do t2 <- instantiate . scheme $ varInfo
-              s2 <- unify t1 $ applySubst s1 t2
+              s2 <- unify rvalueT $ applySubst s1 t2
               existingInstances <- getInstances env n
               let s3 = s2 `composeSubst` s1
                   env' = applySubst s3 env
-                  env'' = Map.insert n (varInfo { scheme = generalize env' $ applySubst s3 t1 }) env'
-                  newTypeScheme = generalize env'' . applySubst s3 $ t1
-              let unifyInstances = foldM unifyInstances' s3 $ Set.toList existingInstances
+                  unifiedScheme = generalize env' $ applySubst s3 rvalueT
+                  env'' = Map.insert n (varInfo { scheme = unifiedScheme }) env'
+                  unifyInstances = foldM unifyInstances' s3 $ Set.toList existingInstances
                       where unifyInstances' s i = do
-                              tempType <- instantiate newTypeScheme
+                              tempType <- instantiate unifiedScheme
                               s' <- unify (applySubst s i) (applySubst s tempType)
                               return $ s' `composeSubst` s
-              res <- unifyInstances 
+              _ <- unifyInstances 
               (s4, tRest) <- inferType env'' e2
               return $ (s4 `composeSubst` s3, tRest)
                       
