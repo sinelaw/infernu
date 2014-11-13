@@ -387,7 +387,8 @@ inferType env (EAssign n e1 e2) =
                               s' <- unify (applySubst s i) (applySubst s tempType)
                               return $ s' `composeSubst` s
               res <- unifyInstances 
-              inferType env'' e2
+              (s4, tRest) <- inferType env'' e2
+              return $ (s4 `composeSubst` s3, tRest)
                       
 inferType env (EArray exprs) =
   do tvName <- fresh
