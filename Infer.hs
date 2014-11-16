@@ -219,7 +219,7 @@ runInfer :: Infer a -> Either String a
 runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, monotypes = Set.empty, mutableVars = Set.empty }
 
 addInstance :: VarId -> Type TBody -> Infer ()
-addInstance varId' t = modify (\is -> is { varInstances = addToMappedSet varId' t $ varInstances is })
+addInstance varId' t = trace' ("add instance: " ++ show varId' ++ " := ") <$> modify (\is -> is { varInstances = addToMappedSet varId' t $ varInstances is })
 
 getInstances :: TypeEnv -> VarId -> Infer (Set.Set (Type TBody))
 getInstances env varId'' = do
@@ -311,18 +311,18 @@ generalize tenv t = do
 
 ----------------------------------------------------------------------
 
--- unify' :: Type TBody -> Type TBody -> Infer TSubst
--- unify' t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify t1 t2
-               
 unify :: Type TBody -> Type TBody -> Infer TSubst
-unify (TBody (TVar n)) t = substInstances $ varBind n t
-unify t (TBody (TVar n)) = substInstances $ varBind n t
-unify (TBody x) (TBody y) = if x == y
+unify t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' t1 t2
+               
+unify' :: Type TBody -> Type TBody -> Infer TSubst
+unify' (TBody (TVar n)) t = substInstances $ varBind n t
+unify' t (TBody (TVar n)) = substInstances $ varBind n t
+unify' (TBody x) (TBody y) = if x == y
                             then return nullSubst
                             else throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
-unify t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ pretty t1 ++ " with " ++ pretty t2
-unify t1@(TCons _ _) t2@(TBody _) = substInstances $ unify t2 t1
-unify (TCons n1 ts1) (TCons n2 ts2) =
+unify' t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ pretty t1 ++ " with " ++ pretty t2
+unify' t1@(TCons _ _) t2@(TBody _) = substInstances $ unify' t2 t1
+unify' (TCons n1 ts1) (TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then unifyl nullSubst ts1 ts2
     else throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
@@ -330,7 +330,7 @@ unify (TCons n1 ts1) (TCons n2 ts2) =
 unifyl :: TSubst -> [Type TBody] -> [Type TBody] -> Infer TSubst
 unifyl initialSubst xs ys = substInstances $ foldM unifyl' initialSubst $ zip xs ys
     where unifyl' s (x, y) = do
-            s' <- unify (applySubst s x) (applySubst s y)
+            s' <- unify' (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
 
 varBind :: TVarName -> Type TBody -> Infer TSubst
@@ -360,9 +360,8 @@ inferType env (EVar n) = case Map.lookup n env of
     t <- instantiate . scheme $ varInfo
     mutable <- isMutable $ varId varInfo
     s <- if mutable
-    then do prevInstance <- head . Set.toList <$> getInstances env (varId varInfo)
-            unify prevInstance t
-    else return nullSubst
+         then unifyAllInstances nullSubst env (varId varInfo) t
+         else return nullSubst
     addInstance (varId varInfo) t
     return (s, applySubst s t)
 inferType env (EAbs argName e2) =
@@ -399,12 +398,7 @@ inferType env e@(EAssign n expr1 expr2) =
               addMonotype rvalueT
               addMutableVar $ varId varInfo
               let env' = applySubst s1 (Map.insert n monoVarInfo env)
-              existingInstances <- getInstances env' (varId varInfo)
-              let unifyInstances = foldM unifyInstances' s1 $ Set.toList existingInstances
-                      where unifyInstances' s i = do
-                              s' <- unify (applySubst s i) (applySubst s1 rvalueT)
-                              return $ s' `composeSubst` s
-              s4 <- unifyInstances
+              s4 <- unifyAllInstances s1 env' (varId varInfo) rvalueT
               let env'' = applySubst s4 env' 
               (s5, tRest) <- inferType env'' expr2
               return $ (s5 `composeSubst` s4, tRest)
@@ -418,6 +412,13 @@ inferType env (EArray exprs) =
 inferType env (ETuple exprs) =
   do (subst, _, types) <- accumInfer env exprs
      return (subst, TCons TTuple $ reverse types)
+
+unifyAllInstances s env varId' t = do
+  existingInstances <- getInstances env varId'
+  foldM unifyInstances' s $ Set.toList existingInstances
+      where unifyInstances' s1 i =
+                do s2 <- unify (applySubst s1 i) (applySubst s1 t)
+                   return $ s2 `composeSubst` s1
 
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
@@ -488,7 +489,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- This should fail because it "collapses" x to be Number -> Number which is not compatible with bool -> bool
 --
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (ETuple [EVar "x", EVar "y"])))
--- Left "Could not unify: TNumber with TBoolean"
+-- Left "Could not unify: TBoolean with TNumber"
 --
 -- The following should succeed because x is immutable and thus polymorphic:
 --
@@ -528,7 +529,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Right (TCons TTuple [TBody TBoolean,TBody TNumber])
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
--- Right (TCons TFunc [TBody (TVar 1),TBody (TVar 1)])
+-- Right (TCons TFunc [TBody (TVar 3),TBody (TVar 3)])
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
 -- Left "Could not unify: TBoolean with 1 -> 1"
@@ -537,7 +538,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Right (TBody TBoolean)
 --
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
--- Left "Could not unify: TNumber with TBoolean"
+-- Left "Could not unify: TBoolean with TNumber"
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
 -- Right (TCons TArray [TBody TBoolean])
@@ -546,7 +547,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- Right (TCons TArray [TBody TBoolean])
 --
 -- >>> test $ ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
--- Right (TCons TArray [TBody (TVar 1)])
+-- Right (TCons TArray [TBody (TVar 3)])
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
 -- Left "Could not unify: TNumber with TBoolean"
