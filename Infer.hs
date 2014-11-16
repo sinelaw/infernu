@@ -467,7 +467,7 @@ instance Pretty TConsName where
             
 instance Pretty t => Pretty (Type t) where
   prettyTab n (TBody t) = prettyTab n t
-  prettyTab n (TCons TFunc [t1, t2]) = prettyTab n t1 ++ " -> " ++ prettyTab n t2
+  prettyTab n (TCons TFunc [t1, t2]) = "(" ++ prettyTab n t1 ++ " -> " ++ prettyTab n t2 ++ ")"
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
   prettyTab _ _ = error "Unknown type for pretty"
@@ -491,24 +491,24 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- This should fail because it "collapses" x to be Number -> Number which is not compatible with bool -> bool
 --
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (ETuple [EVar "x", EVar "y"])))
--- Left "Could not unify: TBoolean with TNumber"
+-- "Error: Could not unify: TBoolean with TNumber"
 --
 -- The following should succeed because x is immutable and thus polymorphic:
 --
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (ETuple [EVar "x", EVar "y"]))
--- Right (TCons TTuple [TCons TFunc [TBody (TVar 8),TBody (TVar 8)],TCons TTuple [TBody TNumber,TBody TBoolean]])
+-- "((8 -> 8), (TNumber, TBoolean))"
 --
 -- The following should fail because x is mutable and therefore a monotype:
 --
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "z1" (EVar "z1")) (ETuple [EVar "x", EVar "y"])))
--- Left "Could not unify: TBoolean with TNumber"
+-- "Error: Could not unify: TBoolean with TNumber"
 --
 
 -- |
 -- The following should also succeed because "x" is only ever used like this: (x True). The second assignment to x is: x := \z1 -> False, which is specific but matches the usage. Note that x's type is collapsed to: Boolean -> Boolean.
 --
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (EApp (EVar "x") (ELit (LitBoolean True))) (EAssign "x" (EAbs "z1" (ELit (LitBoolean False))) (ETuple [EVar "x", EVar "y"])))
--- Right (TCons TTuple [TCons TFunc [TBody TBoolean,TBody TBoolean],TBody TBoolean])
+-- "((TBoolean -> TBoolean), TBoolean)"
 --
 
 -- | Tests a setter for x being called with something more specific than x's original definition:
@@ -523,67 +523,69 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- >>>       "_" (EApp (EVar "setX") (EAbs "a" (ELit (LitString "a"))))
 -- >>>       (EApp (EVar "x") (ELit (LitBoolean True)))))
 -- >>> :}
--- Left "Could not unify: TString with TBoolean"
+-- "Error: Could not unify: TString with TBoolean"
 
 -- | 'test' is a utility function for running the following tests:
 --
 -- >>> test $ ETuple [ELit (LitBoolean True), ELit (LitNumber 2)]
--- Right (TCons TTuple [TBody TBoolean,TBody TNumber])
+-- "(TBoolean, TNumber)"
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
--- Right (TCons TFunc [TBody (TVar 3),TBody (TVar 3)])
+-- "(3 -> 3)"
 --
 -- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
--- Left "Could not unify: TBoolean with 1 -> 1"
+-- "Error: Could not unify: TBoolean with (1 -> 1)"
 --
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
--- Right (TBody TBoolean)
+-- "TBoolean"
 --
 -- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
--- Left "Could not unify: TBoolean with TNumber"
+-- "Error: Could not unify: TBoolean with TNumber"
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
--- Right (TCons TArray [TBody TBoolean])
+-- "[TBoolean]"
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (EVar "x")
--- Right (TCons TArray [TBody TBoolean])
+-- "[TBoolean]"
 --
 -- >>> test $ ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
--- Right (TCons TArray [TBody (TVar 3)])
+-- "[3]"
 --
 -- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
--- Left "Could not unify: TNumber with TBoolean"
+-- "Error: Could not unify: TNumber with TBoolean"
 --
 -- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
--- Right (TCons TFunc [TBody (TVar 6),TBody (TVar 6)])
+-- "(6 -> 6)"
 --
 -- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
--- Right (TBody TNumber)
+-- "TNumber"
 --
 -- >>> test $ ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
--- Left "Occurs check failed: 1 in 1 -> 2"
+-- "Error: Occurs check failed: 1 in (1 -> 2)"
 --
 -- >>> test $ EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
--- Right (TCons TFunc [TCons TFunc [TBody TBoolean,TBody (TVar 3)],TBody (TVar 3)])
+-- "((TBoolean -> 3) -> 3)"
 --
 -- >>> test $ EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
--- Left "Could not unify: TNumber with TNumber -> 1"
+-- "Error: Could not unify: TNumber with (TNumber -> 1)"
 
 -- | EAssign
 -- >>> test $ ELet "x" (EAbs "y" (ELit (LitNumber 0))) (EAssign "x" (EAbs "y" (EVar "y")) (EVar "x"))
--- Right (TCons TFunc [TBody TNumber,TBody TNumber])
+-- "(TNumber -> TNumber)"
 --
 -- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (EVar "x"))
--- Right (TCons TFunc [TBody TNumber,TBody TNumber])
+-- "(TNumber -> TNumber)"
 --
 -- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))])
--- Right (TCons TTuple [TBody TNumber,TBody TBoolean])
+-- "(TNumber, TBoolean)"
 --
 -- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EApp (EVar "x") (EVar "x"))
--- Right (TCons TFunc [TBody (TVar 5),TBody (TVar 5)])
+-- "(5 -> 5)"
 --
-test :: Exp -> Either String (Type TBody)
-test e = runInfer $ typeInference Map.empty e
+-- >>> test $ ELet "x" (EAbs "a" (EVar "a")) (ELet "getX" (EAbs "v" (EVar "x")) (ELet "setX" (EAbs "v" (ELet "_" (EAssign "x" (EVar "v") (EVar "x")) (ELit (LitBoolean True)))) (ELet "_" (EApp (EVar "setX") (EAbs "a" (ELit (LitString "a")))) (EVar "getX"))))
+-- "(12 -> (String -> String))"
+test :: Exp -> String
+test e = pretty . runInfer $ typeInference Map.empty e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
 --       Left err -> putStrLn $ show e ++ "\n " ++ err ++ "\n"
