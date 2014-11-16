@@ -364,7 +364,7 @@ inferType env (EVar n) = case Map.lookup n env of
     then do prevInstance <- head . Set.toList <$> getInstances env n
             unify prevInstance t
     else return nullSubst
-    return (s, t)
+    return (s, trace' (n ++ " \t==> ") $ applySubst s t)
 inferType env (EAbs argName e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
