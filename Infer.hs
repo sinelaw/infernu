@@ -28,10 +28,12 @@ import Prelude hiding (foldr)
 --import           Test.QuickCheck.All    
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 -- import           Data.DeriveTH
-import Debug.Trace(trace)
+--import Debug.Trace(trace)
 
-trace' prefix x = trace (prefix ++ " " ++ show x) x
-                  
+--trace' prefix x = trace (prefix ++ " " ++ show x) x
+trace' :: String -> a -> a
+trace' _ = id
+           
 ----------------------------------------------------------------------
 
 -- var x = 2;    --> let x = ref 2 in    | x :: a
