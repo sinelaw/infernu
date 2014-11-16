@@ -18,7 +18,7 @@ import           Control.Monad.Trans.Either (EitherT(..), runEitherT, left)
 import           Data.Functor        ((<$>))
 import           Data.List           (intercalate)
 import qualified Data.Map.Lazy       as Map
-import           Data.Maybe          (fromMaybe)
+import           Data.Maybe          (fromMaybe, isNothing)
 import qualified Data.Set            as Set
 import           Data.Foldable       (Foldable(..))
 
@@ -221,16 +221,12 @@ runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, v
 addInstance :: VarId -> Type TBody -> Infer ()
 addInstance varId' t = modify (\is -> is { varInstances = addToMappedSet varId' t $ varInstances is })
 
-getInstances :: TypeEnv -> EVarName -> Infer (Set.Set (Type TBody))
-getInstances env n = do
-  let varId' = getVarId n env
-  case varId' of
+getInstances :: TypeEnv -> VarId -> Infer (Set.Set (Type TBody))
+getInstances env varId'' = do
+  res <- Map.lookup varId'' . varInstances <$> get
+  case res of
     Nothing -> return Set.empty
-    Just varId'' ->
-        do res <- Map.lookup varId'' . varInstances <$> get
-           case res of
-             Nothing -> return Set.empty
-             Just types -> return types
+    Just types -> return types
 
 getMonotypes :: Infer (Set.Set (Type TBody))
 getMonotypes = monotypes <$> get
@@ -251,7 +247,7 @@ substInstances inf = do s <- inf
                         return s
                                
 substInstances' :: TSubst -> Infer ()
-substInstances' s = modify (applySubst s)
+substInstances' s = modify $ applySubst s
                            
 fresh :: Infer TVarName
 fresh = do
@@ -261,6 +257,7 @@ fresh = do
 throwError :: String -> Infer a
 throwError = lift . left
 
+               
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
 --
 -- For example:
@@ -314,6 +311,9 @@ generalize tenv t = do
 
 ----------------------------------------------------------------------
 
+-- unify' :: Type TBody -> Type TBody -> Infer TSubst
+-- unify' t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify t1 t2
+               
 unify :: Type TBody -> Type TBody -> Infer TSubst
 unify (TBody (TVar n)) t = substInstances $ varBind n t
 unify t (TBody (TVar n)) = substInstances $ varBind n t
@@ -358,13 +358,13 @@ inferType env (EVar n) = case Map.lookup n env of
   Nothing -> throwError $ "Unbound variable: " ++ n
   Just varInfo -> do
     t <- instantiate . scheme $ varInfo
-    addInstance (varId varInfo) t
     mutable <- isMutable $ varId varInfo
     s <- if mutable
-    then do prevInstance <- head . Set.toList <$> getInstances env n
+    then do prevInstance <- head . Set.toList <$> getInstances env (varId varInfo)
             unify prevInstance t
     else return nullSubst
-    return (s, trace' (n ++ " \t==> ") $ applySubst s t)
+    addInstance (varId varInfo) t
+    return (s, applySubst s t)
 inferType env (EAbs argName e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
@@ -378,16 +378,16 @@ inferType env (EApp e1 e2) =
      (s2, t2) <- inferType (applySubst s1 env) e2
      s3 <- unify (applySubst s2 t1) (TCons TFunc [t2, tvar])
      return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
-inferType env (ELet n e1 e2) =
+inferType env e@(ELet n e1 e2) =
   do (s1, t1) <- inferType env e1
      varId' <- fresh
      t' <- generalize (applySubst s1 env) t1
      let env' = Map.insert n (singletonVarInfo varId' t') env
      (s2, t2) <- inferType env' e2
-     return (s2 `composeSubst` s1, t2)
+     return (s2 `composeSubst` s1, applySubst s2 t2)
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
-inferType env (EAssign n expr1 expr2) =
+inferType env e@(EAssign n expr1 expr2) =
   do (s1, rvalueT) <- inferType env expr1
      -- TODO use something like hoistEither (but for Maybe)
      case Map.lookup n env of
@@ -395,14 +395,14 @@ inferType env (EAssign n expr1 expr2) =
        Just varInfo ->
            do let monoVarInfo = ungeneralizeVar varInfo
               monoType <- instantiate $ scheme monoVarInfo
+              addInstance (varId varInfo) monoType
               addMonotype rvalueT
               addMutableVar $ varId varInfo
-              s3 <- unify rvalueT $ applySubst s1 monoType
-              let env' = applySubst s3 (Map.insert n monoVarInfo env)
-              existingInstances <- getInstances env' n
-              let unifyInstances = foldM unifyInstances' s3 $ Set.toList existingInstances
+              let env' = applySubst s1 (Map.insert n monoVarInfo env)
+              existingInstances <- getInstances env' (varId varInfo)
+              let unifyInstances = foldM unifyInstances' s1 $ Set.toList existingInstances
                       where unifyInstances' s i = do
-                              s' <- unify (applySubst s i) (applySubst s1 monoType)
+                              s' <- unify (applySubst s i) (applySubst s1 rvalueT)
                               return $ s' `composeSubst` s
               s4 <- unifyInstances
               let env'' = applySubst s4 env' 
@@ -418,7 +418,7 @@ inferType env (EArray exprs) =
 inferType env (ETuple exprs) =
   do (subst, _, types) <- accumInfer env exprs
      return (subst, TCons TTuple $ reverse types)
-    
+
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
   (s, t) <- inferType env e 
