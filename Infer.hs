@@ -185,9 +185,21 @@ prop_composeSubst :: TSubst -> TSubst -> Type TBody -> Bool
 prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst new (applySubst old t)
 
 ----------------------------------------------------------------------
+-- | Adds an element to the value set of a map: key -> value set
+--
+-- >>> let m1 = addToMappedSet 1 2 (Map.empty)
+-- >>> m1
+-- fromList [(1,fromList [2])]
+-- >>> addToMappedSet 1 3 m1
+-- fromList [(1,fromList [2,3])]
+addToMappedSet :: (Ord a, Ord b) => a -> b -> (Map.Map a (Set.Set b)) -> (Map.Map a (Set.Set b))
+addToMappedSet k v m = Map.insert k (Set.insert v set) m
+    where set = case Map.lookup k m of
+                  Nothing -> Set.empty
+                  Just vs -> vs 
 
 data InferState = InferState { nameSource :: NameSource
-                             , varInstances :: Map.Map TVarName (Maybe (Type TBody))
+                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody))
                              , monotypes :: Set.Set (Type TBody)
                              , mutableVars :: Set.Set VarId }
                   deriving (Show, Eq)
@@ -206,15 +218,19 @@ runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 runInfer :: Infer a -> Either String a
 runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, monotypes = Set.empty, mutableVars = Set.empty }
 
-setInstance :: VarId -> Type TBody -> Infer ()
-setInstance varId' t = modify (\is -> is { varInstances = Map.insert varId' (Just t) $ varInstances is })
+addInstance :: VarId -> Type TBody -> Infer ()
+addInstance varId' t = modify (\is -> is { varInstances = addToMappedSet varId' t $ varInstances is })
 
-getInstance :: TypeEnv -> EVarName -> Infer (Maybe (Type TBody))
-getInstance env n = do
+getInstances :: TypeEnv -> EVarName -> Infer (Set.Set (Type TBody))
+getInstances env n = do
   let varId' = getVarId n env
   case varId' of
-    Nothing -> return Nothing
-    Just varId'' -> join . Map.lookup varId'' . varInstances <$> get
+    Nothing -> return Set.empty
+    Just varId'' ->
+        do res <- Map.lookup varId'' . varInstances <$> get
+           case res of
+             Nothing -> return Set.empty
+             Just types -> return types
 
 getMonotypes :: Infer (Set.Set (Type TBody))
 getMonotypes = monotypes <$> get
@@ -341,17 +357,14 @@ inferType _ (ELit lit) = return . (nullSubst,) $ TBody $ case lit of
 inferType env (EVar n) = case Map.lookup n env of
   Nothing -> throwError $ "Unbound variable: " ++ n
   Just varInfo -> do
+    t <- instantiate . scheme $ varInfo
+    addInstance (varId varInfo) t
     mutable <- isMutable $ varId varInfo
-    prevInstance <- getInstance env n
-    let setInstance' =
-            do t <- instantiate . scheme $ varInfo
-               setInstance (varId varInfo) t
-               return t
-    t <- case (prevInstance, mutable) of
-           (Nothing, _) -> setInstance'
-           (Just t, True) -> return t
-           (Just t, False) -> setInstance'
-    return (nullSubst, t)
+    s <- if mutable
+    then do prevInstance <- head . Set.toList <$> getInstances env n
+            unify prevInstance t
+    else return nullSubst
+    return (s, t)
 inferType env (EAbs argName e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
@@ -386,10 +399,12 @@ inferType env (EAssign n expr1 expr2) =
               addMutableVar $ varId varInfo
               s3 <- unify rvalueT $ applySubst s1 monoType
               let env' = applySubst s3 (Map.insert n monoVarInfo env)
-              prevInstance <- getInstance env' n
-              s4 <- case prevInstance of
-                Nothing -> return s3
-                Just oldT -> unify rvalueT $ applySubst s3 oldT
+              existingInstances <- getInstances env' n
+              let unifyInstances = foldM unifyInstances' s3 $ Set.toList existingInstances
+                      where unifyInstances' s i = do
+                              s' <- unify (applySubst s i) (applySubst s1 monoType)
+                              return $ s' `composeSubst` s
+              s4 <- unifyInstances
               let env'' = applySubst s4 env' 
               (s5, tRest) <- inferType env'' expr2
               return $ (s5 `composeSubst` s4, tRest)
@@ -406,56 +421,61 @@ inferType env (ETuple exprs) =
     
 typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
 typeInference env e = do
-  (s, t) <- inferType env e
+  (s, t) <- inferType env e 
   return $ applySubst s t
 
 ----------------------------------------------------------------------
+tab :: Int -> String
+tab t = take (t*4) $ repeat ' '
 
 class Pretty a where
-  pretty :: a -> String
+  prettyTab :: Int -> a -> String
+
+pretty :: Pretty a => a -> String
+pretty = prettyTab 0
 
 instance Pretty LitVal where
-  pretty (LitNumber x) = show x
-  pretty (LitBoolean x) = show x
-  pretty (LitString x) = show x
+  prettyTab _ (LitNumber x) = show x
+  prettyTab _ (LitBoolean x) = show x
+  prettyTab _ (LitString x) = show x
 
 instance Pretty EVarName where
-  pretty x = x
+  prettyTab _ x = x
 
 instance Pretty Exp where
-  pretty (EVar n) = pretty n
-  pretty (EApp e1 e2) = pretty e1 ++ " " ++ pretty e2
-  pretty (EAbs n e) = "(\\" ++ pretty n ++ " -> " ++ pretty e ++ ")"
-  pretty (ELet n e1 e2) = "(let " ++ pretty n ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
-  pretty (ELit l) = pretty l
-  pretty (EAssign n e1 e2) = pretty n ++ " := " ++ pretty e1 ++ "; " ++ pretty e2
-  pretty (EArray es) = "[" ++ intercalate ", " (map pretty es) ++ "]"
-  pretty (ETuple es) = "(" ++ intercalate ", " (map pretty es) ++ ")"
+  prettyTab t (EVar n) = prettyTab t n
+  prettyTab t (EApp e1 e2) = prettyTab t e1 ++ " " ++ prettyTab t e2
+  prettyTab t (EAbs n e) = "(\\" ++ prettyTab t n ++ " -> " ++ prettyTab t e ++ ")"
+  prettyTab t (ELet n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
+  prettyTab t (ELit l) = prettyTab t l
+  prettyTab t (EAssign n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
+  prettyTab t (EArray es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
+  prettyTab t (ETuple es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
                        
 instance Pretty TVarName where
-  pretty = show
+  prettyTab _ = show
 
 instance Pretty TBody where
-  pretty (TVar n) = pretty n
-  pretty x = show x
+  prettyTab t (TVar n) = prettyTab t n
+  prettyTab _ x = show x
 
 instance Pretty TConsName where
-  pretty = show
+  prettyTab _ = show
             
 instance Pretty t => Pretty (Type t) where
-  pretty (TBody t) = pretty t
-  pretty (TCons TFunc [t1, t2]) = pretty t1 ++ " -> " ++ pretty t2
-  pretty (TCons TArray [t]) = "[" ++ pretty t ++ "]"
-  pretty (TCons TTuple ts) = "(" ++ intercalate ", " (map pretty ts) ++ ")"
-  pretty _ = error "Unknown type for pretty"
+  prettyTab n (TBody t) = prettyTab n t
+  prettyTab n (TCons TFunc [t1, t2]) = prettyTab n t1 ++ " -> " ++ prettyTab n t2
+  prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
+  prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
+  prettyTab _ _ = error "Unknown type for pretty"
              
 instance Pretty TScheme where
-  pretty (TScheme vars t) = forall ++ pretty t
-      where forall = if null vars then "" else "forall " ++ unwords (map pretty vars) ++ ". "
+  prettyTab n (TScheme vars t) = forall ++ prettyTab n t
+      where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
 
 instance (Pretty a, Pretty b) => Pretty (Either a b) where
-    pretty (Left x) = "Error: " ++ pretty x
-    pretty (Right x) = pretty x
+    prettyTab n (Left x) = "Error: " ++ prettyTab n x
+    prettyTab n (Right x) = prettyTab n x
 
 ----------------------------------------------------------------------
 --
@@ -487,6 +507,8 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (EApp (EVar "x") (ELit (LitBoolean True))) (EAssign "x" (EAbs "z1" (ELit (LitBoolean False))) (ETuple [EVar "x", EVar "y"])))
 -- Right (TCons TTuple [TCons TFunc [TBody TBoolean,TBody TBoolean],TBody TBoolean])
 --
+
+-- | Tests a setter for x being called with something more specific than x's original definition:
 -- >>> :{
 -- >>> test $ ELet
 -- >>> "x" (EAbs "a" (EVar "a"))

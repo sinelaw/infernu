@@ -46,10 +46,10 @@ fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prett
 parseFile :: String -> IO ()
 parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
-  putStrLn . show $ js
+  --putStrLn . show $ js
   let expr = (foldStmts $ ES3.unJavaScript js)  empty
-  putStrLn "--"
-  putStrLn . show $ expr
+  --putStrLn "--"
+  --putStrLn . show $ expr
   putStrLn . pretty $ expr
   putStrLn . pretty $ test expr
                            
