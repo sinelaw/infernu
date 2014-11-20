@@ -9,7 +9,7 @@
 module Infer where
 
 
-import           Control.Monad       (forM, foldM, join)
+import           Control.Monad       (forM, forM_, foldM, join)
 --import           Control.Monad.State (State, evalState, get, modify)
 import           Data.Functor.Identity(Identity(..), runIdentity)
 import           Control.Monad.Trans(lift)
@@ -51,20 +51,19 @@ type EVarName = String
 data LitVal = LitNumber Double | LitBoolean Bool | LitString String
             deriving (Show, Eq, Ord)
 
-data Exp = EVar EVarName
-         | EApp Exp Exp
-         | EAbs EVarName Exp
-         | ELet EVarName Exp Exp
-         | ELit LitVal
-         | EAssign EVarName Exp Exp
-         | EArray [Exp]
-         | ETuple [Exp]
-         deriving (Show, Eq, Ord)
+data Exp a = EVar a EVarName
+           | EApp a (Exp a) (Exp a)
+           | EAbs a EVarName (Exp a)
+           | ELet a EVarName (Exp a) (Exp a)
+           | ELit a LitVal
+           | EAssign a EVarName (Exp a) (Exp a)
+           | EArray a [(Exp a)]
+           | ETuple a [(Exp a)]
+             deriving (Show, Eq, Ord, Functor)
 
 ----------------------------------------------------------------------
 
 type TVarName = Int
-
 
 data TBody = TVar TVarName
             | TNumber | TBoolean | TString
@@ -132,44 +131,16 @@ instance Types TScheme where
   applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 ungeneralize :: TScheme -> TScheme
-ungeneralize (TScheme tvars tbody) = (TScheme [] tbody)
-                                   
+ungeneralize (TScheme _ tbody) = (TScheme [] tbody)
+
+getQuantificands :: TScheme -> [TVarName]
+getQuantificands (TScheme tvars _) = tvars
+
 -- alphaEquivalent :: TScheme -> TScheme -> Bool                                   
 -- alphaEquivalent ts1@(TScheme tvn1 _) (TScheme tvn2 t2) = ts1 == TScheme tvn1 ts2'
 --     where TScheme _ ts2' = applySubst substVarNames (TScheme [] t2)
 --           substVarNames = Map.fromList . map (\(old,new) -> (old, TBody $ TVar new)) $ zip tvn2 tvn1
     
-----------------------------------------------------------------------
-
-type VarId = TVarName
-    
-data VarInfo = VarInfo { scheme :: TScheme, varId :: VarId }
-               deriving (Show, Eq)
-                        
-singletonVarInfo :: VarId -> TScheme -> VarInfo
-singletonVarInfo n s = VarInfo { scheme = s, varId = n }
-
-ungeneralizeVar :: VarInfo -> VarInfo
-ungeneralizeVar v = v { scheme = ungeneralize $ scheme v }
-                       
-instance Types VarInfo where
-    freeTypeVars v = freeTypeVars $ scheme v
-    applySubst s v = v { scheme = applySubst s $ scheme v }
-                     
--- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
---
--- Note: instance of Types 
-type TypeEnv = Map.Map EVarName VarInfo
-
-
-getVarId :: EVarName -> TypeEnv -> Maybe VarId
-getVarId n env = fmap varId $ Map.lookup n env
-                 
--- Used internally to generate fresh type variable names
-data NameSource = NameSource { lastName :: TVarName }
-                deriving (Show, Eq)
-
-
 ----------------------------------------------------------------------
 
 nullSubst :: TSubst
@@ -187,29 +158,57 @@ prop_composeSubst :: TSubst -> TSubst -> Type TBody -> Bool
 prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst new (applySubst old t)
 
 ----------------------------------------------------------------------
--- | Adds an element to the value set of a map: key -> value set
+
+type VarId = TVarName
+                     
+-- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
 --
--- >>> let m1 = addToMappedSet 1 2 (Map.empty)
+-- Note: instance of Types 
+type TypeEnv = Map.Map EVarName VarId
+
+
+getVarId :: EVarName -> TypeEnv -> Maybe VarId
+getVarId = Map.lookup
+                 
+-- Used internally to generate fresh type variable names
+data NameSource = NameSource { lastName :: TVarName }
+                deriving (Show, Eq)
+
+----------------------------------------------------------------------
+-- | Adds an element to the value set of a map: key -> [value]
+--
+-- >>> let m1 = addToMappedSet 1 2 Map.empty
 -- >>> m1
--- fromList [(1,fromList [2])]
+-- fromList [(1, fromList [2])]
 -- >>> addToMappedSet 1 3 m1
--- fromList [(1,fromList [2,3])]
+-- fromList [(1, fromList [2,3])]
 addToMappedSet :: (Ord a, Ord b) => a -> b -> (Map.Map a (Set.Set b)) -> (Map.Map a (Set.Set b))
-addToMappedSet k v m = Map.insert k (Set.insert v set) m
-    where set = case Map.lookup k m of
-                  Nothing -> Set.empty
-                  Just vs -> vs 
+addToMappedSet k v m = Map.insert k (Set.insert v vs) m
+    where vs = case Map.lookup k m of
+                 Nothing -> Set.empty
+                 Just vs' -> vs' 
+
+-- | Adds a pair of equivalent items to an equivalence map.
+--
+-- >>> let m1 = addEquivalence 1 2 Map.empty
+-- >>> m1
+-- fromList [(1, fromList [1,2]),(2, fromList [1,2])]
+--
+addEquivalence :: (Ord a) => a -> a -> Map.Map a (Set.Set a) -> Map.Map a (Set.Set a)
+addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
+    where updatedSet = Set.insert x . Set.insert y $ Set.union (getSet x) (getSet y)
+          getSet item = fromMaybe Set.empty $ Map.lookup item m 
+
 
 data InferState = InferState { nameSource :: NameSource
-                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody))
-                             , monotypes :: Set.Set (Type TBody)
-                             , mutableVars :: Set.Set VarId }
+                             -- must be stateful because we sometimes discover that a variable is mutable.
+                             , varSchemes :: Map.Map VarId TScheme
+                             , varInstances :: Map.Map TVarName (Set.Set TVarName) }
                   deriving (Show, Eq)
 
 instance Types InferState where
     freeTypeVars = freeTypeVars . varInstances
-    applySubst s is = is { varInstances = applySubst s $ varInstances is 
-                         , monotypes = applySubst s $ monotypes is }
+    applySubst s = id
                       
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT String Identity) a
@@ -218,48 +217,59 @@ runInferWith :: InferState -> Infer a -> Either String a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either String a
-runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, monotypes = Set.empty, mutableVars = Set.empty }
-
-addInstance :: VarId -> Type TBody -> Infer ()
-addInstance varId' t = trace' ("add instance: " ++ show varId' ++ " := ") <$> modify (\is -> is { varInstances = addToMappedSet varId' t $ varInstances is })
-
-getInstances :: TypeEnv -> VarId -> Infer (Set.Set (Type TBody))
-getInstances env varId'' = do
-  res <- Map.lookup varId'' . varInstances <$> get
-  case res of
-    Nothing -> return Set.empty
-    Just types -> return types
-
-getMonotypes :: Infer (Set.Set (Type TBody))
-getMonotypes = monotypes <$> get
-
-addMonotype :: Type TBody -> Infer ()
-addMonotype t = modify (\is -> is { monotypes = Set.insert t $ monotypes is })
-
-addMutableVar :: VarId -> Infer ()
-addMutableVar n = modify (\is -> is { mutableVars = Set.insert n $ mutableVars is })
-
-isMutable :: VarId -> Infer Bool
-isMutable n = Set.member n . mutableVars <$> get
-            
--- | Applies the given subst to the set of instances saved in the set; for convience, returns the same argument it got.
-substInstances :: Infer TSubst -> Infer TSubst
-substInstances inf = do s <- inf
-                        substInstances' s
-                        return s
-                               
-substInstances' :: TSubst -> Infer ()
-substInstances' s = modify $ applySubst s
+runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty }
                            
 fresh :: Infer TVarName
 fresh = do
-  modify (\is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } })
+  modify $ \is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } }
   lastName . nameSource <$> get
 
 throwError :: String -> Infer a
 throwError = lift . left
 
-               
+failWith :: Maybe a -> Infer a -> Infer a
+failWith action error = case action of
+                          Nothing -> error
+                          Just x -> return x
+
+failWithM :: Infer (Maybe a) -> Infer a -> Infer a
+failWithM action error = do
+  result <- action
+  failWith result error
+
+getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
+getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
+
+getVarScheme :: EVarName -> TypeEnv -> Infer (Maybe TScheme)
+getVarScheme n env = case getVarId n env of
+                       Nothing -> throwError $ "Unbound variable: '" ++ show n ++ "'"
+                       Just varId -> getVarSchemeByVarId varId
+
+setVarScheme :: EVarName -> VarId -> TScheme -> Infer ()
+setVarScheme n varId scheme = do
+  modify $ \is -> is { varSchemes = Map.insert varId scheme $ varSchemes is }
+  return ()
+
+addVarScheme :: EVarName -> TypeEnv -> TScheme -> Infer TypeEnv
+addVarScheme n env scheme = do
+  varId <- fresh
+  setVarScheme n varId scheme
+  return $ Map.insert n varId env
+
+addVarInstance :: TVarName -> TVarName -> Infer ()
+addVarInstance x y = modify $ \is -> is { varInstances = addEquivalence x y (varInstances is) }
+
+getEquivalences :: TVarName -> Infer (Set.Set TVarName)
+getEquivalences n = fromMaybe Set.empty . Map.lookup n . varInstances <$> get
+
+getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
+getFreeTVars env = do
+  let collectFreeTVs s varId = fromMaybe Set.empty . fmap freeTypeVars <$> getVarSchemeByVarId varId
+  foldM collectFreeTVs Set.empty (Map.elems env)
+
+applySubstInfer :: TSubst -> Infer ()
+applySubstInfer s = modify $ \is -> is { varSchemes = applySubst s $ varSchemes is }
+
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
 --
 -- For example:
@@ -275,10 +285,18 @@ instantiate (TScheme tvarNames t) = do
     freshName <- fresh
     return (tvName, freshName)
 
+  forM_ allocNames $ uncurry addVarInstance
+
   let replaceVar (TVar n) = TVar . fromMaybe n $ lookup n allocNames
       replaceVar x = x
 
   return $ fmap replaceVar t
+
+instantiateVar :: EVarName -> TypeEnv -> Infer (Type TBody)
+instantiateVar n env = do
+  varId <- getVarId n env `failWith` throwError ("Unbound variable: '" ++ show n ++ "'")
+  scheme <- getVarSchemeByVarId varId `failWithM` throwError ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
+  instantiate scheme
 
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
@@ -307,8 +325,7 @@ instantiate (TScheme tvarNames t) = do
 -- TODO add tests for monotypes
 generalize :: TypeEnv -> Type TBody -> Infer TScheme
 generalize tenv t = do
-  monotypes' <- getMonotypes
-  let unboundVars = (freeTypeVars t `Set.difference` freeTypeVars tenv) `Set.difference` freeTypeVars monotypes'
+  unboundVars <- (Set.difference $ freeTypeVars t) <$> getFreeTVars tenv 
   return $ TScheme (Set.toList unboundVars) t
 
 ----------------------------------------------------------------------
@@ -317,20 +334,20 @@ unify :: Type TBody -> Type TBody -> Infer TSubst
 unify t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' t1 t2
                
 unify' :: Type TBody -> Type TBody -> Infer TSubst
-unify' (TBody (TVar n)) t = substInstances $ varBind n t
-unify' t (TBody (TVar n)) = substInstances $ varBind n t
+unify' (TBody (TVar n)) t = varBind n t
+unify' t (TBody (TVar n)) = varBind n t
 unify' (TBody x) (TBody y) = if x == y
-                            then return nullSubst
-                            else throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
+                             then return nullSubst
+                             else throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
 unify' t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ pretty t1 ++ " with " ++ pretty t2
-unify' t1@(TCons _ _) t2@(TBody _) = substInstances $ unify' t2 t1
+unify' t1@(TCons _ _) t2@(TBody _) = unify' t2 t1
 unify' (TCons n1 ts1) (TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then unifyl nullSubst ts1 ts2
     else throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
 
 unifyl :: TSubst -> [Type TBody] -> [Type TBody] -> Infer TSubst
-unifyl initialSubst xs ys = substInstances $ foldM unifyl' initialSubst $ zip xs ys
+unifyl initialSubst xs ys = foldM unifyl' initialSubst $ zip xs ys
     where unifyl' s (x, y) = do
             s' <- unify' (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
@@ -345,89 +362,88 @@ varBind n t | t == TBody (TVar n) = return nullSubst
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp] -> Infer (TSubst, TypeEnv, [Type TBody])
-accumInfer env = foldM accumInfer' (nullSubst, env, [])
-    where accumInfer' (subst, env', types) expr = do
-            (subst', t) <- inferType env' expr
-            return (subst' `composeSubst` subst, applySubst subst' env, t:types)
+accumInfer :: TypeEnv -> [Exp a] -> Infer (TSubst, [Type TBody])
+accumInfer env = foldM accumInfer' (nullSubst, [])
+    where accumInfer' (subst, types) expr = do
+            (subst', t) <- inferType env expr
+            applySubstInfer subst'
+            return (subst' `composeSubst` subst, t:types)
 
-inferType :: TypeEnv -> Exp -> Infer (TSubst, Type TBody)
-inferType _ (ELit lit) = return . (nullSubst,) $ TBody $ case lit of
+inferType :: TypeEnv -> Exp a -> Infer (TSubst, Type TBody)
+inferType _ (ELit _ lit) = return . (nullSubst,) $ TBody $ case lit of
   LitNumber _ -> TNumber
   LitBoolean _ -> TBoolean
   LitString _ -> TString
-inferType env (EVar n) = case Map.lookup n env of
-  Nothing -> throwError $ "Unbound variable: " ++ n
-  Just varInfo -> do
-    t <- instantiate . scheme $ varInfo
-    mutable <- isMutable $ varId varInfo
-    s <- if mutable
-         then unifyAllInstances nullSubst env (varId varInfo) t
-         else return nullSubst
-    addInstance (varId varInfo) t
-    return (s, applySubst s t)
-inferType env (EAbs argName e2) =
+inferType env (EVar _ n) = do
+  scheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n)
+  t <- instantiate scheme
+  return (nullSubst, t)
+inferType env (EAbs _ argName e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
-         env' = Map.insert argName (singletonVarInfo tvarName $ TScheme [] tvar) env
+     env' <- addVarScheme argName env $ TScheme [] tvar
      (s1, t1) <- inferType env' e2
      return (s1, TCons TFunc [applySubst s1 tvar, t1])
-inferType env (EApp e1 e2) =
+inferType env (EApp _ e1 e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
      (s1, t1) <- inferType env e1
      (s2, t2) <- inferType (applySubst s1 env) e2
      s3 <- unify (applySubst s2 t1) (TCons TFunc [t2, tvar])
      return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
-inferType env e@(ELet n e1 e2) =
+inferType env e@(ELet _ n e1 e2) =
   do (s1, t1) <- inferType env e1
-     varId' <- fresh
      t' <- generalize (applySubst s1 env) t1
-     let env' = Map.insert n (singletonVarInfo varId' t') env
+     env' <- addVarScheme n env t'
      (s2, t2) <- inferType env' e2
      return (s2 `composeSubst` s1, applySubst s2 t2)
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
-inferType env e@(EAssign n expr1 expr2) =
+inferType env e@(EAssign _ n expr1 expr2) =
   do (s1, rvalueT) <- inferType env expr1
      -- TODO use something like hoistEither (but for Maybe)
-     case Map.lookup n env of
-       Nothing -> throwError $ "Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1
-       Just varInfo ->
-           do let monoVarInfo = ungeneralizeVar varInfo
-              monoType <- instantiate $ scheme monoVarInfo
-              addInstance (varId varInfo) monoType
-              addMonotype rvalueT
-              addMutableVar $ varId varInfo
-              let env' = applySubst s1 (Map.insert n monoVarInfo env)
-              s4 <- unifyAllInstances s1 env' (varId varInfo) rvalueT
-              let env'' = applySubst s4 env' 
-              (s5, tRest) <- inferType env'' expr2
-              return $ (s5 `composeSubst` s4, tRest)
+     lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
+     varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
+     let ungeneralizedScheme = ungeneralize lvalueScheme 
+     setVarScheme n varId ungeneralizedScheme
+     s2 <- unify rvalueT (applySubst s1 ungeneralizedScheme)
+     let s3 = s2 `composeSubst` s1
+     s4 <- unifyAllInstances s3 $ getQuantificands lvalueScheme
+     let env' = applySubst s4 env 
+     (s5, tRest) <- inferType env' expr2
+     return $ (s5 `composeSubst` s4, tRest)
                       
-inferType env (EArray exprs) =
+inferType env (EArray _ exprs) =
   do tvName <- fresh
      let tv = TBody $ TVar tvName
      (subst, _, types) <- accumInfer env exprs
      subst' <- unifyl subst (tv:types) types
      return (subst', TCons TArray [applySubst subst' $ TBody $ TVar tvName])
-inferType env (ETuple exprs) =
+inferType env (ETuple _ exprs) =
   do (subst, _, types) <- accumInfer env exprs
      return (subst, TCons TTuple $ reverse types)
 
 unifyAllInstances s env varId' t = do
-  existingInstances <- getInstances env varId'
+  existingInstances <- getEquivalences env varId'
+  -- TODO handle if any of the vars being unified are quantified in some other variable's scheme
   foldM unifyInstances' s $ Set.toList existingInstances
       where unifyInstances' s1 i =
                 do s2 <- unify (applySubst s1 i) (applySubst s1 t)
                    return $ s2 `composeSubst` s1
 
-typeInference :: TypeEnv -> Exp -> Infer (Type TBody)
+typeInference :: TypeEnv -> Exp a -> Infer (Type TBody)
 typeInference env e = do
   (s, t) <- inferType env e 
   return $ applySubst s t
 
 ----------------------------------------------------------------------
+
+
+
+
+
+----------------------------------------------------------------------
+
 tab :: Int -> String
 tab t = take (t*4) $ repeat ' '
 
@@ -445,15 +461,15 @@ instance Pretty LitVal where
 instance Pretty EVarName where
   prettyTab _ x = x
 
-instance Pretty Exp where
-  prettyTab t (EVar n) = prettyTab t n
-  prettyTab t (EApp e1 e2) = prettyTab t e1 ++ " " ++ prettyTab t e2
-  prettyTab t (EAbs n e) = "(\\" ++ prettyTab t n ++ " -> " ++ prettyTab t e ++ ")"
-  prettyTab t (ELet n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
-  prettyTab t (ELit l) = prettyTab t l
-  prettyTab t (EAssign n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
-  prettyTab t (EArray es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
-  prettyTab t (ETuple es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
+instance Pretty (Exp a) where
+  prettyTab t (EVar _ n) = prettyTab t n
+  prettyTab t (EApp _ e1 e2) = prettyTab t e1 ++ " " ++ prettyTab t e2
+  prettyTab t (EAbs _ n e) = "(\\" ++ prettyTab t n ++ " -> " ++ prettyTab t e ++ ")"
+  prettyTab t (ELet _ n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
+  prettyTab t (ELit _ l) = prettyTab t l
+  prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
+  prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
+  prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
                        
 instance Pretty TVarName where
   prettyTab _ = show
@@ -584,7 +600,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 --
 -- >>> test $ ELet "x" (EAbs "a" (EVar "a")) (ELet "getX" (EAbs "v" (EVar "x")) (ELet "setX" (EAbs "v" (ELet "_" (EAssign "x" (EVar "v") (EVar "x")) (ELit (LitBoolean True)))) (ELet "_" (EApp (EVar "setX") (EAbs "a" (ELit (LitString "a")))) (EVar "getX"))))
 -- "(12 -> (String -> String))"
-test :: Exp -> String
+test :: Exp a -> String
 test e = pretty . runInfer $ typeInference Map.empty e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
