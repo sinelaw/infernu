@@ -405,8 +405,9 @@ inferType env e@(EAssign _ n expr1 expr2) =
      lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
      varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
      let ungeneralizedScheme = ungeneralize lvalueScheme 
+     lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
-     s2 <- unify rvalueT (applySubst s1 ungeneralizedScheme)
+     s2 <- unify rvalueT (applySubst s1 lvalueT)
      let s3 = s2 `composeSubst` s1
      s4 <- unifyAllInstances s3 $ getQuantificands lvalueScheme
      let env' = applySubst s4 env 
