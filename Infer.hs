@@ -1,15 +1,15 @@
-{-# LANGUAGE DeriveFoldable    #-}
+--{-# LANGUAGE DeriveFoldable    #-}
 {-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE DeriveTraversable #-}
+--{-# LANGUAGE DeriveGeneric     #-}
+--{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
+--{-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
 {-# LANGUAGE TupleSections     #-}
 
 module Infer where
 
 
-import           Control.Monad       (forM, forM_, foldM, join)
+import           Control.Monad       (forM, forM_, foldM)
 --import           Control.Monad.State (State, evalState, get, modify)
 import           Data.Functor.Identity(Identity(..), runIdentity)
 import           Control.Monad.Trans(lift)
@@ -18,7 +18,7 @@ import           Control.Monad.Trans.Either (EitherT(..), runEitherT, left)
 import           Data.Functor        ((<$>))
 import           Data.List           (intercalate)
 import qualified Data.Map.Lazy       as Map
-import           Data.Maybe          (fromMaybe, isNothing, catMaybes)
+import           Data.Maybe          (fromMaybe, mapMaybe)
 import qualified Data.Set            as Set
 import           Data.Foldable       (Foldable(..))
 
@@ -57,8 +57,8 @@ data Exp a = EVar a EVarName
            | ELet a EVarName (Exp a) (Exp a)
            | ELit a LitVal
            | EAssign a EVarName (Exp a) (Exp a)
-           | EArray a [(Exp a)]
-           | ETuple a [(Exp a)]
+           | EArray a [Exp a]
+           | ETuple a [Exp a]
              deriving (Show, Eq, Ord, Functor)
 
 ----------------------------------------------------------------------
@@ -131,7 +131,7 @@ instance Types TScheme where
   applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 ungeneralize :: TScheme -> TScheme
-ungeneralize (TScheme _ tbody) = (TScheme [] tbody)
+ungeneralize (TScheme _ tbody) = TScheme [] tbody
 
 getQuantificands :: TScheme -> [TVarName]
 getQuantificands (TScheme tvars _) = tvars
@@ -182,11 +182,9 @@ data NameSource = NameSource { lastName :: TVarName }
 -- fromList [(1, fromList [2])]
 -- >>> addToMappedSet 1 3 m1
 -- fromList [(1, fromList [2,3])]
-addToMappedSet :: (Ord a, Ord b) => a -> b -> (Map.Map a (Set.Set b)) -> (Map.Map a (Set.Set b))
+addToMappedSet :: (Ord a, Ord b) => a -> b -> Map.Map a (Set.Set b) -> Map.Map a (Set.Set b)
 addToMappedSet k v m = Map.insert k (Set.insert v vs) m
-    where vs = case Map.lookup k m of
-                 Nothing -> Set.empty
-                 Just vs' -> vs' 
+    where vs = fromMaybe Set.empty $ Map.lookup k m
 
 -- | Adds a pair of equivalent items to an equivalence map.
 --
@@ -228,14 +226,14 @@ throwError :: String -> Infer a
 throwError = lift . left
 
 failWith :: Maybe a -> Infer a -> Infer a
-failWith action error = case action of
-                          Nothing -> error
+failWith action err = case action of
+                          Nothing -> err
                           Just x -> return x
 
 failWithM :: Infer (Maybe a) -> Infer a -> Infer a
-failWithM action error = do
+failWithM action err = do
   result <- action
-  failWith result error
+  failWith result err
 
 getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
@@ -264,7 +262,8 @@ getEquivalences n = fromMaybe Set.empty . Map.lookup n . varInstances <$> get
 
 getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
 getFreeTVars env = do
-  let collectFreeTVs s varId = fromMaybe Set.empty . fmap freeTypeVars <$> getVarSchemeByVarId varId
+  let collectFreeTVs s varId = Set.union s <$> curFreeTVs 
+          where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId 
   foldM collectFreeTVs Set.empty (Map.elems env)
 
 applySubstInfer :: TSubst -> Infer ()
@@ -325,7 +324,7 @@ instantiateVar n env = do
 -- TODO add tests for monotypes
 generalize :: TypeEnv -> Type TBody -> Infer TScheme
 generalize tenv t = do
-  unboundVars <- (Set.difference $ freeTypeVars t) <$> getFreeTVars tenv 
+  unboundVars <- Set.difference (freeTypeVars t) <$> getFreeTVars tenv 
   return $ TScheme (Set.toList unboundVars) t
 
 ----------------------------------------------------------------------
@@ -363,8 +362,9 @@ varBind n t | t == TBody (TVar n) = return nullSubst
 -- | Drops the last element of a list. Does not entail an O(n) price.
 -- >>> dropLast [1,2,3]
 -- [1,2]
+dropLast :: [a] -> [a]
 dropLast [] = []
-dropLast [x] = []
+dropLast [_] = []
 dropLast (x:xs) = x : dropLast xs
 
 unifyAll :: TSubst -> [Type TBody] -> Infer TSubst
@@ -404,7 +404,7 @@ inferType env (EApp _ e1 e2) =
      (s2, t2) <- inferType env e2
      s3 <- unify (applySubst s2 t1) (TCons TFunc [t2, tvar])
      return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
-inferType env e@(ELet _ n e1 e2) =
+inferType env (ELet _ n e1 e2) =
   do (s1, t1) <- inferType env e1
      applySubstInfer s1
      t' <- generalize env t1
@@ -413,7 +413,7 @@ inferType env e@(ELet _ n e1 e2) =
      return (s2 `composeSubst` s1, applySubst s2 t2)
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
-inferType env e@(EAssign _ n expr1 expr2) =
+inferType env (EAssign _ n expr1 expr2) =
   do (s1, rvalueT) <- inferType env expr1
      -- TODO use something like hoistEither (but for Maybe)
      lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
@@ -426,7 +426,7 @@ inferType env e@(EAssign _ n expr1 expr2) =
      s4 <- unifyAllInstances s3 $ getQuantificands lvalueScheme
      applySubstInfer s4
      (s5, tRest) <- inferType env expr2
-     return $ (s5 `composeSubst` s4, tRest)
+     return (s5 `composeSubst` s4, tRest)
                       
 inferType env (EArray _ exprs) =
   do tvName <- fresh
@@ -441,7 +441,7 @@ inferType env (ETuple _ exprs) =
 unifyAllInstances :: TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances s tvs = do
   m <- varInstances <$> get
-  let equivalenceSets = catMaybes $ map (flip Map.lookup $ m) tvs
+  let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
 
   -- TODO suboptimal - some of the sets may be identical
   let unifyAll' s' equivs = unifyAll s' . map (TBody . TVar) $ Set.toList equivs
@@ -456,7 +456,7 @@ typeInference env e = do
 
 
 tab :: Int -> String
-tab t = take (t*4) $ repeat ' '
+tab t = replicate (t*4) ' '
 
 class Pretty a where
   prettyTab :: Int -> a -> String
