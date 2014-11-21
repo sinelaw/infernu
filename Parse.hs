@@ -6,7 +6,7 @@ import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import Language.ECMAScript3.Syntax(SourcePos(..))
-
+import qualified Data.Map.Lazy as Map
 import Infer
 
 empty z = (EVar z "_")
@@ -43,7 +43,7 @@ fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ ma
 fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
 
-parseFile :: String -> IO ()
+parseFile :: String -> IO (Either String (Type TBody))
 parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
   --putStrLn . show $ js
@@ -54,6 +54,7 @@ parseFile arg = do
   print expr
   putStrLn . pretty $ expr
   putStrLn . pretty $ test expr
+  return . runInfer $ typeInference Map.empty expr
                            
 
 -- ex :: Body (Expr ()) -> Expr ()
