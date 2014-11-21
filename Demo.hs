@@ -12,12 +12,12 @@ isRight _ = False
 main :: IO ()
 main = do
   args <- getArgs
-  let (shouldFail:fileName:[]) = args
+  let (shouldPass:fileName:[]) = args
   res <- parseFile fileName
   putStrLn $ if isRight res 
-             then if shouldFail == "y" 
-                  then "FAIL"
-                  else "OK"
-             else if shouldFail == "y"
+             then if shouldPass == "y" 
                   then "OK"
                   else "FAIL"
+             else if shouldPass == "y"
+                  then "FAIL"
+                  else "OK"
