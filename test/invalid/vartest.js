@@ -1,5 +1,3 @@
-function () {
-var x;
-x = 0;
+var x = false;
 x = 'a';
-}
+
