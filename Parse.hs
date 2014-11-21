@@ -47,9 +47,11 @@ parseFile :: String -> IO ()
 parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
   --putStrLn . show $ js
-  let expr = (foldStmts $ ES3.unJavaScript js) (empty SourcePos)
+  let src (ES3.Script a _) = a
+
+  let expr = (foldStmts $ ES3.unJavaScript js) (empty $ src js)
   --putStrLn "--"
-  putStrLn . show $ expr
+  print expr
   putStrLn . pretty $ expr
   putStrLn . pretty $ test expr
                            
