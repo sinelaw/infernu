@@ -18,7 +18,7 @@ import           Control.Monad.Trans.Either (EitherT(..), runEitherT, left)
 import           Data.Functor        ((<$>))
 import           Data.List           (intercalate)
 import qualified Data.Map.Lazy       as Map
-import           Data.Maybe          (fromMaybe, isNothing)
+import           Data.Maybe          (fromMaybe, isNothing, catMaybes)
 import qualified Data.Set            as Set
 import           Data.Foldable       (Foldable(..))
 
@@ -207,8 +207,8 @@ data InferState = InferState { nameSource :: NameSource
                   deriving (Show, Eq)
 
 instance Types InferState where
-    freeTypeVars = freeTypeVars . varInstances
-    applySubst s = id
+    freeTypeVars = freeTypeVars . varSchemes
+    applySubst s is = is { varSchemes = applySubst s (varSchemes is) }
                       
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT String Identity) a
@@ -343,20 +343,32 @@ unify' t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ pretty 
 unify' t1@(TCons _ _) t2@(TBody _) = unify' t2 t1
 unify' (TCons n1 ts1) (TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
-    then unifyl nullSubst ts1 ts2
+    then unifyl nullSubst $ zip ts1 ts2
     else throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
 
-unifyl :: TSubst -> [Type TBody] -> [Type TBody] -> Infer TSubst
-unifyl initialSubst xs ys = foldM unifyl' initialSubst $ zip xs ys
+-- | Unifies pairs of types, accumulating the substs
+unifyl :: TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
+unifyl initialSubst ts = foldM unifyl' initialSubst ts
     where unifyl' s (x, y) = do
             s' <- unify' (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
+
 
 varBind :: TVarName -> Type TBody -> Infer TSubst
 varBind n t | t == TBody (TVar n) = return nullSubst
             | n `Set.member` freeTypeVars t = throwError $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
             | otherwise = return $ singletonSubst n t
 
+
+-- | Drops the last element of a list. Does not entail an O(n) price.
+-- >>> dropLast [1,2,3]
+-- [1,2]
+dropLast [] = []
+dropLast [x] = []
+dropLast (x:xs) = x : dropLast xs
+
+unifyAll :: TSubst -> [Type TBody] -> Infer TSubst
+unifyAll s ts = unifyl s $ zip (dropLast ts) (drop 1 ts)
 
                           
 ----------------------------------------------------------------------
@@ -388,12 +400,14 @@ inferType env (EApp _ e1 e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
      (s1, t1) <- inferType env e1
-     (s2, t2) <- inferType (applySubst s1 env) e2
+     applySubstInfer s1
+     (s2, t2) <- inferType env e2
      s3 <- unify (applySubst s2 t1) (TCons TFunc [t2, tvar])
      return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
 inferType env e@(ELet _ n e1 e2) =
   do (s1, t1) <- inferType env e1
-     t' <- generalize (applySubst s1 env) t1
+     applySubstInfer s1
+     t' <- generalize env t1
      env' <- addVarScheme n env t'
      (s2, t2) <- inferType env' e2
      return (s2 `composeSubst` s1, applySubst s2 t2)
@@ -410,27 +424,28 @@ inferType env e@(EAssign _ n expr1 expr2) =
      s2 <- unify rvalueT (applySubst s1 lvalueT)
      let s3 = s2 `composeSubst` s1
      s4 <- unifyAllInstances s3 $ getQuantificands lvalueScheme
-     let env' = applySubst s4 env 
-     (s5, tRest) <- inferType env' expr2
+     applySubstInfer s4
+     (s5, tRest) <- inferType env expr2
      return $ (s5 `composeSubst` s4, tRest)
                       
 inferType env (EArray _ exprs) =
   do tvName <- fresh
      let tv = TBody $ TVar tvName
-     (subst, _, types) <- accumInfer env exprs
-     subst' <- unifyl subst (tv:types) types
+     (subst, types) <- accumInfer env exprs
+     subst' <- unifyl subst $ zip (tv:types) types
      return (subst', TCons TArray [applySubst subst' $ TBody $ TVar tvName])
 inferType env (ETuple _ exprs) =
-  do (subst, _, types) <- accumInfer env exprs
+  do (subst, types) <- accumInfer env exprs
      return (subst, TCons TTuple $ reverse types)
 
-unifyAllInstances s env varId' t = do
-  existingInstances <- getEquivalences env varId'
-  -- TODO handle if any of the vars being unified are quantified in some other variable's scheme
-  foldM unifyInstances' s $ Set.toList existingInstances
-      where unifyInstances' s1 i =
-                do s2 <- unify (applySubst s1 i) (applySubst s1 t)
-                   return $ s2 `composeSubst` s1
+unifyAllInstances :: TSubst -> [TVarName] -> Infer TSubst
+unifyAllInstances s tvs = do
+  m <- varInstances <$> get
+  let equivalenceSets = catMaybes $ map (flip Map.lookup $ m) tvs
+
+  -- TODO suboptimal - some of the sets may be identical
+  let unifyAll' s' equivs = unifyAll s' . map (TBody . TVar) $ Set.toList equivs
+  foldM unifyAll' s equivalenceSets
 
 typeInference :: TypeEnv -> Exp a -> Infer (Type TBody)
 typeInference env e = do
@@ -439,11 +454,6 @@ typeInference env e = do
 
 ----------------------------------------------------------------------
 
-
-
-
-
-----------------------------------------------------------------------
 
 tab :: Int -> String
 tab t = take (t*4) $ repeat ' '
