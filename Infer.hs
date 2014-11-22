@@ -205,7 +205,8 @@ addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
 data InferState = InferState { nameSource :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes :: Map.Map VarId TScheme
-                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody)) }
+                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody))
+                             , mutableVars :: Set.Set VarId }
                   deriving (Show, Eq)
 
 instance Types InferState where
@@ -219,7 +220,7 @@ runInferWith :: InferState -> Infer a -> Either String a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either String a
-runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty }
+runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty, mutableVars = Set.empty }
                            
 fresh :: Infer TVarName
 fresh = do
@@ -238,6 +239,9 @@ failWithM :: Infer (Maybe a) -> Infer a -> Infer a
 failWithM action err = do
   result <- action
   failWith result err
+
+addMutableVar :: VarId -> Infer ()
+addMutableVar varId = modify $ \is -> is { mutableVars = Set.insert varId $ mutableVars is }
 
 getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
@@ -266,10 +270,10 @@ getEquivalences n = fromMaybe Set.empty . Map.lookup n . varInstances <$> get
 
 getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
 getFreeTVars env = do
-  varIds <- Map.keys . varSchemes <$> get
+  mutableVarIds <- mutableVars <$> get
   let collectFreeTVs s varId = Set.union s <$> curFreeTVs 
           where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId 
-  foldM collectFreeTVs Set.empty varIds
+  foldM collectFreeTVs Set.empty (Map.elems env ++ Set.toList mutableVarIds)
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
@@ -453,10 +457,11 @@ inferType' env (ELet _ n e1 e2) =
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign _ n expr1 expr2) =
-  do (s1, rvalueT) <- inferType env expr1
+  do varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
+     addMutableVar varId
+     (s1, rvalueT) <- inferType env expr1
      -- TODO use something like hoistEither (but for Maybe)
      lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
-     varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
      let ungeneralizedScheme = ungeneralize lvalueScheme 
      lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
