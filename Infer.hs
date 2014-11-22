@@ -249,7 +249,7 @@ getVarScheme n env = case getVarId n env of
 
 setVarScheme :: EVarName -> VarId -> TScheme -> Infer ()
 setVarScheme n varId scheme = do
-  modify $ \is -> is { varSchemes = Map.insert varId scheme $ varSchemes is }
+  modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ show n ++ ": " ++ pretty scheme) . Map.insert varId scheme $ varSchemes is }
   return ()
 
 addVarScheme :: EVarName -> TypeEnv -> TScheme -> Infer TypeEnv
@@ -266,9 +266,10 @@ getEquivalences n = fromMaybe Set.empty . Map.lookup n . varInstances <$> get
 
 getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
 getFreeTVars env = do
+  varIds <- Map.keys . varSchemes <$> get
   let collectFreeTVs s varId = Set.union s <$> curFreeTVs 
           where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId 
-  foldM collectFreeTVs Set.empty (Map.elems env)
+  foldM collectFreeTVs Set.empty varIds
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
