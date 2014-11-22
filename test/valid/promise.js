@@ -1,6 +1,3 @@
-
-
-
 function once(f) {
     var ran = true;
     var result;

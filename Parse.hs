@@ -13,16 +13,17 @@ empty z = (EVar z "_")
         
 foldStmts :: [ES3.Statement a] -> Exp a -> Exp a
 foldStmts [x] n = fromStatement x n
-foldStmts (x:xs) n = (fromStatement x (foldStmts xs n))
+foldStmts (x:xs) n = fromStatement x (foldStmts xs n)
                   
 fromStatement :: ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt z stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt z) = id 
 fromStatement (ES3.ExprStmt z e) = ELet z "_" (fromExpression e)
-fromStatement (ES3.IfStmt z pred' thenS elseS) = \n -> ELet z "if" (fromExpression pred') (foldStmts [thenS, elseS] n)
-fromStatement (ES3.VarDeclStmt z decls) = \n -> chain decls n
-    where chain [(ES3.VarDecl z (ES3.Id _ name) (Just v))] n = ELet z name (fromExpression v) n
-          chain ((ES3.VarDecl z (ES3.Id _ name) (Just v)):xs) n = ELet z name (fromExpression v) (chain xs n)
+fromStatement (ES3.IfStmt z pred' thenS elseS) = ELet z "if" (fromExpression pred') . foldStmts [thenS, elseS]
+fromStatement (ES3.VarDeclStmt z decls) = chain decls
+    where chain [] n = ELet z "_" (empty z) n
+          chain [ES3.VarDecl z' (ES3.Id _ name) (Just v)] n = ELet z' name (fromExpression v) n
+          chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) n = ELet z' name (fromExpression v) (chain xs n)
 fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) (EAbs z (ES3.unId . head $ args) $ foldStmts stmts $ empty z)
 -- TODO: return statements must be added to the core language to be handled correctly.                                                     
 fromStatement (ES3.ReturnStmt z x) = \n -> maybe (EVar z "_") fromExpression x
@@ -31,15 +32,19 @@ fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPri
 fromExpression :: ES3.Expression a -> Exp a
 fromExpression (ES3.StringLit z s) = ELit z (LitString s)
 fromExpression (ES3.BoolLit z s) = ELit z (LitBoolean s)
+fromExpression (ES3.IntLit z s) = ELit z (LitNumber $ fromIntegral s)
+fromExpression (ES3.NumLit z s) = ELit z (LitNumber s)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs
     where chainApp [x] = EApp z (fromExpression expr) (fromExpression x)
           chainApp (x:xs) = EApp z (chainApp xs) (fromExpression x)
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
 fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ map ES3.unId argNames
-    where chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
+    where chainAbs [] = EAbs z "_" (foldStmts stmts $ empty z)
+          chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
           chainAbs (x:xs) = EAbs z x (chainAbs xs)
 --           where funcBody = Block $ map fromStatement stmts 
+fromExpression (ES3.ArrayLit z exprs) = EArray z (map fromExpression exprs)
 fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
 
