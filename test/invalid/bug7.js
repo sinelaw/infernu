@@ -3,8 +3,9 @@ function makeX(_) {
     var setX = function (v2) { x = [v2]; return true; };
     return setX;
 }
-var mx1 = makeX(false);
+var mx1 = makeX(0);
+mx1(0);
 mx1(false);
-mx1(2);
-mx1;
-makeX;
+var mx2 = makeX(false);
+mx2(false);
+//makeX;
