@@ -32,9 +32,9 @@ import Prelude hiding (foldr)
 --import Debug.Trace(trace)
 trace :: a -> b -> b
 trace _ y = y
+
 trace' :: Show a => String -> a -> a
 trace' prefix x = trace (prefix ++ " " ++ show x) x
---trace' _ = id
            
 ----------------------------------------------------------------------
 
@@ -194,18 +194,18 @@ addToMappedSet k v m = Map.insert k (Set.insert v vs) m
 --
 -- >>> let m1 = addEquivalence 1 2 Map.empty
 -- >>> m1
--- fromList [(1,fromList [1,2]),(2,fromList [1,2])]
+-- fromList [(1,fromList [TBody (TVar 1),TBody (TVar 2)]),(2,fromList [TBody (TVar 1),TBody (TVar 2)])]
 --
-addEquivalence :: (Ord a) => a -> a -> Map.Map a (Set.Set a) -> Map.Map a (Set.Set a)
+addEquivalence :: TVarName -> TVarName -> Map.Map TVarName (Set.Set (Type TBody)) -> Map.Map TVarName (Set.Set (Type TBody))
 addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
-    where updatedSet = Set.insert x . Set.insert y $ Set.union (getSet x) (getSet y)
+    where updatedSet = Set.insert (TBody $ TVar x) . Set.insert (TBody $ TVar y) $ Set.union (getSet x) (getSet y)
           getSet item = fromMaybe Set.empty $ Map.lookup item m 
 
 
 data InferState = InferState { nameSource :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes :: Map.Map VarId TScheme
-                             , varInstances :: Map.Map TVarName (Set.Set TVarName) }
+                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody)) }
                   deriving (Show, Eq)
 
 instance Types InferState where
@@ -261,7 +261,7 @@ addVarScheme n env scheme = do
 addVarInstance :: TVarName -> TVarName -> Infer ()
 addVarInstance x y = modify $ \is -> is { varInstances = trace' "updated equivs" $ addEquivalence x y (varInstances is) }
 
-getEquivalences :: TVarName -> Infer (Set.Set TVarName)
+getEquivalences :: TVarName -> Infer (Set.Set (Type TBody))
 getEquivalences n = fromMaybe Set.empty . Map.lookup n . varInstances <$> get
 
 getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
@@ -280,10 +280,13 @@ getFreeTVars env = do
 --     applySubstInfer $ Map.singleton 0 (TBody TString)
 --     varSchemes <$> get
 -- :}
--- Right (fromList [(1,TScheme [0] (TCons TFunc [TString,TBody (TVar 1)]))])
+-- Right (fromList [(1,TScheme [0] (TCons TFunc [TBody TString,TBody (TVar 1)]))])
 --
 applySubstInfer :: TSubst -> Infer ()
-applySubstInfer s = modify $ \is -> is { varSchemes = trace' "Updated env map:" . applySubst s $ varSchemes is }
+applySubstInfer s = modify $ \is -> is { 
+                      varSchemes = trace' ("Updated env map using subst: " ++ show s ++ " --> ") . applySubst s $ varSchemes is
+                    , varInstances = applySubst s $ varInstances is
+                    }
 
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
 --
@@ -327,6 +330,9 @@ instantiateVar n env = do
 --   type variables that are free in the given type, but are not free in the type environment.
 --
 -- Example:
+--
+-- >>> runInfer $ generalize Map.empty $ TCons TFunc [TBody (TVar 0),TBody (TVar 1)]
+-- Right (TScheme [0,1] (TCons TFunc [TBody (TVar 0),TBody (TVar 1)]))
 --
 -- >>> let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
 -- >>> let tenv = Map.insert "x" t Map.empty
@@ -476,7 +482,7 @@ unifyAllInstances s tvs = do
   let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
 
   -- TODO suboptimal - some of the sets may be identical
-  let unifyAll' s' equivs = unifyAll s' . map (TBody . TVar) . trace' "equivalence:" $ Set.toList equivs
+  let unifyAll' s' equivs = unifyAll s' . trace' "equivalence:" $ Set.toList equivs
   trace' "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
 typeInference :: TypeEnv -> Exp a -> Infer (Type TBody)
@@ -586,63 +592,63 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 
 -- | 'test' is a utility function for running the following tests:
 --
--- >>> test $ ETuple [ELit (LitBoolean True), ELit (LitNumber 2)]
+-- >>> test $ ETuple () [ELit () (LitBoolean True), ELit () (LitNumber 2)]
 -- "(TBoolean, TNumber)"
 --
--- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (EAbs "y" (EVar "y")) (EVar "id"))
--- "(3 -> 3)"
+-- >>> test $ ELet () "id" (EAbs () "x" (EVar () "x")) (EAssign () "id" (EAbs () "y" (EVar () "y")) (EVar () "id"))
+-- "(1 -> 1)"
 --
--- >>> test $ ELet "id" (EAbs "x" (EVar "x")) (EAssign "id" (ELit (LitBoolean True)) (EVar "id"))
+-- >>> test $ ELet () "id" (EAbs () "x" (EVar () "x")) (EAssign () "id" (ELit () (LitBoolean True)) (EVar () "id"))
 -- "Error: Could not unify: TBoolean with (1 -> 1)"
 --
--- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitBoolean False)) (EVar "x"))
+-- >>> test $ ELet () "x" (ELit () (LitBoolean True)) (EAssign () "x" (ELit () (LitBoolean False)) (EVar () "x"))
 -- "TBoolean"
 --
--- >>> test $ ELet "x" (ELit (LitBoolean True)) (EAssign "x" (ELit (LitNumber 3)) (EVar "x"))
--- "Error: Could not unify: TBoolean with TNumber"
---
--- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True]) (EVar "x")
--- "[TBoolean]"
---
--- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitBoolean False]) (EVar "x")
--- "[TBoolean]"
---
--- >>> test $ ELet "x" (EArray []) (EAssign "x" (EArray []) (EVar "x"))
--- "[3]"
---
--- >>> test $ ELet "x" (EArray [ELit $ LitBoolean True, ELit $ LitNumber 2]) (EVar "x")
+-- >>> test $ ELet () "x" (ELit () (LitBoolean True)) (EAssign () "x" (ELit () (LitNumber 3)) (EVar () "x"))
 -- "Error: Could not unify: TNumber with TBoolean"
 --
--- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EVar "id") (EVar "id"))
--- "(6 -> 6)"
+-- >>> test $ ELet () "x" (EArray () [ELit () (LitBoolean True)]) (EVar () "x")
+-- "[TBoolean]"
 --
--- >>> test $ ELet "id" (EAbs "x" (ELet "y" (EVar "x") (EVar "y"))) (EApp (EApp (EVar "id") (EVar "id")) (ELit (LitNumber 2)))
+-- >>> test $ ELet () "x" (EArray () [ELit () $ LitBoolean True, ELit () $ LitBoolean False]) (EVar () "x")
+-- "[TBoolean]"
+--
+-- >>> test $ ELet () "x" (EArray () []) (EAssign () "x" (EArray () []) (EVar () "x"))
+-- "[1]"
+--
+-- >>> test $ ELet () "x" (EArray () [ELit () $ LitBoolean True, ELit () $ LitNumber 2]) (EVar () "x")
+-- "Error: Could not unify: TNumber with TBoolean"
+--
+-- >>> test $ ELet () "id" (EAbs () "x" (ELet () "y" (EVar () "x") (EVar () "y"))) (EApp () (EVar () "id") (EVar () "id"))
+-- "(7 -> 7)"
+--
+-- >>> test $ ELet () "id" (EAbs () "x" (ELet () "y" (EVar () "x") (EVar () "y"))) (EApp () (EApp () (EVar () "id") (EVar () "id")) (ELit () (LitNumber 2)))
 -- "TNumber"
 --
--- >>> test $ ELet "id" (EAbs "x" (EApp (EVar "x") (EVar "x"))) (EVar "id")
--- "Error: Occurs check failed: 1 in (1 -> 2)"
+-- >>> test $ ELet () "id" (EAbs () "x" (EApp () (EVar () "x") (EVar () "x"))) (EVar () "id")
+-- "Error: Occurs check failed: 1 in (1 -> 3)"
 --
--- >>> test $ EAbs "m" (ELet "y" (EVar "m") (ELet "x" (EApp (EVar "y") (ELit (LitBoolean True))) (EVar "x")))
--- "((TBoolean -> 3) -> 3)"
+-- >>> test $ EAbs () "m" (ELet () "y" (EVar () "m") (ELet () "x" (EApp () (EVar () "y") (ELit () (LitBoolean True))) (EVar () "x")))
+-- "((TBoolean -> 4) -> 4)"
 --
--- >>> test $ EApp (ELit (LitNumber 2)) (ELit (LitNumber 2))
+-- >>> test $ EApp () (ELit () (LitNumber 2)) (ELit () (LitNumber 2))
 -- "Error: Could not unify: TNumber with (TNumber -> 1)"
 
 -- | EAssign
--- >>> test $ ELet "x" (EAbs "y" (ELit (LitNumber 0))) (EAssign "x" (EAbs "y" (EVar "y")) (EVar "x"))
+-- >>> test $ ELet () "x" (EAbs () "y" (ELit () (LitNumber 0))) (EAssign () "x" (EAbs () "y" (EVar () "y")) (EVar () "x"))
 -- "(TNumber -> TNumber)"
 --
--- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (EVar "x"))
+-- >>> test $ ELet () "x" (EAbs () "y" (EVar () "y")) (EAssign () "x" (EAbs () "y" (ELit () (LitNumber 0))) (EVar () "x"))
 -- "(TNumber -> TNumber)"
 --
--- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))])
+-- >>> test $ ELet () "x" (EAbs () "y" (EVar () "y")) (ETuple () [EApp () (EVar () "x") (ELit () (LitNumber 2)), EApp () (EVar () "x") (ELit () (LitBoolean True))])
 -- "(TNumber, TBoolean)"
 --
--- >>> test $ ELet "x" (EAbs "y" (EVar "y")) (EApp (EVar "x") (EVar "x"))
--- "(5 -> 5)"
+-- >>> test $ ELet () "x" (EAbs () "y" (EVar () "y")) (EApp () (EVar () "x") (EVar () "x"))
+-- "(6 -> 6)"
 --
--- >>> test $ ELet "x" (EAbs "a" (EVar "a")) (ELet "getX" (EAbs "v" (EVar "x")) (ELet "setX" (EAbs "v" (ELet "_" (EAssign "x" (EVar "v") (EVar "x")) (ELit (LitBoolean True)))) (ELet "_" (EApp (EVar "setX") (EAbs "a" (ELit (LitString "a")))) (EVar "getX"))))
--- "(12 -> (String -> String))"
+-- >>> test $ ELet () "x" (EAbs () "a" (EVar () "a")) (ELet () "getX" (EAbs () "v" (EVar () "x")) (ELet () "setX" (EAbs () "v" (ELet () "_" (EAssign () "x" (EVar () "v") (EVar () "x")) (ELit () (LitBoolean True)))) (ELet () "_" (EApp () (EVar () "setX") (EAbs () "a" (ELit () (LitString "a")))) (EVar () "getX"))))
+-- "(16 -> (TString -> TString))"
 test :: Exp a -> String
 test e = pretty . runInfer $ typeInference Map.empty e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
