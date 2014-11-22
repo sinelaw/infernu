@@ -1,13 +1,14 @@
-function getput() {
-    var x;
-    return {
-        get: function() { return x; },
-        put: function(y) { var old = x; x = y; return old; }
-    };
+function getput(_) {
+    var x = [];
+    //return [
+    //    function(_) { return x; },
+    return    function(y) { var old = x; x = y; return old; };
+    //];
 };
 
-var gp = getput();
-
+var gp = getput(false);
+gp([1]);
+gp([false]);
 //gp.put(2);
 //var num = gp.get();
 

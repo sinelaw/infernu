@@ -378,7 +378,7 @@ unify' (TCons n1 ts1) (TCons n2 ts2) =
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
-unifyl initialSubst ts = foldM unifyl' initialSubst ts
+unifyl = foldM unifyl'
     where unifyl' s (x, y) = do
             s' <- unify' (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
