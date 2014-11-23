@@ -18,7 +18,14 @@ fromStatement :: ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
 fromStatement (ES3.ExprStmt z e) = ELet z "_" (fromExpression e)
-fromStatement (ES3.IfStmt z pred' thenS elseS) = ELet z "if" (fromExpression pred') . foldStmts [thenS, elseS]
+fromStatement (ES3.IfStmt z pred' thenS elseS) = ELet z "if" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . foldStmts [thenS, elseS]
+fromStatement (ES3.IfSingleStmt z pred' thenS) = ELet z "if" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement thenS
+fromStatement (ES3.WhileStmt z pred' loopS) = ELet z "while" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
+fromStatement (ES3.DoWhileStmt z loopS pred') = ELet z "dowhile" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
+fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
+fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
+fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
+--fromStatement (ES3.ForInStmt z init' obj loopS) = 
 fromStatement (ES3.VarDeclStmt _ decls) = chain decls
     where chain [] k = k
           chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
