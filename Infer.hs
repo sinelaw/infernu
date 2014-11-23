@@ -53,7 +53,11 @@ trace' prefix x = trace (prefix ++ " " ++ show x) x
 
 type EVarName = String
 
-data LitVal = LitNumber Double | LitBoolean Bool | LitString String
+data LitVal = LitNumber Double
+            | LitBoolean Bool
+            | LitString String
+            | LitRegex String Bool Bool
+            -- | LitNull
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar a EVarName
@@ -64,6 +68,7 @@ data Exp a = EVar a EVarName
            | EAssign a EVarName (Exp a) (Exp a)
            | EArray a [Exp a]
            | ETuple a [Exp a]
+           | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
              deriving (Show, Eq, Ord, Functor)
 
 ----------------------------------------------------------------------
@@ -71,7 +76,7 @@ data Exp a = EVar a EVarName
 type TVarName = Int
 
 data TBody = TVar TVarName
-            | TNumber | TBoolean | TString
+            | TNumber | TBoolean | TString | TRegex
             deriving (Show, Eq, Ord)
                        
 data TConsName = TFunc | TArray | TTuple
@@ -420,7 +425,8 @@ isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
 isExpansive (EArray _ exprs)  = any isExpansive exprs
 isExpansive (ETuple _ exprs)  = any isExpansive exprs
-
+isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
+                                       
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
@@ -442,6 +448,7 @@ inferType' _ (ELit _ lit) = return . (nullSubst,) $ TBody $ case lit of
   LitNumber _ -> TNumber
   LitBoolean _ -> TBoolean
   LitString _ -> TString
+  LitRegex _ _ _ -> TRegex
 inferType' env (EVar _ n) = do
   t <- instantiateVar n env
   return (nullSubst, t)
@@ -498,6 +505,19 @@ inferType' env (ETuple _ exprs) =
   do (subst, types) <- accumInfer env exprs
      return (subst, TCons TTuple $ reverse types)
 
+inferType' env (EIfThenElse _ ePred eThen eElse) =
+  do (s1,tp) <- inferType env ePred
+     s2 <- unify (TBody TBoolean) tp
+     let s3 = s2 `composeSubst` s1
+     applySubstInfer s3
+     (s4, tThen) <- inferType env eThen
+     applySubstInfer s4
+     (s5, tElse) <- inferType env eElse
+     s6 <- unify tThen tElse
+     let s' = s6 `composeSubst` s5 `composeSubst` s4 `composeSubst` s3
+     return (s', tThen)      
+     
+     
 unifyAllInstances :: TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances s tvs = do
   m <- varInstances <$> get
@@ -528,7 +548,8 @@ instance Pretty LitVal where
   prettyTab _ (LitNumber x) = show x
   prettyTab _ (LitBoolean x) = show x
   prettyTab _ (LitString x) = show x
-
+  prettyTab _ (LitRegex x g i) = "/" ++ x ++ "/" ++ (if g then "g" else "") ++ (if i then "i" else "") ++ (if g || i then "/" else "")
+                                 
 instance Pretty EVarName where
   prettyTab _ x = x
 
@@ -541,6 +562,7 @@ instance Pretty (Exp a) where
   prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
   prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
+  prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
                        
 instance Pretty TVarName where
   prettyTab _ = show

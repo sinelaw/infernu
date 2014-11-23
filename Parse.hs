@@ -31,10 +31,14 @@ fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPri
                  
 fromExpression :: ES3.Expression a -> Exp a
 fromExpression (ES3.StringLit z s) = ELit z (LitString s)
+fromExpression (ES3.RegexpLit z s g i) = ELit z (LitRegex s g i)
 fromExpression (ES3.BoolLit z s) = ELit z (LitBoolean s)
 fromExpression (ES3.IntLit z s) = ELit z (LitNumber $ fromIntegral s)
 fromExpression (ES3.NumLit z s) = ELit z (LitNumber s)
+--fromExpression (ES3.NullLit a) = ELit z LitNull
+fromExpression (ES3.ArrayLit z exprs) = EArray z (map fromExpression exprs)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
+fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
 fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs
     where chainApp [x] = EApp z (fromExpression expr) (fromExpression x)
           chainApp (x:xs) = EApp z (chainApp xs) (fromExpression x)
@@ -44,7 +48,11 @@ fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ ma
           chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
           chainAbs (x:xs) = EAbs z x (chainAbs xs)
 --           where funcBody = Block $ map fromStatement stmts 
-fromExpression (ES3.ArrayLit z exprs) = EArray z (map fromExpression exprs)
+fromExpression (ES3.ListExpr z exprs) = case exprs of
+                                          [] -> empty z
+                                          [x] -> fromExpression x
+                                          xs -> ELet z "_" (ETuple z . map fromExpression $ tail revXs) (fromExpression $ head revXs)
+                                                where revXs = reverse xs
 fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
 
