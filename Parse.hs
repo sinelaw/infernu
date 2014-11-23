@@ -24,6 +24,8 @@ fromStatement (ES3.WhileStmt z pred' loopS) = ELet z "while" (EArray z [fromExpr
 fromStatement (ES3.DoWhileStmt z loopS pred') = ELet z "dowhile" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
 fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
+fromStatement (ES3.ThrowStmt _ _) = id
+fromStatement s@(ES3.WithStmt _ _ _) = error $ "Not implemented: 'with' in\n" ++ show (ES3PP.prettyPrint s)
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
 --fromStatement (ES3.ForInStmt z init' obj loopS) = 
 fromStatement (ES3.VarDeclStmt _ decls) = chain decls
@@ -33,7 +35,6 @@ fromStatement (ES3.VarDeclStmt _ decls) = chain decls
 fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) (EAbs z (ES3.unId . head $ args) $ foldStmts stmts $ empty z)
 -- TODO: return statements must be added to the core language to be handled correctly.                                                     
 fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z "_") fromExpression x
-fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPrint s)
                  
 fromExpression :: ES3.Expression a -> Exp a
 fromExpression (ES3.StringLit z s) = ELit z (LitString s)
