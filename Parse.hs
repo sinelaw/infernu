@@ -48,11 +48,12 @@ fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ ma
           chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
           chainAbs (x:xs) = EAbs z x (chainAbs xs)
 --           where funcBody = Block $ map fromStatement stmts 
-fromExpression (ES3.ListExpr z exprs) = case exprs of
-                                          [] -> empty z
-                                          [x] -> fromExpression x
-                                          xs -> ELet z "_" (ETuple z . map fromExpression $ tail revXs) (fromExpression $ head revXs)
-                                                where revXs = reverse xs
+fromExpression (ES3.ListExpr z exprs) =
+    case exprs of
+      [] -> empty z
+      [x] -> fromExpression x
+      xs -> ELet z "_" (ETuple z . map fromExpression $ tail revXs) (fromExpression $ head revXs)
+          where revXs = reverse xs
 fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
 
