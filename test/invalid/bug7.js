@@ -8,4 +8,4 @@ mx1(0);
 mx1(false);
 var mx2 = makeX(false);
 mx2(false);
-//makeX;
+mx1;

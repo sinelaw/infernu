@@ -9,6 +9,7 @@ function getput(_) {
 var gp = getput(false);
 gp([1]);
 gp([false]);
+gp;
 //gp.put(2);
 //var num = gp.get();
 

@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 --{-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
 {-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE CPP #-}
 
 module Infer where
 
@@ -28,10 +29,12 @@ import Prelude hiding (foldr)
 --import           Test.QuickCheck.All    
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 -- import           Data.DeriveTH
-
---import Debug.Trace(trace)
+#if TRACE
+import Debug.Trace(trace)
+#else
 trace :: a -> b -> b
 trace _ y = y
+#endif
 
 trace' :: Show a => String -> a -> a
 trace' prefix x = trace (prefix ++ " " ++ show x) x
@@ -70,14 +73,13 @@ type TVarName = Int
 data TBody = TVar TVarName
             | TNumber | TBoolean | TString
             deriving (Show, Eq, Ord)
-
+                       
 data TConsName = TFunc | TArray | TTuple
             deriving (Show, Eq, Ord)
                
 data Type t = TBody t
             | TCons TConsName [Type t]
             deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
-
 
 type TSubst = Map.Map TVarName (Type TBody)
 
@@ -206,7 +208,7 @@ data InferState = InferState { nameSource :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes :: Map.Map VarId TScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type TBody))
-                             , mutableVars :: Set.Set VarId }
+                             , mutableTVars :: Set.Set TVarName }
                   deriving (Show, Eq)
 
 instance Types InferState where
@@ -220,7 +222,7 @@ runInferWith :: InferState -> Infer a -> Either String a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either String a
-runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty, mutableVars = Set.empty }
+runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty, mutableTVars = Set.empty }
                            
 fresh :: Infer TVarName
 fresh = do
@@ -240,8 +242,11 @@ failWithM action err = do
   result <- action
   failWith result err
 
-addMutableVar :: VarId -> Infer ()
-addMutableVar varId = modify $ \is -> is { mutableVars = Set.insert varId $ mutableVars is }
+addMutableTVar :: TVarName -> Infer ()
+addMutableTVar tv = modify $ \is -> is { mutableTVars = Set.insert tv $ mutableTVars is }
+
+addMutableTVars :: TScheme -> Infer ()
+addMutableTVars (TScheme tvs _) = mapM_ addMutableTVar $ trace' "adding mutable TVs:" tvs
 
 getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
@@ -270,10 +275,9 @@ getEquivalences n = fromMaybe Set.empty . Map.lookup n . varInstances <$> get
 
 getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
 getFreeTVars env = do
-  mutableVarIds <- mutableVars <$> get
   let collectFreeTVs s varId = Set.union s <$> curFreeTVs 
           where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId 
-  foldM collectFreeTVs Set.empty (Map.elems env ++ Set.toList mutableVarIds)
+  foldM collectFreeTVs Set.empty (Map.elems env)
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
@@ -406,7 +410,17 @@ dropLast (x:xs) = x : dropLast xs
 unifyAll :: TSubst -> [Type TBody] -> Infer TSubst
 unifyAll s ts = unifyl s $ zip (dropLast ts) (drop 1 ts)
 
-                          
+
+isExpansive :: Exp a -> Bool
+isExpansive (EVar _ _)        = True
+isExpansive (EApp _ _ _)      = True
+isExpansive (EAssign _ _ _ _) = True
+isExpansive (ELet _ _ _ _)    = True
+isExpansive (EAbs _ _ _)      = False
+isExpansive (ELit _ _)        = False
+isExpansive (EArray _ exprs)  = any isExpansive exprs
+isExpansive (ETuple _ exprs)  = any isExpansive exprs
+
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
@@ -450,7 +464,10 @@ inferType' env (EApp _ e1 e2) =
 inferType' env (ELet _ n e1 e2) =
   do (s1, t1) <- inferType env e1
      applySubstInfer s1
-     t' <- trace' ("let generalized '" ++ show n ++ "' --") <$> generalize env t1
+     let generalizeScheme = trace' ("let generalized '" ++ show n ++ "' --") <$> generalize env t1
+     t' <- if isExpansive e1
+           then return $ TScheme [] t1
+           else generalizeScheme
      env' <- addVarScheme n env t'
      (s2, t2) <- inferType env' e2
      return (s2 `composeSubst` s1, applySubst s2 t2)
@@ -458,13 +475,12 @@ inferType' env (ELet _ n e1 e2) =
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign _ n expr1 expr2) =
   do varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
-     addMutableVar varId
-     (s1, rvalueT) <- inferType env expr1
-     -- TODO use something like hoistEither (but for Maybe)
      lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
+     addMutableTVars lvalueScheme
      let ungeneralizedScheme = ungeneralize lvalueScheme 
      lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
+     (s1, rvalueT) <- inferType env expr1
      s2 <- unify rvalueT (applySubst s1 lvalueT)
      let s3 = s2 `composeSubst` s1
      s4 <- unifyAllInstances s3 $ getQuantificands lvalueScheme

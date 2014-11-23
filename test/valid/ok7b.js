@@ -1,6 +1,6 @@
-
-function makeX(setX_) {
-    var setX = function (v2) { setX_(v2); return true; };
+function makeX(_) {
+    var x = [];
+    var setX = function (v2) { x = [v2]; return true; };
     return setX;
 }
 var mx1 = makeX(false);
