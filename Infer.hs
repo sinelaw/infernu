@@ -21,7 +21,7 @@ import           Data.List           (intercalate)
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (fromMaybe, mapMaybe)
 import qualified Data.Set            as Set
-import           Data.Foldable       (Foldable(..))
+--import           Data.Foldable       (Foldable(..))
 
 import Prelude hiding (foldr)
     
@@ -57,6 +57,7 @@ data LitVal = LitNumber Double
             | LitBoolean Bool
             | LitString String
             | LitRegex String Bool Bool
+            | LitUndefined
             -- | LitNull
             deriving (Show, Eq, Ord)
 
@@ -76,7 +77,7 @@ data Exp a = EVar a EVarName
 type TVarName = Int
 
 data TBody = TVar TVarName
-            | TNumber | TBoolean | TString | TRegex
+            | TNumber | TBoolean | TString | TRegex | TUndefined
             deriving (Show, Eq, Ord)
                        
 data TConsName = TFunc | TArray | TTuple
@@ -449,6 +450,7 @@ inferType' _ (ELit _ lit) = return . (nullSubst,) $ TBody $ case lit of
   LitBoolean _ -> TBoolean
   LitString _ -> TString
   LitRegex _ _ _ -> TRegex
+  LitUndefined -> TUndefined
 inferType' env (EVar _ n) = do
   t <- instantiateVar n env
   return (nullSubst, t)
@@ -549,6 +551,7 @@ instance Pretty LitVal where
   prettyTab _ (LitBoolean x) = show x
   prettyTab _ (LitString x) = show x
   prettyTab _ (LitRegex x g i) = "/" ++ x ++ "/" ++ (if g then "g" else "") ++ (if i then "i" else "") ++ (if g || i then "/" else "")
+  prettyTab _ LitUndefined = "undefined"
                                  
 instance Pretty EVarName where
   prettyTab _ x = x

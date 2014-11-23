@@ -1,32 +1,31 @@
 module Parse where
 
-import Control.Arrow((***))
-import Control.Monad(forM_)
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Language.ECMAScript3.Parser as ES3Parser
-import Language.ECMAScript3.Syntax(SourcePos(..))
 import qualified Data.Map.Lazy as Map
 import Infer
 
+empty :: a -> Exp a
 empty z = (EVar z "_")
         
 foldStmts :: [ES3.Statement a] -> Exp a -> Exp a
-foldStmts [x] n = fromStatement x n
-foldStmts (x:xs) n = fromStatement x (foldStmts xs n)
+foldStmts [] k = k
+foldStmts [x] k = fromStatement x k
+foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
                   
 fromStatement :: ES3.Statement a -> Exp a -> Exp a
-fromStatement (ES3.BlockStmt z stmts) = foldStmts stmts
-fromStatement (ES3.EmptyStmt z) = id 
+fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
+fromStatement (ES3.EmptyStmt _) = id
 fromStatement (ES3.ExprStmt z e) = ELet z "_" (fromExpression e)
 fromStatement (ES3.IfStmt z pred' thenS elseS) = ELet z "if" (fromExpression pred') . foldStmts [thenS, elseS]
-fromStatement (ES3.VarDeclStmt z decls) = chain decls
-    where chain [] n = ELet z "_" (empty z) n
-          chain [ES3.VarDecl z' (ES3.Id _ name) (Just v)] n = ELet z' name (fromExpression v) n
-          chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) n = ELet z' name (fromExpression v) (chain xs n)
+fromStatement (ES3.VarDeclStmt _ decls) = chain decls
+    where chain [] k = k
+          chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
+          chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chain xs k)
 fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) (EAbs z (ES3.unId . head $ args) $ foldStmts stmts $ empty z)
 -- TODO: return statements must be added to the core language to be handled correctly.                                                     
-fromStatement (ES3.ReturnStmt z x) = \n -> maybe (EVar z "_") fromExpression x
+fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z "_") fromExpression x
 fromStatement s = error $ "Not implemented statement: " ++ show (ES3PP.prettyPrint s)
                  
 fromExpression :: ES3.Expression a -> Exp a
@@ -40,7 +39,8 @@ fromExpression (ES3.ArrayLit z exprs) = EArray z (map fromExpression exprs)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
 fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs
-    where chainApp [x] = EApp z (fromExpression expr) (fromExpression x)
+    where chainApp [] = EApp z (fromExpression expr) (empty z) -- TODO handle functions that take no parameter
+          chainApp [x] = EApp z (fromExpression expr) (fromExpression x)
           chainApp (x:xs) = EApp z (chainApp xs) (fromExpression x)
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
 fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ map ES3.unId argNames
@@ -61,8 +61,8 @@ parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
   --putStrLn . show $ js
   let src (ES3.Script a _) = a
-
-  let expr = (foldStmts $ ES3.unJavaScript js) (empty $ src js)
+  let emptySrcPos = src js -- hack
+  let expr = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
   --putStrLn "--"
   print expr
   putStrLn . pretty $ expr
