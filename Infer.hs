@@ -213,8 +213,7 @@ addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
 data InferState = InferState { nameSource :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes :: Map.Map VarId TScheme
-                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody))
-                             , mutableTVars :: Set.Set TVarName }
+                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody)) }
                   deriving (Show, Eq)
 
 instance Types InferState where
@@ -228,7 +227,7 @@ runInferWith :: InferState -> Infer a -> Either String a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either String a
-runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty, mutableTVars = Set.empty }
+runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty }
                            
 fresh :: Infer TVarName
 fresh = do
@@ -247,12 +246,6 @@ failWithM :: Infer (Maybe a) -> Infer a -> Infer a
 failWithM action err = do
   result <- action
   failWith result err
-
-addMutableTVar :: TVarName -> Infer ()
-addMutableTVar tv = modify $ \is -> is { mutableTVars = Set.insert tv $ mutableTVars is }
-
-addMutableTVars :: TScheme -> Infer ()
-addMutableTVars (TScheme tvs _) = mapM_ addMutableTVar $ trace' "adding mutable TVs:" tvs
 
 getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
@@ -485,7 +478,6 @@ inferType' env (ELet _ n e1 e2) =
 inferType' env (EAssign _ n expr1 expr2) =
   do varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
      lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
-     addMutableTVars lvalueScheme
      let ungeneralizedScheme = ungeneralize lvalueScheme 
      lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
