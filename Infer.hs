@@ -508,7 +508,7 @@ inferType' env (ETuple _ exprs) =
 inferType' env (ERow _ propExprs) =
   do (s,ts) <- accumInfer env $ map snd propExprs
      applySubstInfer s
-     return (s, TCons (TRow (map fst propExprs)) ts)
+     return (s, TCons (TRow (map fst propExprs)) $ reverse ts)
 inferType' env (EIfThenElse _ ePred eThen eElse) =
   do (s1,tp) <- inferType env ePred
      s2 <- unify (TBody TBoolean) tp
