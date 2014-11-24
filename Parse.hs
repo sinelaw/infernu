@@ -31,9 +31,11 @@ fromStatement (ES3.VarDeclStmt _ decls) = chain decls
     where chain [] k = k
           chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
           chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chain xs k)
-fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) (EAbs z (firstArg args) $ foldStmts stmts $ empty z)
-    where firstArg [] = "_"
-          firstArg (x:xs) = ES3.unId x -- TODO handle multiple arguments
+fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name)
+                                                     $ case args of
+                                                         [] -> EAbs z "_" body
+                                                         xs -> foldl (\expr arg -> EAbs z (ES3.unId arg) expr) body xs
+                                                         where body = (foldStmts stmts $ empty z)
 -- TODO: return statements must be added to the core language to be handled correctly.                                                     
 fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z "_") fromExpression x
                  
