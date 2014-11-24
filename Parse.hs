@@ -5,26 +5,35 @@ import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import Infer
 
+-- | A 'magic' impossible variable name that can never occur in valid JS syntax.
+poo :: EVarName
+poo = " "
+
+-- | A dummy expression that does nothing (but has a type).
 empty :: a -> Exp a
-empty z = (EVar z "_")
+empty z = (EVar z poo)
+
+errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
+errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ (show sourcePos) ++ " in\n" ++ (show $ ES3PP.prettyPrint expr)
         
-foldStmts :: [ES3.Statement a] -> Exp a -> Exp a
+foldStmts :: Show a => [ES3.Statement a] -> Exp a -> Exp a
 foldStmts [] k = k
 foldStmts [x] k = fromStatement x k
 foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
                   
-fromStatement :: ES3.Statement a -> Exp a -> Exp a
+fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
-fromStatement (ES3.ExprStmt z e) = ELet z "_" (fromExpression e)
-fromStatement (ES3.IfStmt z pred' thenS elseS) = ELet z "if" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . foldStmts [thenS, elseS]
-fromStatement (ES3.IfSingleStmt z pred' thenS) = ELet z "if" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement thenS
-fromStatement (ES3.WhileStmt z pred' loopS) = ELet z "while" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
-fromStatement (ES3.DoWhileStmt z loopS pred') = ELet z "dowhile" (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
+fromStatement (ES3.ExprStmt z e) = ELet z poo (fromExpression e)
+-- TODO: The if/while/do conversion is hacky and introduces dummy poo names into the scope.
+fromStatement (ES3.IfStmt z pred' thenS elseS) = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . foldStmts [thenS, elseS]
+fromStatement (ES3.IfSingleStmt z pred' thenS) = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement thenS
+fromStatement (ES3.WhileStmt z pred' loopS) = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
+fromStatement (ES3.DoWhileStmt z loopS pred') = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
 fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ThrowStmt _ _) = id
-fromStatement s@(ES3.WithStmt _ _ _) = error $ "Not implemented: 'with' in\n" ++ show (ES3PP.prettyPrint s)
+fromStatement s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
 --fromStatement (ES3.ForInStmt z init' obj loopS) = 
 fromStatement (ES3.VarDeclStmt _ decls) = chain decls
@@ -33,19 +42,19 @@ fromStatement (ES3.VarDeclStmt _ decls) = chain decls
           chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chain xs k)
 fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name)
                                                      $ case args of
-                                                         [] -> EAbs z "_" body
+                                                         [] -> EAbs z poo body
                                                          xs -> foldl (\expr arg -> EAbs z (ES3.unId arg) expr) body xs
                                                          where body = (foldStmts stmts $ empty z)
 -- TODO: return statements must be added to the core language to be handled correctly.                                                     
-fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z "_") fromExpression x
+fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z poo) fromExpression x
                  
-fromExpression :: ES3.Expression a -> Exp a
+fromExpression :: Show a => ES3.Expression a -> Exp a
 fromExpression (ES3.StringLit z s) = ELit z (LitString s)
 fromExpression (ES3.RegexpLit z s g i) = ELit z (LitRegex s g i)
 fromExpression (ES3.BoolLit z s) = ELit z (LitBoolean s)
 fromExpression (ES3.IntLit z s) = ELit z (LitNumber $ fromIntegral s)
 fromExpression (ES3.NumLit z s) = ELit z (LitNumber s)
---fromExpression (ES3.NullLit a) = ELit z LitNull
+fromExpression (ES3.NullLit z) = ELit z LitNull
 fromExpression (ES3.ArrayLit z exprs) = EArray z (map fromExpression exprs)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
@@ -55,7 +64,7 @@ fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs
           chainApp (x:xs) = EApp z (chainApp xs) (fromExpression x)
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
 fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ map ES3.unId argNames
-    where chainAbs [] = EAbs z "_" (foldStmts stmts $ empty z)
+    where chainAbs [] = EAbs z poo (foldStmts stmts $ empty z)
           chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
           chainAbs (x:xs) = EAbs z x (chainAbs xs)
 --           where funcBody = Block $ map fromStatement stmts 
@@ -63,9 +72,10 @@ fromExpression (ES3.ListExpr z exprs) =
     case exprs of
       [] -> empty z
       [x] -> fromExpression x
-      xs -> ELet z "_" (ETuple z . map fromExpression $ tail revXs) (fromExpression $ head revXs)
+      xs -> ELet z poo (ETuple z . map fromExpression $ tail revXs) (fromExpression $ head revXs)
           where revXs = reverse xs
-fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
+fromExpression e@(ES3.ThisRef z) = errorNotSupported "this" z e
+--fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 -- -- ------------------------------------------------------------------------
 
 parseFile :: String -> IO (Either String (Type TBody))

@@ -1,8 +1,6 @@
 module Main where
 
-import System.Exit(exitWith, ExitCode(..))
 import System.Environment(getArgs)    
-import Infer
 import Parse
 
 isRight :: Either a b -> Bool

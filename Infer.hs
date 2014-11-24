@@ -71,7 +71,7 @@ data LitVal = LitNumber Double
             | LitString String
             | LitRegex String Bool Bool
             | LitUndefined
-            -- | LitNull
+            | LitNull
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar a EVarName
@@ -90,7 +90,7 @@ data Exp a = EVar a EVarName
 type TVarName = Int
 
 data TBody = TVar TVarName
-            | TNumber | TBoolean | TString | TRegex | TUndefined
+            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
             deriving (Show, Eq, Ord)
                        
 data TConsName = TFunc | TArray | TTuple
@@ -443,6 +443,7 @@ inferType' _ (ELit _ lit) = return . (nullSubst,) $ TBody $ case lit of
   LitString _ -> TString
   LitRegex _ _ _ -> TRegex
   LitUndefined -> TUndefined
+  LitNull -> TNull
 inferType' env (EVar _ n) = do
   t <- instantiateVar n env
   return (nullSubst, t)
@@ -547,6 +548,7 @@ instance Pretty LitVal where
   prettyTab _ (LitString x) = show x
   prettyTab _ (LitRegex x g i) = "/" ++ x ++ "/" ++ (if g then "g" else "") ++ (if i then "i" else "") ++ (if g || i then "/" else "")
   prettyTab _ LitUndefined = "undefined"
+  prettyTab _ LitNull = "null"
                                  
 instance Pretty EVarName where
   prettyTab _ x = x
