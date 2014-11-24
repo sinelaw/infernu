@@ -82,6 +82,7 @@ data Exp a = EVar a EVarName
            | EAssign a EVarName (Exp a) (Exp a)
            | EArray a [Exp a]
            | ETuple a [Exp a]
+           | ERow a [(EVarName, Exp a)]
            | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
              deriving (Show, Eq, Ord, Functor)
 
@@ -90,15 +91,16 @@ data Exp a = EVar a EVarName
 type TVarName = Int
 
 data TBody = TVar TVarName
-            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
-            deriving (Show, Eq, Ord)
+           | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
+             deriving (Show, Eq, Ord)
                        
 data TConsName = TFunc | TArray | TTuple
-            deriving (Show, Eq, Ord)
+               | TRow [String]
+                 deriving (Show, Eq, Ord)
                
 data Type t = TBody t
             | TCons TConsName [Type t]
-            deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
+              deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
 
 type TSubst = Map.Map TVarName (Type TBody)
 
@@ -418,6 +420,7 @@ isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
 isExpansive (EArray _ exprs)  = any isExpansive exprs
 isExpansive (ETuple _ exprs)  = any isExpansive exprs
+isExpansive (ERow _ exprs)    = any isExpansive $ map snd exprs
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
                                        
 ----------------------------------------------------------------------
@@ -502,7 +505,10 @@ inferType' env (EArray _ exprs) =
 inferType' env (ETuple _ exprs) =
   do (subst, types) <- accumInfer env exprs
      return (subst, TCons TTuple $ reverse types)
-
+inferType' env (ERow _ propExprs) =
+  do (s,ts) <- accumInfer env $ map snd propExprs
+     applySubstInfer s
+     return (s, TCons (TRow (map fst propExprs)) ts)
 inferType' env (EIfThenElse _ ePred eThen eElse) =
   do (s1,tp) <- inferType env ePred
      s2 <- unify (TBody TBoolean) tp
@@ -562,6 +568,7 @@ instance Pretty (Exp a) where
   prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
   prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
+  prettyTab t (ERow _ props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
   prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
                        
 instance Pretty TVarName where
@@ -577,10 +584,15 @@ instance Pretty TConsName where
 instance Pretty t => Pretty (Type t) where
   prettyTab n (TBody t) = prettyTab n t
   prettyTab n (TCons TFunc [t1, t2]) = "(" ++ prettyTab n t1 ++ " -> " ++ prettyTab n t2 ++ ")"
+  prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
+  prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-  prettyTab _ _ = error "Unknown type for pretty"
-             
+  prettyTab t (TCons (TRow names) ts) = if length names /= length ts
+                                        then error $ "Maltformed TRow: names = " ++ intercalate ", " (map pretty names) ++ ", types: " ++ intercalate ", " (map pretty ts)
+                                        else "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
+                                            where props = zip names ts
+      
 instance Pretty TScheme where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "

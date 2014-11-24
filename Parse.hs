@@ -56,6 +56,7 @@ fromExpression (ES3.IntLit z s) = ELit z (LitNumber $ fromIntegral s)
 fromExpression (ES3.NumLit z s) = ELit z (LitNumber s)
 fromExpression (ES3.NullLit z) = ELit z LitNull
 fromExpression (ES3.ArrayLit z exprs) = EArray z (map fromExpression exprs)
+fromExpression (ES3.ObjectLit z props) = ERow z $ zip (map (fromProp . fst) props) (map (fromExpression . snd) props)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
 fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs
@@ -76,6 +77,12 @@ fromExpression (ES3.ListExpr z exprs) =
           where revXs = reverse xs
 fromExpression e@(ES3.ThisRef z) = errorNotSupported "this" z e
 --fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
+
+fromProp :: ES3.Prop a -> String
+fromProp (ES3.PropId _ (ES3.Id _ x)) = x
+fromProp (ES3.PropString _ x) = x
+fromProp (ES3.PropNum _ x) = show x
+
 -- -- ------------------------------------------------------------------------
 
 parseFile :: String -> IO (Either String (Type TBody))
@@ -199,8 +206,4 @@ parseFile arg = do
 -- fromLValue (ES3.LBracket _ x y) = ex $ Index (fromExpression x) (fromExpression y)
 
 
--- fromProp :: ES3.Prop a -> String
--- fromProp (ES3.PropId _ (ES3.Id _ x)) = x
--- fromProp (ES3.PropString _ x) = x
--- fromProp (ES3.PropNum _ x) = show x
 
