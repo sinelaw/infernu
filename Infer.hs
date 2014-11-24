@@ -7,8 +7,21 @@
 {-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE CPP #-}
 
-module Infer where
-
+module Infer
+    (Exp(..)
+    , LitVal(..)
+    , EVarName
+    , TVarName
+    , TBody(..)
+    , TConsName
+    , Type(..)
+    , runTypeInference
+    , test
+    , Pretty(..)
+    , pretty
+    )
+    where
+    
 
 import           Control.Monad       (forM, forM_, foldM)
 --import           Control.Monad.State (State, evalState, get, modify)
@@ -187,17 +200,6 @@ data NameSource = NameSource { lastName :: TVarName }
                 deriving (Show, Eq)
 
 ----------------------------------------------------------------------
--- | Adds an element to the value set of a map: key -> [value]
---
--- >>> let m1 = addToMappedSet 1 2 Map.empty
--- >>> m1
--- fromList [(1,fromList [2])]
--- >>> addToMappedSet 1 3 m1
--- fromList [(1,fromList [2,3])]
-addToMappedSet :: (Ord a, Ord b) => a -> b -> Map.Map a (Set.Set b) -> Map.Map a (Set.Set b)
-addToMappedSet k v m = Map.insert k (Set.insert v vs) m
-    where vs = fromMaybe Set.empty $ Map.lookup k m
-
 -- | Adds a pair of equivalent items to an equivalence map.
 --
 -- >>> let m1 = addEquivalence 1 2 Map.empty
@@ -268,9 +270,6 @@ addVarScheme n env scheme = do
 
 addVarInstance :: TVarName -> TVarName -> Infer ()
 addVarInstance x y = modify $ \is -> is { varInstances = trace' "updated equivs" $ addEquivalence x y (varInstances is) }
-
-getEquivalences :: TVarName -> Infer (Set.Set (Type TBody))
-getEquivalences n = fromMaybe Set.empty . Map.lookup n . varInstances <$> get
 
 getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
 getFreeTVars env = do
@@ -693,12 +692,15 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- >>> test $ ELet () "x" (EAbs () "a" (EVar () "a")) (ELet () "getX" (EAbs () "v" (EVar () "x")) (ELet () "setX" (EAbs () "v" (ELet () "_" (EAssign () "x" (EVar () "v") (EVar () "x")) (ELit () (LitBoolean True)))) (ELet () "_" (EApp () (EVar () "setX") (EAbs () "a" (ELit () (LitString "a")))) (EVar () "getX"))))
 -- "(16 -> (TString -> TString))"
 test :: Exp a -> String
-test e = pretty . runInfer $ typeInference Map.empty e
+test e = pretty $ runTypeInference e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
 --       Left err -> putStrLn $ show e ++ "\n " ++ err ++ "\n"
 --       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
-    
+
+
+runTypeInference :: Exp a -> Either String (Type TBody)
+runTypeInference e = runInfer $ typeInference Map.empty e
 
 -- Test runner
 

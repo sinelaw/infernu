@@ -78,7 +78,7 @@ parseFile arg = do
   print expr
   putStrLn . pretty $ expr
   putStrLn . pretty $ test expr
-  return . runInfer $ typeInference Map.empty expr
+  return $ runTypeInference expr
                            
 
 -- ex :: Body (Expr ()) -> Expr ()
