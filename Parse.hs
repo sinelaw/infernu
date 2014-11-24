@@ -3,7 +3,6 @@ module Parse where
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Language.ECMAScript3.Parser as ES3Parser
-import qualified Data.Map.Lazy as Map
 import Infer
 
 empty :: a -> Exp a
