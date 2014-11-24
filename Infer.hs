@@ -464,15 +464,19 @@ inferType' env (EApp _ e1 e2) =
      applySubstInfer s3
      return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
 inferType' env (ELet _ n e1 e2) =
-  do (s1, t1) <- inferType env e1
+  do recType <- TBody . TVar <$> fresh
+     recEnv <- addVarScheme n env $ TScheme [] recType
+     (s1, t1) <- inferType recEnv e1
      applySubstInfer s1
+     s1rec <- unify t1 recType
+     applySubstInfer s1rec
      let generalizeScheme = trace' ("let generalized '" ++ show n ++ "' --") <$> generalize env t1
      t' <- if isExpansive e1
            then return $ TScheme [] t1
            else generalizeScheme
      env' <- addVarScheme n env t'
      (s2, t2) <- inferType env' e2
-     return (s2 `composeSubst` s1, applySubst s2 t2)
+     return (s2 `composeSubst` (s1rec `composeSubst` s1), applySubst s2 t2)
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign _ n expr1 expr2) =
