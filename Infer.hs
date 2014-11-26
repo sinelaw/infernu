@@ -466,7 +466,7 @@ unify' t1@(TRow row1) t2@(TRow row2) =
 unifyRows :: (Pretty y, Pretty x) => TVarName -> TSubst
                -> (x, Set.Set EPropName, Map.Map EPropName (Type TBody))
                -> (y, Set.Set EPropName, Maybe TVarName)
-               -> StateT InferState (EitherT String Identity) TSubst              
+               -> Infer TSubst              
 unifyRows r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
            in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
