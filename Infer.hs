@@ -448,33 +448,34 @@ unify' t1@(TCons _ _) t2@(TRow _)    = unificationError t1 t2
 unify' t1@(TBody _)   t2@(TRow _)    = unificationError t1 t2
 -- TODO: un-hackify!
 unify' t1@(TRow row1) t2@(TRow row2) =
-    do s1 <- unifyl nullSubst commonTypes
+    do let (m2, r2) = flattenRow row2
+           names2 = Set.fromList $ Map.keys m2
+           (m1, r1) = flattenRow row1
+           names1 = Set.fromList $ Map.keys m1
+           commonNames = Set.toList $ names1 `Set.intersection` names2
+           namesToTypes :: Map.Map EPropName (Type a) -> [EPropName] -> [Type a]
+           namesToTypes m = mapMaybe (flip Map.lookup m)
+           commonTypes :: [(Type TBody, Type TBody)]
+           commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
+       s1 <- unifyl nullSubst commonTypes
        r <- fresh
-       let in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
-       let in2NotIn1row = unflattenRow m2 (Just r) (flip Set.member in2NotIn1)
-       s2 <- case r2 of
-               Nothing -> if Set.null in1NotIn2
-                          then return nullSubst
-                          else unificationError t1 t2
-               Just r2' -> unify (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
-       s3 <- case r1 of
-               Nothing -> if Set.null in2NotIn1
-                          then return nullSubst
-                          else unificationError t2 t1
-               Just r1' -> unify (applySubst s2 $ TRow in2NotIn1row) (applySubst s2 $ TBody $ TVar r1')
---       s3 <- unify (TRow in2NotIn1row) (TBody $ TVar r2)
+       s2 <- unifyRows r s1 (t1, names1, m1) (t2, names2, r2)
+       s3 <- unifyRows r s2 (t2, names2, m2) (t1, names1, r1)
        return $ s3 `composeSubst` s2 `composeSubst` s1
-    where (m1, r1) = flattenRow row1
-          (m2, r2) = flattenRow row2
-          names1 = Set.fromList $ Map.keys m1
-          names2 = Set.fromList $ Map.keys m2
-          in1NotIn2 = names1 `Set.difference` names2
-          in2NotIn1 = names2 `Set.difference` names1
-          commonNames = Set.toList $ names1 `Set.intersection` names2
-          namesToTypes :: Map.Map EPropName (Type a) -> [EPropName] -> [Type a]
-          namesToTypes m = mapMaybe (flip Map.lookup m)
-          commonTypes :: [(Type TBody, Type TBody)]
-          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
+
+unifyRows :: (Pretty y, Pretty x) => TVarName -> TSubst
+               -> (x, Set.Set EPropName, Map.Map EPropName (Type TBody))
+               -> (y, Set.Set EPropName, Maybe TVarName)
+               -> StateT InferState (EitherT String Identity) TSubst              
+unifyRows r s1 (t1, names1, m1) (t2, names2, r2) =
+    do let in1NotIn2 = names1 `Set.difference` names2
+           in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
+           
+       case r2 of
+         Nothing -> if Set.null in1NotIn2
+                    then return nullSubst
+                    else unificationError t1 t2
+         Just r2' -> unify (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
                                     
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
