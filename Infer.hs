@@ -453,16 +453,14 @@ unify' t1@(TRow row1) t2@(TRow row2) =
        let in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
        let in2NotIn1row = unflattenRow m2 (Just r) (flip Set.member in2NotIn1)
        s2 <- case r2 of
-               Nothing -> error "Not implemented"
-                   -- if Set.null in1NotIn2
-                   --        then return nullSubst
-                   --        else unificationError t1 t2
+               Nothing -> if Set.null in1NotIn2
+                          then return nullSubst
+                          else unificationError t1 t2
                Just r2' -> unify (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
        s3 <- case r1 of
-               Nothing -> error "Not implemented"
-                   -- if Set.null in2NotIn1
-                   --        then return nullSubst
-                   --        else unificationError t2 t1
+               Nothing -> if Set.null in2NotIn1
+                          then return nullSubst
+                          else unificationError t2 t1
                Just r1' -> unify (applySubst s2 $ TRow in2NotIn1row) (applySubst s2 $ TBody $ TVar r1')
 --       s3 <- unify (TRow in2NotIn1row) (TBody $ TVar r2)
        return $ s3 `composeSubst` s2 `composeSubst` s1
@@ -602,8 +600,7 @@ inferType' env (ETuple _ exprs) =
 inferType' env (ERow _ propExprs) =
   do (s,ts) <- accumInfer env $ map snd propExprs
      applySubstInfer s
-     ro <- fresh
-     return (s, (TRow $ foldr (\(n,t) r -> TRowProp n t r) (TRowEnd $ Just ro) $ zip (map fst propExprs) (reverse ts)))
+     return (s, (TRow $ foldr (\(n,t) r -> TRowProp n t r) (TRowEnd Nothing) $ zip (map fst propExprs) (reverse ts)))
 inferType' env (EIfThenElse _ ePred eThen eElse) =
   do (s1,tp) <- inferType env ePred
      s2 <- unify (TBody TBoolean) tp
@@ -691,9 +688,9 @@ instance Pretty t => Pretty (Type t) where
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
   prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-  prettyTab t (TRow list) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))  ++ ", " ++ show r ++ "..}"
-                                     where (props, r) = flattenRow list
-      
+  prettyTab t (TRow list) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props)) ++ maybe "" ((", "++) . const "...") r ++ "}"
+    where (props, r) = flattenRow list
+
 instance Pretty TScheme where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
