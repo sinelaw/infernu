@@ -76,6 +76,7 @@ fromExpression (ES3.ListExpr z exprs) =
       xs -> ELet z poo (ETuple z . map fromExpression $ tail revXs) (fromExpression $ head revXs)
           where revXs = reverse xs
 fromExpression e@(ES3.ThisRef z) = errorNotSupported "this" z e
+fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
 --fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
 
 fromProp :: ES3.Prop a -> String

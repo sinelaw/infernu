@@ -85,6 +85,7 @@ data Exp a = EVar a EVarName
            | ETuple a [Exp a]
            | ERow a [(EPropName, Exp a)]
            | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
+           | EProp a (Exp a) EPropName
              deriving (Show, Eq, Ord, Functor)
 
 ----------------------------------------------------------------------
@@ -98,6 +99,7 @@ data TBody = TVar TVarName
 data TConsName = TFunc | TArray | TTuple
                  deriving (Show, Eq, Ord)
 
+-- | Row type.
 data TRowList t = TRowProp EPropName (Type t) (TRowList t)
                 | TRowEnd (Maybe TVarName)
                   deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
@@ -109,7 +111,22 @@ data Type t = TBody t
 
 type TSubst = Map.Map TVarName (Type TBody)
 
+----------------------------------------------------------------------
 
+class VarNames a where
+    mapVarNames :: (TVarName -> TVarName) -> a -> a
+
+instance VarNames (Type TBody) where                   
+    mapVarNames f (TBody (TVar x)) = TBody . TVar $ f x
+    mapVarNames _ t@(TBody _) = t
+    mapVarNames f (TCons c ts) = TCons c $ map (mapVarNames f) ts
+    mapVarNames f (TRow l) = TRow $ mapVarNames f l
+
+instance VarNames (TRowList TBody) where
+    mapVarNames f (TRowProp n t l) = TRowProp n (mapVarNames f t) (mapVarNames f l)
+    mapVarNames f (TRowEnd (Just x)) = TRowEnd (Just $ f x)
+    mapVarNames _ (TRowEnd Nothing) = TRowEnd Nothing
+                                      
 ----------------------------------------------------------------------
 
 class Types a where
@@ -163,6 +180,16 @@ flattenRow = flattenRow' (Map.empty, Nothing)
 unflattenRow :: Map.Map EPropName (Type t) -> Maybe TVarName -> (EPropName -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if (f n) then TRowProp n t l else l) (TRowEnd r) m
     
+-- | Types instance for TRowList
+--
+-- >>> freeTypeVars (TRowProp "x" (TBody TNumber) (TRowEnd $ Just 1))
+-- fromList [1]
+-- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd Nothing))
+-- fromList [2]
+-- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd $ Just 1))
+-- fromList [1,2]
+-- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowProp "y" (TBody $ TVar 3) (TRowEnd $ Just 1)))
+-- fromList [1,2,3]
 instance Types (TRowList TBody) where
   freeTypeVars (TRowProp _ propType rest) = freeTypeVars propType `Set.union` freeTypeVars rest
   freeTypeVars (TRowEnd tvarName) = maybe Set.empty Set.singleton tvarName
@@ -352,10 +379,9 @@ instantiate (TScheme tvarNames t) = do
 
   forM_ allocNames $ uncurry addVarInstance
 
-  let replaceVar (TVar n) = TVar . fromMaybe n $ lookup n allocNames
-      replaceVar x = x
+  let replaceVar n = fromMaybe n $ lookup n allocNames
 
-  return $ fmap replaceVar t
+  return $ mapVarNames replaceVar t
 
 instantiateVar :: EVarName -> TypeEnv -> Infer (Type TBody)
 instantiateVar n env = do
@@ -489,7 +515,8 @@ isExpansive (EArray _ exprs)  = any isExpansive exprs
 isExpansive (ETuple _ exprs)  = any isExpansive exprs
 isExpansive (ERow _ exprs)    = any isExpansive $ map snd exprs
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
-                                       
+isExpansive (EProp _ expr _)  = isExpansive expr
+                                
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
@@ -588,7 +615,14 @@ inferType' env (EIfThenElse _ ePred eThen eElse) =
      s6 <- unify tThen tElse
      let s' = s6 `composeSubst` s5 `composeSubst` s4 `composeSubst` s3
      return (s', tThen)      
-     
+inferType' env (EProp _ eObj propName) =
+  do (s1, tObj) <- inferType env eObj
+     rowVar <- fresh
+     propVar <- fresh
+     s2 <- unify tObj $ TRow $ TRowProp propName (TBody $ TVar propVar) $ TRowEnd (Just rowVar)
+     let s3 = s2 `composeSubst` s1
+     applySubstInfer s3
+     return (s3, applySubst s3 (TBody $ TVar propVar))
      
 unifyAllInstances :: TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances s tvs = do
@@ -638,6 +672,7 @@ instance Pretty (Exp a) where
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
   prettyTab t (ERow _ props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
   prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
+  prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
                        
 instance Pretty TVarName where
   prettyTab _ = show
