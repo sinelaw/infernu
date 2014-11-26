@@ -170,7 +170,7 @@ instance Types (TRowList TBody) where
   applySubst s (TRowProp propName propType rest) = sortRow $ TRowProp propName (applySubst s propType) (applySubst s rest)
   applySubst s t@(TRowEnd (Just tvarName)) = case Map.lookup tvarName s of
                                                Nothing -> t
-                                               Just (TRow _) -> t
+                                               Just (TRow t') -> t'
                                                Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
                               
@@ -431,13 +431,13 @@ unify' t1@(TRow row1) t2@(TRow row2) =
                    -- if Set.null in1NotIn2
                    --        then return nullSubst
                    --        else unificationError t1 t2
-               Just r2' -> unify (TRow in1NotIn2row) (TBody $ TVar r2')
+               Just r2' -> unify (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
        s3 <- case r1 of
                Nothing -> error "Not implemented"
                    -- if Set.null in2NotIn1
                    --        then return nullSubst
                    --        else unificationError t2 t1
-               Just r1' -> unify (TRow in2NotIn1row) (TBody $ TVar r1')
+               Just r1' -> unify (applySubst s2 $ TRow in2NotIn1row) (applySubst s2 $ TBody $ TVar r1')
 --       s3 <- unify (TRow in2NotIn1row) (TBody $ TVar r2)
        return $ s3 `composeSubst` s2 `composeSubst` s1
     where (m1, r1) = flattenRow row1
