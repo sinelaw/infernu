@@ -36,7 +36,7 @@ import           Data.Maybe          (fromMaybe, mapMaybe)
 import qualified Data.Set            as Set
 --import           Data.Foldable       (Foldable(..))
 
-import Prelude hiding (foldr)
+import Prelude hiding ()
     
 -- import           Test.QuickCheck(choose)
 --import           Test.QuickCheck.All    
@@ -65,6 +65,7 @@ trace' prefix x = trace (prefix ++ " " ++ show x) x
 ----------------------------------------------------------------------
 
 type EVarName = String
+type EPropName = String
 
 data LitVal = LitNumber Double
             | LitBoolean Bool
@@ -82,7 +83,7 @@ data Exp a = EVar a EVarName
            | EAssign a EVarName (Exp a) (Exp a)
            | EArray a [Exp a]
            | ETuple a [Exp a]
-           | ERow a [(EVarName, Exp a)]
+           | ERow a [(EPropName, Exp a)]
            | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
              deriving (Show, Eq, Ord, Functor)
 
@@ -95,11 +96,15 @@ data TBody = TVar TVarName
              deriving (Show, Eq, Ord)
                        
 data TConsName = TFunc | TArray | TTuple
-               | TRow [String]
                  deriving (Show, Eq, Ord)
-               
+
+data TRowList t = TRowProp EPropName (Type t) (TRowList t)
+                | TRowEnd (Maybe TVarName)
+                  deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
+            
 data Type t = TBody t
             | TCons TConsName [Type t]
+            | TRow (TRowList t)
               deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
 
 type TSubst = Map.Map TVarName (Type TBody)
@@ -134,16 +139,40 @@ instance Types (Type TBody) where
   freeTypeVars (TBody (TVar n)) = Set.singleton n
   freeTypeVars (TBody _) = Set.empty
   freeTypeVars (TCons _ ts) = Set.unions $ map freeTypeVars ts
+  freeTypeVars (TRow r) = freeTypeVars r
 
   applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
   applySubst _ t@(TBody _) = t
   applySubst s (TCons n ts) = TCons n (applySubst s ts)
+  applySubst s (TRow r) = TRow $ applySubst s r
 
-
+                              
 -- instance (Functor f, Foldable f, Types a) => Types (f a) where
 --   freeTypeVars = foldr (Set.union . freeTypeVars) Set.empty
 --   applySubst s = fmap (applySubst s)
 
+sortRow :: TRowList TBody -> TRowList TBody
+sortRow row = row -- TODO implement
+
+flattenRow :: TRowList t -> (Map.Map EPropName (Type t), Maybe TVarName)
+flattenRow = flattenRow' (Map.empty, Nothing)
+    where flattenRow' :: (Map.Map EPropName (Type t), Maybe TVarName) -> TRowList t -> (Map.Map EPropName (Type t), Maybe TVarName)
+          flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
+          flattenRow' (m,_) (TRowEnd r') = (m, r')
+
+unflattenRow :: Map.Map EPropName (Type t) -> Maybe TVarName -> (EPropName -> Bool) -> TRowList t
+unflattenRow m r f = Map.foldrWithKey (\n t l -> if (f n) then TRowProp n t l else l) (TRowEnd r) m
+    
+instance Types (TRowList TBody) where
+  freeTypeVars (TRowProp _ propType rest) = freeTypeVars propType `Set.union` freeTypeVars rest
+  freeTypeVars (TRowEnd tvarName) = maybe Set.empty Set.singleton tvarName
+
+  applySubst s (TRowProp propName propType rest) = sortRow $ TRowProp propName (applySubst s propType) (applySubst s rest)
+  applySubst s t@(TRowEnd (Just tvarName)) = case Map.lookup tvarName s of
+                                               Nothing -> t
+                                               Just (TRow _) -> t
+                                               Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
+  applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
                               
 ----------------------------------------------------------------------
 
@@ -371,20 +400,58 @@ generalize tenv t = do
 
 unify :: Type TBody -> Type TBody -> Infer TSubst
 unify t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' t1 t2
-               
+
+unificationError :: (Pretty x, Pretty y) => x -> y -> Infer a
+unificationError x y = throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
+                       
 unify' :: Type TBody -> Type TBody -> Infer TSubst
 unify' (TBody (TVar n)) t = varBind n t
 unify' t (TBody (TVar n)) = varBind n t
 unify' (TBody x) (TBody y) = if x == y
                              then return nullSubst
-                             else throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
-unify' t1@(TBody _) t2@(TCons _ _) = throwError $ "Could not unify: " ++ pretty t1 ++ " with " ++ pretty t2
+                             else unificationError x y
+unify' t1@(TBody _) t2@(TCons _ _) = unificationError t1 t2
 unify' t1@(TCons _ _) t2@(TBody _) = unify' t2 t1
 unify' (TCons n1 ts1) (TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then unifyl nullSubst $ zip ts1 ts2
     else throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
-
+unify' t1@(TRow _)    t2@(TCons _ _) = unificationError t1 t2
+unify' t1@(TRow _)    t2@(TBody _)   = unificationError t1 t2
+unify' t1@(TCons _ _) t2@(TRow _)    = unificationError t1 t2
+unify' t1@(TBody _)   t2@(TRow _)    = unificationError t1 t2
+-- TODO: un-hackify!
+unify' t1@(TRow row1) t2@(TRow row2) =
+    do s1 <- unifyl nullSubst commonTypes
+       r <- fresh
+       let in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
+       let in2NotIn1row = unflattenRow m2 (Just r) (flip Set.member in2NotIn1)
+       s2 <- case r2 of
+               Nothing -> error "Not implemented"
+                   -- if Set.null in1NotIn2
+                   --        then return nullSubst
+                   --        else unificationError t1 t2
+               Just r2' -> unify (TRow in1NotIn2row) (TBody $ TVar r2')
+       s3 <- case r1 of
+               Nothing -> error "Not implemented"
+                   -- if Set.null in2NotIn1
+                   --        then return nullSubst
+                   --        else unificationError t2 t1
+               Just r1' -> unify (TRow in2NotIn1row) (TBody $ TVar r1')
+--       s3 <- unify (TRow in2NotIn1row) (TBody $ TVar r2)
+       return $ s3 `composeSubst` s2 `composeSubst` s1
+    where (m1, r1) = flattenRow row1
+          (m2, r2) = flattenRow row2
+          names1 = Set.fromList $ Map.keys m1
+          names2 = Set.fromList $ Map.keys m2
+          in1NotIn2 = names1 `Set.difference` names2
+          in2NotIn1 = names2 `Set.difference` names1
+          commonNames = Set.toList $ names1 `Set.intersection` names2
+          namesToTypes :: Map.Map EPropName (Type a) -> [EPropName] -> [Type a]
+          namesToTypes m = mapMaybe (flip Map.lookup m)
+          commonTypes :: [(Type TBody, Type TBody)]
+          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
+                                    
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
 unifyl = foldM unifyl'
@@ -508,7 +575,8 @@ inferType' env (ETuple _ exprs) =
 inferType' env (ERow _ propExprs) =
   do (s,ts) <- accumInfer env $ map snd propExprs
      applySubstInfer s
-     return (s, TCons (TRow (map fst propExprs)) $ reverse ts)
+     ro <- fresh
+     return (s, (TRow $ foldr (\(n,t) r -> TRowProp n t r) (TRowEnd $ Just ro) $ zip (map fst propExprs) (reverse ts)))
 inferType' env (EIfThenElse _ ePred eThen eElse) =
   do (s1,tp) <- inferType env ePred
      s2 <- unify (TBody TBoolean) tp
@@ -588,10 +656,8 @@ instance Pretty t => Pretty (Type t) where
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
   prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-  prettyTab t (TCons (TRow names) ts) = if length names /= length ts
-                                        then error $ "Maltformed TRow: names = " ++ intercalate ", " (map pretty names) ++ ", types: " ++ intercalate ", " (map pretty ts)
-                                        else "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
-                                            where props = zip names ts
+  prettyTab t (TRow list) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))  ++ ", " ++ show r ++ "..}"
+                                     where (props, r) = flattenRow list
       
 instance Pretty TScheme where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
