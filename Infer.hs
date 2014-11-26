@@ -34,8 +34,10 @@ import           Data.List           (intercalate)
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (fromMaybe, mapMaybe)
 import qualified Data.Set            as Set
+import           Data.Char           (chr, ord)
 --import           Data.Foldable       (Foldable(..))
-
+import qualified Data.Digits         as Digits
+    
 import Prelude hiding ()
     
 -- import           Test.QuickCheck(choose)
@@ -631,10 +633,15 @@ unifyAllInstances s tvs = do
   let unifyAll' s' equivs = unifyAll s' . trace' "equivalence:" $ Set.toList equivs
   trace' "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
+defragTVarNames :: Type TBody -> Type TBody
+defragTVarNames t = mapVarNames f t
+    where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
+          f n = maybe n id $ Map.lookup n vars
+         
 typeInference :: TypeEnv -> Exp a -> Infer (Type TBody)
 typeInference env e = do
   (s, t) <- inferType env e 
-  return $ applySubst s t
+  return . defragTVarNames $ applySubst s t
 
 ----------------------------------------------------------------------
 
@@ -671,9 +678,16 @@ instance Pretty (Exp a) where
   prettyTab t (ERow _ props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
   prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
-                       
+
+
+toChr :: Int -> Char                              
+toChr n = chr (ord 'a' + n - 1)
+
+-- |
+-- >>> prettyTab 0 (27 :: TVarName)
+-- aa
 instance Pretty TVarName where
-  prettyTab _ = show
+  prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 n)
 
 instance Pretty TBody where
   prettyTab t (TVar n) = prettyTab t n
@@ -751,10 +765,10 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- "(TBoolean, TNumber)"
 --
 -- >>> test $ ELet () "id" (EAbs () "x" (EVar () "x")) (EAssign () "id" (EAbs () "y" (EVar () "y")) (EVar () "id"))
--- "(1 -> 1)"
+-- "(a -> a)"
 --
 -- >>> test $ ELet () "id" (EAbs () "x" (EVar () "x")) (EAssign () "id" (ELit () (LitBoolean True)) (EVar () "id"))
--- "Error: Could not unify: TBoolean with (1 -> 1)"
+-- "Error: Could not unify: TBoolean with (c -> c)"
 --
 -- >>> test $ ELet () "x" (ELit () (LitBoolean True)) (EAssign () "x" (ELit () (LitBoolean False)) (EVar () "x"))
 -- "TBoolean"
@@ -769,22 +783,22 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- "[TBoolean]"
 --
 -- >>> test $ ELet () "x" (EArray () []) (EAssign () "x" (EArray () []) (EVar () "x"))
--- "[1]"
+-- "[a]"
 --
 -- >>> test $ ELet () "x" (EArray () [ELit () $ LitBoolean True, ELit () $ LitNumber 2]) (EVar () "x")
 -- "Error: Could not unify: TNumber with TBoolean"
 --
 -- >>> test $ ELet () "id" (EAbs () "x" (ELet () "y" (EVar () "x") (EVar () "y"))) (EApp () (EVar () "id") (EVar () "id"))
--- "(7 -> 7)"
+-- "(a -> a)"
 --
 -- >>> test $ ELet () "id" (EAbs () "x" (ELet () "y" (EVar () "x") (EVar () "y"))) (EApp () (EApp () (EVar () "id") (EVar () "id")) (ELit () (LitNumber 2)))
 -- "TNumber"
 --
 -- >>> test $ ELet () "id" (EAbs () "x" (EApp () (EVar () "x") (EVar () "x"))) (EVar () "id")
--- "Error: Occurs check failed: 1 in (1 -> 3)"
+-- "Error: Occurs check failed: a in (a -> b)"
 --
 -- >>> test $ EAbs () "m" (ELet () "y" (EVar () "m") (ELet () "x" (EApp () (EVar () "y") (ELit () (LitBoolean True))) (EVar () "x")))
--- "((TBoolean -> 4) -> 4)"
+-- "((TBoolean -> a) -> a)"
 --
 -- >>> test $ EApp () (ELit () (LitNumber 2)) (ELit () (LitNumber 2))
 -- "Error: Could not unify: TNumber with (TNumber -> 1)"
@@ -800,10 +814,10 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 -- "(TNumber, TBoolean)"
 --
 -- >>> test $ ELet () "x" (EAbs () "y" (EVar () "y")) (EApp () (EVar () "x") (EVar () "x"))
--- "(6 -> 6)"
+-- "(a -> a)"
 --
 -- >>> test $ ELet () "x" (EAbs () "a" (EVar () "a")) (ELet () "getX" (EAbs () "v" (EVar () "x")) (ELet () "setX" (EAbs () "v" (ELet () "_" (EAssign () "x" (EVar () "v") (EVar () "x")) (ELit () (LitBoolean True)))) (ELet () "_" (EApp () (EVar () "setX") (EAbs () "a" (ELit () (LitString "a")))) (EVar () "getX"))))
--- "(16 -> (TString -> TString))"
+-- "(a -> (TString -> TString))"
 test :: Exp a -> String
 test e = pretty $ runTypeInference e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
