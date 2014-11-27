@@ -1,0 +1,8 @@
+FAIL  y valid/getid.js
+ERROR y valid/map.js
+FAIL  y valid/objlit-func.js
+FAIL  y valid/promise.js
+ERROR y valid/test.js
+ERROR n invalid/blo2.js
+ERROR n invalid/this.js
+FAIL  n invalid/var-recursive-nonfunc.js
