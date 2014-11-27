@@ -1,8 +1,11 @@
 module Parse where
 
+import Data.Functor((<$>))
+import qualified Data.Set as Set
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Language.ECMAScript3.Parser as ES3Parser
+import qualified Text.Parsec.Pos as Pos
 import Infer
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
@@ -86,7 +89,18 @@ fromProp (ES3.PropString _ x) = x
 fromProp (ES3.PropNum _ x) = show x
 
 -- -- ------------------------------------------------------------------------
+zipByPos :: [(ES3.SourcePos, String)] -> [(Int, String)] -> [String]
+zipByPos [] xs = map snd xs
+zipByPos _  [] = []
+zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
+                                            then (("//" ++ (indentToColumn $ Pos.sourceColumn pos) ++ s):zipByPos ps xs')
+                                            else (x:zipByPos ps' xs)
+    where indentToColumn n = take (n - 3) $ repeat ' '
 
+                    
+indexList :: [a] -> [(Int, a)]
+indexList = zip [1..]
+            
 parseFile :: String -> IO (Either String [(ES3.SourcePos, (Type TBody))])
 parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
@@ -95,8 +109,18 @@ parseFile arg = do
       expr = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
       expr' = runTypeInference expr
       res = fmap getAnnotations expr'
-  putStrLn $ pretty expr'
-  putStrLn . show $ fmap (fmap (\(a,t) -> (a, pretty . minifyVars $ t))) res
+      prettyRes = fmap (Set.toList . Set.fromList . fmap (\(a,t) -> (a, pretty $ t))) res
+  sourceCode <- lines <$> readFile arg
+  let annotatedSource = case prettyRes of
+                          Left _ -> ""
+                          Right xs -> unlines $ zipByPos xs indexedSource
+                              where --indexedSource :: [(Int, [(Int, Char)])]
+                                    indexedSource = indexList sourceCode
+                                    --indexedAnno :: [(Int, [(Int, Char)])]
+                                    --indexedAnno = (map (\(s,t) -> (Pos.sourceLine s, t)) xs)
+  putStrLn $ annotatedSource
+  -- putStrLn $ pretty expr'
+  -- putStrLn . show $ prettyRes
   return res
                            
 
