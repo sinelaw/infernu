@@ -1,4 +1,4 @@
---{-# LANGUAGE DeriveFoldable    #-}
+{-# LANGUAGE DeriveFoldable    #-}
 {-# LANGUAGE DeriveFunctor     #-}
 --{-# LANGUAGE DeriveGeneric     #-}
 --{-# LANGUAGE DeriveTraversable #-}
@@ -19,6 +19,8 @@ module Infer
     , test
     , Pretty(..)
     , pretty
+    , getAnnotations
+    , minifyVars
     )
     where
     
@@ -35,10 +37,10 @@ import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (fromMaybe, mapMaybe)
 import qualified Data.Set            as Set
 import           Data.Char           (chr, ord)
---import           Data.Foldable       (Foldable(..))
+import           Data.Foldable       (Foldable(..))
 import qualified Data.Digits         as Digits
     
-import Prelude hiding ()
+import Prelude hiding (foldr)
     
 -- import           Test.QuickCheck(choose)
 --import           Test.QuickCheck.All    
@@ -88,7 +90,7 @@ data Exp a = EVar a EVarName
            | ERow a [(EPropName, Exp a)]
            | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
            | EProp a (Exp a) EPropName
-             deriving (Show, Eq, Ord, Functor)
+             deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
 
@@ -164,8 +166,7 @@ instance Types (Type TBody) where
   applySubst _ t@(TBody _) = t
   applySubst s (TCons n ts) = TCons n (applySubst s ts)
   applySubst s (TRow r) = TRow $ applySubst s r
-
-                              
+                          
 -- instance (Functor f, Foldable f, Types a) => Types (f a) where
 --   freeTypeVars = foldr (Set.union . freeTypeVars) Set.empty
 --   applySubst s = fmap (applySubst s)
@@ -203,6 +204,11 @@ instance Types (TRowList TBody) where
                                                Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
                               
+----------------------------------------------------------------------
+
+getAnnotations :: Exp a -> [a]
+getAnnotations = foldr (:) []
+
 ----------------------------------------------------------------------
 
 -- | Type scheme: a type expression with a "forall" over some type variables that may appear in it (universal quantification).
@@ -521,50 +527,55 @@ isExpansive (EProp _ expr _)  = isExpansive expr
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp a] -> Infer (TSubst, [Type TBody])
+accumInfer :: TypeEnv -> [Exp a] -> Infer (TSubst, [(Type TBody, Exp (a, Type TBody))])
 accumInfer env = foldM accumInfer' (nullSubst, [])
     where accumInfer' (subst, types) expr = do
-            (subst', t) <- inferType env expr
+            (subst', t, e) <- inferType env expr
             applySubstInfer subst'
-            return (subst' `composeSubst` subst, t:types)
+            return (subst' `composeSubst` subst, (t,e):types)
 
-inferType  :: TypeEnv -> Exp a -> Infer (TSubst, Type TBody)
+inferType  :: TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
 inferType env expr = do
-  (s,t) <- inferType' env expr
+  (s, t, e) <- inferType' env expr
   state <- get
-  return . trace (">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n\t" ++ show state ++ "\n\t Environment: " ++ show env ++ "\n----------") $ (s,t)
+  let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n\t" ++ show state ++ "\n\t Environment: " ++ show env ++ "\n----------"
+  return . tr $ (s, t, e)
 
-inferType' :: TypeEnv -> Exp a -> Infer (TSubst, Type TBody)
-inferType' _ (ELit _ lit) = return . (nullSubst,) $ TBody $ case lit of
-  LitNumber _ -> TNumber
-  LitBoolean _ -> TBoolean
-  LitString _ -> TString
-  LitRegex _ _ _ -> TRegex
-  LitUndefined -> TUndefined
-  LitNull -> TNull
-inferType' env (EVar _ n) = do
+inferType' :: TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
+inferType' _ (ELit a lit) = do
+  let t = TBody $ case lit of
+                    LitNumber _ -> TNumber
+                    LitBoolean _ -> TBoolean
+                    LitString _ -> TString
+                    LitRegex _ _ _ -> TRegex
+                    LitUndefined -> TUndefined
+                    LitNull -> TNull
+  return (nullSubst, t, ELit (a,t) lit)  
+inferType' env (EVar a n) = do
   t <- instantiateVar n env
-  return (nullSubst, t)
-inferType' env (EAbs _ argName e2) =
+  return (nullSubst, t, EVar (a, t) n)
+inferType' env (EAbs a argName e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
      env' <- addVarScheme argName env $ TScheme [] tvar
-     (s1, t1) <- inferType env' e2
-     return (s1, TCons TFunc [applySubst s1 tvar, t1])
-inferType' env (EApp _ e1 e2) =
+     (s1, t1, e2') <- inferType env' e2
+     let t = TCons TFunc [applySubst s1 tvar, t1]
+     return (s1, t, EAbs (a, t) argName e2')
+inferType' env (EApp a e1 e2) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
-     (s1, t1) <- inferType env e1
+     (s1, t1, e1') <- inferType env e1
      applySubstInfer s1
-     (s2, t2) <- inferType env e2
+     (s2, t2, e2') <- inferType env e2
      applySubstInfer s2
      s3 <- trace' "\\ unified app" <$> unify (applySubst s2 t1) (TCons TFunc [t2, tvar])
      applySubstInfer s3
-     return (s3 `composeSubst` s2 `composeSubst` s1, applySubst s3 tvar)
-inferType' env (ELet _ n e1 e2) =
+     let t = applySubst s3 tvar
+     return (s3 `composeSubst` s2 `composeSubst` s1, t, EApp (a, t) e1' e2')
+inferType' env (ELet a n e1 e2) =
   do recType <- TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
-     (s1, t1) <- inferType recEnv e1
+     (s1, t1, e1') <- inferType recEnv e1
      s1rec <- unify t1 recType
      let s1' = s1rec `composeSubst` s1
      applySubstInfer s1'
@@ -573,61 +584,67 @@ inferType' env (ELet _ n e1 e2) =
            then return $ TScheme [] $ applySubst s1' t1
            else generalizeScheme
      env' <- addVarScheme n env t'
-     (s2, t2) <- inferType env' e2
+     (s2, t2, e2') <- inferType env' e2
      applySubstInfer s2
-     return (s2 `composeSubst` s1', applySubst s2 t2)
+     let t = applySubst s2 t2
+     return (s2 `composeSubst` s1', t, ELet (a, t) n e1' e2')
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
-inferType' env (EAssign _ n expr1 expr2) =
+inferType' env (EAssign a n expr1 expr2) =
   do varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
      lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
      let ungeneralizedScheme = ungeneralize lvalueScheme 
      lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
-     (s1, rvalueT) <- inferType env expr1
+     (s1, rvalueT, expr1') <- inferType env expr1
      s2 <- unify rvalueT (applySubst s1 lvalueT)
      let s3 = s2 `composeSubst` s1
      s4 <- unifyAllInstances s3 $ getQuantificands lvalueScheme
      applySubstInfer s4
-     (s5, tRest) <- inferType env expr2
-     return (s5 `composeSubst` s4, tRest)
+     (s5, tRest, expr2') <- inferType env expr2
+     return (s5 `composeSubst` s4, tRest, EAssign (a, tRest) n expr1' expr2')
                       
-inferType' env (EArray _ exprs) =
+inferType' env (EArray a exprs) =
   do tvName <- fresh
      let tv = TBody $ TVar tvName
-     (subst, types) <- accumInfer env exprs
+     (subst, te) <- accumInfer env exprs
+     let types = map fst te
      subst' <- unifyl subst $ zip (tv:types) types
      applySubstInfer subst'
-     return (subst', TCons TArray [applySubst subst' $ TBody $ TVar tvName])
-inferType' env (ETuple _ exprs) =
-  do (subst, types) <- accumInfer env exprs
-     return (subst, TCons TTuple $ reverse types)
-inferType' env (ERow _ propExprs) =
-  do (s,ts) <- accumInfer env $ map snd propExprs
+     let t = TCons TArray [applySubst subst' $ TBody $ TVar tvName]
+     return (subst', t, EArray (a,t) $ map snd te)
+inferType' env (ETuple a exprs) =
+  do (subst, te) <- accumInfer env exprs
+     let t = TCons TTuple . reverse $ map fst te
+     return (subst, t, ETuple (a,t) $ map snd te)
+inferType' env (ERow a propExprs) =
+  do (s, te) <- accumInfer env $ map snd propExprs
      applySubstInfer s
-     let propNamesTypes = zip (map fst propExprs) (reverse ts)
+     let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)
          rowType = TRow $ foldr (\(n,t) r -> TRowProp n t r) (TRowEnd Nothing) propNamesTypes
-     return (s, applySubst s rowType)
-inferType' env (EIfThenElse _ ePred eThen eElse) =
-  do (s1,tp) <- inferType env ePred
+         t = applySubst s rowType
+     return (s, t, ERow (a,t) $ zip (map fst propExprs) (map snd te))
+inferType' env (EIfThenElse a ePred eThen eElse) =
+  do (s1, tp, ePred') <- inferType env ePred
      s2 <- unify (TBody TBoolean) tp
      let s3 = s2 `composeSubst` s1
      applySubstInfer s3
-     (s4, tThen) <- inferType env eThen
+     (s4, tThen, eThen') <- inferType env eThen
      applySubstInfer s4
-     (s5, tElse) <- inferType env eElse
+     (s5, tElse, eElse') <- inferType env eElse
      s6 <- unify tThen tElse
      let s' = s6 `composeSubst` s5 `composeSubst` s4 `composeSubst` s3
      applySubstInfer s'
-     return (s', tThen)      
-inferType' env (EProp _ eObj propName) =
-  do (s1, tObj) <- inferType env eObj
+     return (s', tThen, EIfThenElse (a, tThen) ePred' eThen' eElse')      
+inferType' env (EProp a eObj propName) =
+  do (s1, tObj, eObj') <- inferType env eObj
      rowVar <- fresh
      propVar <- fresh
      s2 <- unify tObj $ TRow $ TRowProp propName (TBody $ TVar propVar) $ TRowEnd (Just rowVar)
      let s3 = s2 `composeSubst` s1
+         t = applySubst s3 (TBody $ TVar propVar)
      applySubstInfer s3
-     return (s3, applySubst s3 (TBody $ TVar propVar))
+     return (s3, t, EProp (a,t) eObj' propName)
      
 unifyAllInstances :: TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances s tvs = do
@@ -638,15 +655,15 @@ unifyAllInstances s tvs = do
   let unifyAll' s' equivs = unifyAll s' . trace' "equivalence:" $ Set.toList equivs
   trace' "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
-defragTVarNames :: Type TBody -> Type TBody
-defragTVarNames t = mapVarNames f t
+minifyVars :: Type TBody -> Type TBody
+minifyVars t = mapVarNames f t
     where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
           f n = maybe n id $ Map.lookup n vars
          
-typeInference :: TypeEnv -> Exp a -> Infer (Type TBody)
+typeInference :: TypeEnv -> Exp a -> Infer (Exp (a, Type TBody))
 typeInference env e = do
-  (s, t) <- inferType env e 
-  return . defragTVarNames $ applySubst s t
+  (s, t, e') <- inferType env e 
+  return e'
 
 ----------------------------------------------------------------------
 
@@ -831,7 +848,7 @@ test e = pretty $ runTypeInference e
 --       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
 
 
-runTypeInference :: Exp a -> Either String (Type TBody)
+runTypeInference :: Exp a -> Either String (Exp (a, Type TBody))
 runTypeInference e = runInfer $ typeInference Map.empty e
 
 -- Test runner

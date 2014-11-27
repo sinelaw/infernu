@@ -87,18 +87,17 @@ fromProp (ES3.PropNum _ x) = show x
 
 -- -- ------------------------------------------------------------------------
 
-parseFile :: String -> IO (Either String (Type TBody))
+parseFile :: String -> IO (Either String [(ES3.SourcePos, (Type TBody))])
 parseFile arg = do
   js <- ES3Parser.parseFromFile arg 
-  --putStrLn . show $ js
   let src (ES3.Script a _) = a
-  let emptySrcPos = src js -- hack
-  let expr = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
-  --putStrLn "--"
-  print expr
-  putStrLn . pretty $ expr
-  putStrLn . pretty $ test expr
-  return $ runTypeInference expr
+      emptySrcPos = src js -- hack
+      expr = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
+      expr' = runTypeInference expr
+      res = fmap getAnnotations expr'
+  putStrLn $ pretty expr'
+  putStrLn . show $ fmap (fmap (\(a,t) -> (a, pretty . minifyVars $ t))) res
+  return res
                            
 
 -- ex :: Body (Expr ()) -> Expr ()
