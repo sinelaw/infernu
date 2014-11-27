@@ -319,7 +319,7 @@ getVarScheme n env = case getVarId n env of
 
 setVarScheme :: EVarName -> VarId -> TScheme -> Infer ()
 setVarScheme n varId scheme = do
-  modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ show n ++ ": " ++ pretty scheme) . Map.insert varId scheme $ varSchemes is }
+  modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ show n ++ ": " ++ show scheme) . Map.insert varId scheme $ varSchemes is }
   return ()
 
 addVarScheme :: EVarName -> TypeEnv -> TScheme -> Infer TypeEnv
@@ -389,7 +389,7 @@ instantiateVar :: EVarName -> TypeEnv -> Infer (Type TBody)
 instantiateVar n env = do
   varId <- getVarId n env `failWith` throwError ("Unbound variable: '" ++ show n ++ "'")
   scheme <- getVarSchemeByVarId varId `failWithM` throwError ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
-  trace' ("Instantiated var '" ++ show n ++ "' with scheme: " ++ pretty scheme ++ " to") <$> instantiate scheme
+  trace' ("Instantiated var '" ++ show n ++ "' with scheme: " ++ show scheme ++ " to") <$> instantiate scheme
 
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
@@ -565,16 +565,17 @@ inferType' env (ELet _ n e1 e2) =
   do recType <- TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
      (s1, t1) <- inferType recEnv e1
-     applySubstInfer s1
      s1rec <- unify t1 recType
-     applySubstInfer s1rec
+     let s1' = s1rec `composeSubst` s1
+     applySubstInfer s1'
      let generalizeScheme = trace' ("let generalized '" ++ show n ++ "' --") <$> generalize env t1
      t' <- if isExpansive e1
-           then return $ TScheme [] t1
+           then return $ TScheme [] $ applySubst s1' t1
            else generalizeScheme
      env' <- addVarScheme n env t'
      (s2, t2) <- inferType env' e2
-     return (s2 `composeSubst` (s1rec `composeSubst` s1), applySubst s2 t2)
+     applySubstInfer s2
+     return (s2 `composeSubst` s1', applySubst s2 t2)
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign _ n expr1 expr2) =
@@ -596,6 +597,7 @@ inferType' env (EArray _ exprs) =
      let tv = TBody $ TVar tvName
      (subst, types) <- accumInfer env exprs
      subst' <- unifyl subst $ zip (tv:types) types
+     applySubstInfer subst'
      return (subst', TCons TArray [applySubst subst' $ TBody $ TVar tvName])
 inferType' env (ETuple _ exprs) =
   do (subst, types) <- accumInfer env exprs
@@ -603,7 +605,9 @@ inferType' env (ETuple _ exprs) =
 inferType' env (ERow _ propExprs) =
   do (s,ts) <- accumInfer env $ map snd propExprs
      applySubstInfer s
-     return (s, (TRow $ foldr (\(n,t) r -> TRowProp n t r) (TRowEnd Nothing) $ zip (map fst propExprs) (reverse ts)))
+     let propNamesTypes = zip (map fst propExprs) (reverse ts)
+         rowType = TRow $ foldr (\(n,t) r -> TRowProp n t r) (TRowEnd Nothing) propNamesTypes
+     return (s, applySubst s rowType)
 inferType' env (EIfThenElse _ ePred eThen eElse) =
   do (s1,tp) <- inferType env ePred
      s2 <- unify (TBody TBoolean) tp
@@ -614,6 +618,7 @@ inferType' env (EIfThenElse _ ePred eThen eElse) =
      (s5, tElse) <- inferType env eElse
      s6 <- unify tThen tElse
      let s' = s6 `composeSubst` s5 `composeSubst` s4 `composeSubst` s3
+     applySubstInfer s'
      return (s', tThen)      
 inferType' env (EProp _ eObj propName) =
   do (s1, tObj) <- inferType env eObj
