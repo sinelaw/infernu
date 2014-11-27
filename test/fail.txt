@@ -1,4 +1,3 @@
-FAIL  y valid/getid.js
 ERROR y valid/map.js
 FAIL  y valid/objlit-func.js
 FAIL  y valid/promise.js
