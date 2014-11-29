@@ -432,30 +432,30 @@ generalize tenv t = do
 
 ----------------------------------------------------------------------
 
-unify :: Type TBody -> Type TBody -> Infer TSubst
-unify t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' t1 t2
+unify :: Show a => a -> Type TBody -> Type TBody -> Infer TSubst
+unify a t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' a t1 t2
 
-unificationError :: (Pretty x, Pretty y) => x -> y -> Infer a
-unificationError x y = throwError $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
+unificationError :: (Show a, Pretty x, Pretty y) => a -> x -> y -> Infer b
+unificationError pos x y = throwError $ "At: " ++ show pos ++ " could not unify: " ++ pretty x ++ " with " ++ pretty y
                        
-unify' :: Type TBody -> Type TBody -> Infer TSubst
-unify' (TBody (TVar n)) t = varBind n t
-unify' t (TBody (TVar n)) = varBind n t
-unify' (TBody x) (TBody y) = if x == y
+unify' :: Show a => a -> Type TBody -> Type TBody -> Infer TSubst
+unify' _ (TBody (TVar n)) t = varBind n t
+unify' _ t (TBody (TVar n)) = varBind n t
+unify' a (TBody x) (TBody y) = if x == y
                              then return nullSubst
-                             else unificationError x y
-unify' t1@(TBody _) t2@(TCons _ _) = unificationError t1 t2
-unify' t1@(TCons _ _) t2@(TBody _) = unify' t2 t1
-unify' (TCons n1 ts1) (TCons n2 ts2) =
+                             else unificationError a x y
+unify' a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
+unify' a t1@(TCons _ _) t2@(TBody _) = unify' a t2 t1
+unify' a (TCons n1 ts1) (TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
-    then unifyl nullSubst $ zip ts1 ts2
-    else throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
-unify' t1@(TRow _)    t2@(TCons _ _) = unificationError t1 t2
-unify' t1@(TRow _)    t2@(TBody _)   = unificationError t1 t2
-unify' t1@(TCons _ _) t2@(TRow _)    = unificationError t1 t2
-unify' t1@(TBody _)   t2@(TRow _)    = unificationError t1 t2
+    then unifyl a nullSubst $ zip ts1 ts2
+    else unificationError a n1 n2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
+unify' a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
+unify' a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
+unify' a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
+unify' a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
 -- TODO: un-hackify!
-unify' t1@(TRow row1) t2@(TRow row2) =
+unify' a t1@(TRow row1) t2@(TRow row2) =
     do let (m2, r2) = flattenRow row2
            names2 = Set.fromList $ Map.keys m2
            (m1, r1) = flattenRow row1
@@ -465,31 +465,31 @@ unify' t1@(TRow row1) t2@(TRow row2) =
            namesToTypes m = mapMaybe (flip Map.lookup m)
            commonTypes :: [(Type TBody, Type TBody)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
-       s1 <- unifyl nullSubst commonTypes
+       s1 <- unifyl a nullSubst commonTypes
        r <- fresh
-       s2 <- unifyRows r s1 (t1, names1, m1) (t2, names2, r2)
-       s3 <- unifyRows r s2 (t2, names2, m2) (t1, names1, r1)
+       s2 <- unifyRows a r s1 (t1, names1, m1) (t2, names2, r2)
+       s3 <- unifyRows a r s2 (t2, names2, m2) (t1, names1, r1)
        return $ s3 `composeSubst` s2 `composeSubst` s1
 
-unifyRows :: (Pretty y, Pretty x) => TVarName -> TSubst
+unifyRows :: (Show a, Pretty y, Pretty x) => a -> TVarName -> TSubst
                -> (x, Set.Set EPropName, Map.Map EPropName (Type TBody))
                -> (y, Set.Set EPropName, Maybe TVarName)
                -> Infer TSubst              
-unifyRows r s1 (t1, names1, m1) (t2, names2, r2) =
+unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
            in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
            
        case r2 of
          Nothing -> if Set.null in1NotIn2
                     then return nullSubst
-                    else unificationError t1 t2
-         Just r2' -> unify (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
+                    else unificationError a t1 t2
+         Just r2' -> unify a (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
                                     
 -- | Unifies pairs of types, accumulating the substs
-unifyl :: TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
-unifyl = foldM unifyl'
+unifyl :: Show a => a -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
+unifyl a = foldM unifyl'
     where unifyl' s (x, y) = do
-            s' <- unify' (applySubst s x) (applySubst s y)
+            s' <- unify' a (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
 
 
@@ -507,8 +507,8 @@ dropLast [] = []
 dropLast [_] = []
 dropLast (x:xs) = x : dropLast xs
 
-unifyAll :: TSubst -> [Type TBody] -> Infer TSubst
-unifyAll s ts = unifyl s $ zip (dropLast ts) (drop 1 ts)
+unifyAll :: Show a => a -> TSubst -> [Type TBody] -> Infer TSubst
+unifyAll a s ts = unifyl a s $ zip (dropLast ts) (drop 1 ts)
 
 
 isExpansive :: Exp a -> Bool
@@ -527,21 +527,21 @@ isExpansive (EProp _ expr _)  = isExpansive expr
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp a] -> Infer (TSubst, [(Type TBody, Exp (a, Type TBody))])
+accumInfer :: Show a => TypeEnv -> [Exp a] -> Infer (TSubst, [(Type TBody, Exp (a, Type TBody))])
 accumInfer env = foldM accumInfer' (nullSubst, [])
     where accumInfer' (subst, types) expr = do
             (subst', t, e) <- inferType env expr
             applySubstInfer subst'
             return (subst' `composeSubst` subst, (t,e):types)
 
-inferType  :: TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
+inferType  :: Show a => TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
 inferType env expr = do
   (s, t, e) <- inferType' env expr
   state <- get
   let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n\t" ++ show state ++ "\n\t Environment: " ++ show env ++ "\n----------"
   return . tr $ (s, t, e)
 
-inferType' :: TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
+inferType' :: Show a => TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
 inferType' _ (ELit a lit) = do
   let t = TBody $ case lit of
                     LitNumber _ -> TNumber
@@ -568,7 +568,7 @@ inferType' env (EApp a e1 e2) =
      applySubstInfer s1
      (s2, t2, e2') <- inferType env e2
      applySubstInfer s2
-     s3 <- trace' "\\ unified app" <$> unify (applySubst s2 t1) (TCons TFunc [t2, tvar])
+     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2 t1) (TCons TFunc [t2, tvar])
      applySubstInfer s3
      let t = applySubst s3 tvar
      return (s3 `composeSubst` s2 `composeSubst` s1, t, EApp (a, t) e1' e2')
@@ -576,7 +576,7 @@ inferType' env (ELet a n e1 e2) =
   do recType <- TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
      (s1, t1, e1') <- inferType recEnv e1
-     s1rec <- unify t1 recType
+     s1rec <- unify a t1 recType
      let s1' = s1rec `composeSubst` s1
      applySubstInfer s1'
      let generalizeScheme = trace' ("let generalized '" ++ show n ++ "' --") <$> generalize env t1
@@ -597,9 +597,9 @@ inferType' env (EAssign a n expr1 expr2) =
      lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
      (s1, rvalueT, expr1') <- inferType env expr1
-     s2 <- unify rvalueT (applySubst s1 lvalueT)
+     s2 <- unify a rvalueT (applySubst s1 lvalueT)
      let s3 = s2 `composeSubst` s1
-     s4 <- unifyAllInstances s3 $ getQuantificands lvalueScheme
+     s4 <- unifyAllInstances a s3 $ getQuantificands lvalueScheme
      applySubstInfer s4
      (s5, tRest, expr2') <- inferType env expr2
      return (s5 `composeSubst` s4, tRest, EAssign (a, tRest) n expr1' expr2')
@@ -609,7 +609,7 @@ inferType' env (EArray a exprs) =
      let tv = TBody $ TVar tvName
      (subst, te) <- accumInfer env exprs
      let types = map fst te
-     subst' <- unifyl subst $ zip (tv:types) types
+     subst' <- unifyl a subst $ zip (tv:types) types
      applySubstInfer subst'
      let t = TCons TArray [applySubst subst' $ TBody $ TVar tvName]
      return (subst', t, EArray (a,t) $ map snd te)
@@ -626,13 +626,13 @@ inferType' env (ERow a propExprs) =
      return (s, t, ERow (a,t) $ zip (map fst propExprs) (map snd te))
 inferType' env (EIfThenElse a ePred eThen eElse) =
   do (s1, tp, ePred') <- inferType env ePred
-     s2 <- unify (TBody TBoolean) tp
+     s2 <- unify a (TBody TBoolean) tp
      let s3 = s2 `composeSubst` s1
      applySubstInfer s3
      (s4, tThen, eThen') <- inferType env eThen
      applySubstInfer s4
      (s5, tElse, eElse') <- inferType env eElse
-     s6 <- unify tThen tElse
+     s6 <- unify a tThen tElse
      let s' = s6 `composeSubst` s5 `composeSubst` s4 `composeSubst` s3
      applySubstInfer s'
      return (s', tThen, EIfThenElse (a, tThen) ePred' eThen' eElse')      
@@ -640,19 +640,19 @@ inferType' env (EProp a eObj propName) =
   do (s1, tObj, eObj') <- inferType env eObj
      rowVar <- fresh
      propVar <- fresh
-     s2 <- unify tObj $ TRow $ TRowProp propName (TBody $ TVar propVar) $ TRowEnd (Just rowVar)
+     s2 <- unify a tObj $ TRow $ TRowProp propName (TBody $ TVar propVar) $ TRowEnd (Just rowVar)
      let s3 = s2 `composeSubst` s1
          t = applySubst s3 (TBody $ TVar propVar)
      applySubstInfer s3
      return (s3, t, EProp (a,t) eObj' propName)
      
-unifyAllInstances :: TSubst -> [TVarName] -> Infer TSubst
-unifyAllInstances s tvs = do
+unifyAllInstances :: Show a => a -> TSubst -> [TVarName] -> Infer TSubst
+unifyAllInstances a s tvs = do
   m <- varInstances <$> get
   let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
 
   -- TODO suboptimal - some of the sets may be identical
-  let unifyAll' s' equivs = unifyAll s' . trace' "equivalence:" $ Set.toList equivs
+  let unifyAll' s' equivs = unifyAll a s' . trace' "equivalence:" $ Set.toList equivs
   trace' "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
 minifyVars :: Type TBody -> Type TBody
@@ -660,7 +660,7 @@ minifyVars t = mapVarNames f t
     where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
           f n = maybe n id $ Map.lookup n vars
          
-typeInference :: TypeEnv -> Exp a -> Infer (Exp (a, Type TBody))
+typeInference :: Show a => TypeEnv -> Exp a -> Infer (Exp (a, Type TBody))
 typeInference env e = do
   (s, t, e') <- inferType env e 
   return e'
@@ -840,7 +840,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 --
 -- >>> test $ ELet () "x" (EAbs () "a" (EVar () "a")) (ELet () "getX" (EAbs () "v" (EVar () "x")) (ELet () "setX" (EAbs () "v" (ELet () "_" (EAssign () "x" (EVar () "v") (EVar () "x")) (ELit () (LitBoolean True)))) (ELet () "_" (EApp () (EVar () "setX") (EAbs () "a" (ELit () (LitString "a")))) (EVar () "getX"))))
 -- "(a -> (TString -> TString))"
-test :: Exp a -> String
+test :: Show a => Exp a -> String
 test e = pretty $ runTypeInference e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
@@ -848,7 +848,7 @@ test e = pretty $ runTypeInference e
 --       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
 
 
-runTypeInference :: Exp a -> Either String (Exp (a, Type TBody))
+runTypeInference :: Show a => Exp a -> Either String (Exp (a, Type TBody))
 runTypeInference e = runInfer $ typeInference Map.empty e
 
 -- Test runner

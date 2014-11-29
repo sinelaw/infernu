@@ -110,16 +110,17 @@ parseFile arg = do
       expr' = runTypeInference expr
       res = fmap getAnnotations expr'
       prettyRes = fmap (Set.toList . Set.fromList . fmap (\(a,t) -> (a, pretty $ t))) res
+  print js
   sourceCode <- lines <$> readFile arg
   let annotatedSource = case prettyRes of
-                          Left _ -> ""
+                          Left e -> e
                           Right xs -> unlines $ zipByPos xs indexedSource
                               where --indexedSource :: [(Int, [(Int, Char)])]
                                     indexedSource = indexList sourceCode
                                     --indexedAnno :: [(Int, [(Int, Char)])]
                                     --indexedAnno = (map (\(s,t) -> (Pos.sourceLine s, t)) xs)
   putStrLn $ annotatedSource
-  -- putStrLn $ pretty expr'
+  putStrLn $ pretty expr
   -- putStrLn . show $ prettyRes
   return res
                            
