@@ -119,7 +119,8 @@ data Type t = TBody t
 type TSubst = Map.Map TVarName (Type TBody)
 
 data TypeError = TypeError { source :: SourcePos, message :: String }
-
+               deriving (Show, Eq, Ord)
+                        
 ----------------------------------------------------------------------
 
 class VarNames a where

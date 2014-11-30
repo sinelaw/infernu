@@ -1,5 +1,4 @@
 ERROR y valid/map.js
-// FAIL y valid/objlit-func.js
-// FAIL y valid/promise.js
-// FAIL y valid/prop_access.js
-// FAIL n invalid/var-recursive-nonfunc.js
+// FAIL valid/objlit-func.js:2:24: Error: Occurs check failed: j in ({doStuff: (c -> j), ...} -> i) y valid/objlit-func.js
+ERROR y valid/promise.js
+// FAIL  n invalid/var-recursive-nonfunc.js
