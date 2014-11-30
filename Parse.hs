@@ -26,6 +26,7 @@ foldStmts [] k = k
 foldStmts [x] k = fromStatement x k
 foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
 
+
 fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
@@ -105,7 +106,7 @@ zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
 indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
 
-parseFile :: String -> IO (Either String [(ES3.SourcePos, Type TBody)])
+parseFile :: String -> IO (Either TypeError [(ES3.SourcePos, Type TBody)])
 parseFile arg = do
   js <- ES3Parser.parseFromFile arg
   let src (ES3.Script a _) = a
@@ -114,17 +115,17 @@ parseFile arg = do
       expr' = runTypeInference expr
       res = fmap getAnnotations expr'
       prettyRes = fmap (Set.toList . Set.fromList . fmap (second pretty)) res
-  print js
+  --print js
   sourceCode <- lines <$> readFile arg
   let annotatedSource = case prettyRes of
-                          Left e -> e
+                          Left e -> pretty e
                           Right xs -> unlines $ zipByPos xs indexedSource
                               where --indexedSource :: [(Int, [(Int, Char)])]
                                     indexedSource = indexList sourceCode
                                     --indexedAnno :: [(Int, [(Int, Char)])]
                                     --indexedAnno = (map (\(s,t) -> (Pos.sourceLine s, t)) xs)
   putStrLn annotatedSource
-  putStrLn $ pretty expr
+  --putStrLn $ pretty expr
   -- putStrLn . show $ prettyRes
   return res
 

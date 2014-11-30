@@ -21,6 +21,7 @@ module Infer
     , pretty
     , getAnnotations
     , minifyVars
+    , TypeError
     )
     where
 
@@ -40,7 +41,7 @@ import           Data.List                  (intercalate)
 import qualified Data.Map.Lazy              as Map
 import           Data.Maybe                 (fromMaybe, mapMaybe)
 import qualified Data.Set                   as Set
-
+import           Text.Parsec.Pos            (SourcePos(..), sourceName, sourceLine, sourceColumn)
 import           Prelude                    hiding (foldr)
 
 -- import           Test.QuickCheck(choose)
@@ -116,6 +117,8 @@ data Type t = TBody t
               deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
 
 type TSubst = Map.Map TVarName (Type TBody)
+
+data TypeError = TypeError { source :: SourcePos, message :: String }
 
 ----------------------------------------------------------------------
 
@@ -292,12 +295,12 @@ instance Types InferState where
     applySubst s is = is { varSchemes = applySubst s (varSchemes is) }
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
-type Infer a = StateT InferState (EitherT String Identity) a
+type Infer a = StateT InferState (EitherT TypeError Identity) a
 
-runInferWith :: InferState -> Infer a -> Either String a
+runInferWith :: InferState -> Infer a -> Either TypeError a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
-runInfer :: Infer a -> Either String a
+runInfer :: Infer a -> Either TypeError a
 runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty }
 
 fresh :: Infer TVarName
@@ -305,8 +308,8 @@ fresh = do
   modify $ \is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } }
   lastName . nameSource <$> get
 
-throwError :: String -> Infer a
-throwError = lift . left
+throwError :: SourcePos -> String -> Infer a
+throwError p s = lift . left $ TypeError p s
 
 failWith :: Maybe a -> Infer a -> Infer a
 failWith action err = case action of
@@ -321,9 +324,9 @@ failWithM action err = do
 getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
 
-getVarScheme :: EVarName -> TypeEnv -> Infer (Maybe TScheme)
-getVarScheme n env = case getVarId n env of
-                       Nothing -> throwError $ "Unbound variable: '" ++ show n ++ "'"
+getVarScheme :: SourcePos -> EVarName -> TypeEnv -> Infer (Maybe TScheme)
+getVarScheme a n env = case getVarId n env of
+                       Nothing -> throwError a $ "Unbound variable: '" ++ show n ++ "'"
                        Just varId -> getVarSchemeByVarId varId
 
 setVarScheme :: EVarName -> VarId -> TScheme -> Infer ()
@@ -394,10 +397,10 @@ instantiate (TScheme tvarNames t) = do
 
   return $ mapVarNames replaceVar t
 
-instantiateVar :: EVarName -> TypeEnv -> Infer (Type TBody)
-instantiateVar n env = do
-  varId <- getVarId n env `failWith` throwError ("Unbound variable: '" ++ show n ++ "'")
-  scheme <- getVarSchemeByVarId varId `failWithM` throwError ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
+instantiateVar :: SourcePos -> EVarName -> TypeEnv -> Infer (Type TBody)
+instantiateVar a n env = do
+  varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
+  scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
   trace' ("Instantiated var '" ++ show n ++ "' with scheme: " ++ show scheme ++ " to") <$> instantiate scheme
 
 ----------------------------------------------------------------------
@@ -435,15 +438,15 @@ generalize tenv t = do
 
 ----------------------------------------------------------------------
 
-unify :: Show a => a -> Type TBody -> Type TBody -> Infer TSubst
+unify :: SourcePos -> Type TBody -> Type TBody -> Infer TSubst
 unify a t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' a t1 t2
 
-unificationError :: (Show a, Pretty x, Pretty y) => a -> x -> y -> Infer b
-unificationError pos x y = throwError $ "At: " ++ show pos ++ " could not unify: " ++ pretty x ++ " with " ++ pretty y
+unificationError :: (Pretty x, Pretty y) => SourcePos -> x -> y -> Infer b
+unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
 
-unify' :: Show a => a -> Type TBody -> Type TBody -> Infer TSubst
-unify' _ (TBody (TVar n)) t = varBind n t
-unify' _ t (TBody (TVar n)) = varBind n t
+unify' :: SourcePos -> Type TBody -> Type TBody -> Infer TSubst
+unify' a (TBody (TVar n)) t = varBind a n t
+unify' a t (TBody (TVar n)) = varBind a n t
 unify' a (TBody x) (TBody y) = if x == y
                              then return nullSubst
                              else unificationError a x y
@@ -474,7 +477,7 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
        s3 <- unifyRows a r s2 (t2, names2, m2) (t1, names1, r1)
        return $ s3 `composeSubst` s2 `composeSubst` s1
 
-unifyRows :: (Show a, Pretty y, Pretty x) => a -> TVarName -> TSubst
+unifyRows :: (Pretty y, Pretty x) => SourcePos -> TVarName -> TSubst
                -> (x, Set.Set EPropName, Map.Map EPropName (Type TBody))
                -> (y, Set.Set EPropName, Maybe TVarName)
                -> Infer TSubst
@@ -489,17 +492,17 @@ unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
          Just r2' -> unify a (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
 
 -- | Unifies pairs of types, accumulating the substs
-unifyl :: Show a => a -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
+unifyl :: SourcePos -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
 unifyl a = foldM unifyl'
     where unifyl' s (x, y) = do
             s' <- unify' a (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
 
 
-varBind :: TVarName -> Type TBody -> Infer TSubst
-varBind n t | t == TBody (TVar n) = return nullSubst
-            | n `Set.member` freeTypeVars t = throwError $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
-            | otherwise = return $ singletonSubst n t
+varBind :: SourcePos -> TVarName -> Type TBody -> Infer TSubst
+varBind a n t | t == TBody (TVar n) = return nullSubst
+              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
+              | otherwise = return $ singletonSubst n t
 
 
 -- | Drops the last element of a list. Does not entail an O(n) price.
@@ -510,7 +513,7 @@ dropLast [] = []
 dropLast [_] = []
 dropLast (x:xs) = x : dropLast xs
 
-unifyAll :: Show a => a -> TSubst -> [Type TBody] -> Infer TSubst
+unifyAll :: SourcePos -> TSubst -> [Type TBody] -> Infer TSubst
 unifyAll a s ts = unifyl a s $ zip (dropLast ts) (drop 1 ts)
 
 
@@ -531,21 +534,21 @@ isExpansive (EProp _ expr _)  = isExpansive expr
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: Show a => TypeEnv -> [Exp a] -> Infer (TSubst, [(Type TBody, Exp (a, Type TBody))])
+accumInfer :: TypeEnv -> [Exp SourcePos] -> Infer (TSubst, [(Type TBody, Exp (SourcePos, Type TBody))])
 accumInfer env = foldM accumInfer' (nullSubst, [])
     where accumInfer' (subst, types) expr = do
             (subst', t, e) <- inferType env expr
             applySubstInfer subst'
             return (subst' `composeSubst` subst, (t,e):types)
 
-inferType  :: Show a => TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
+inferType  :: TypeEnv -> Exp SourcePos -> Infer (TSubst, Type TBody, Exp (SourcePos, Type TBody))
 inferType env expr = do
   (s, t, e) <- inferType' env expr
   state <- get
   let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n\t" ++ show state ++ "\n\t Environment: " ++ show env ++ "\n----------"
   return . tr $ (s, t, e)
 
-inferType' :: Show a => TypeEnv -> Exp a -> Infer (TSubst, Type TBody, Exp (a, Type TBody))
+inferType' :: TypeEnv -> Exp SourcePos -> Infer (TSubst, Type TBody, Exp (SourcePos, Type TBody))
 inferType' _ (ELit a lit) = do
   let t = TBody $ case lit of
                     LitNumber _ -> TNumber
@@ -556,7 +559,7 @@ inferType' _ (ELit a lit) = do
                     LitNull -> TNull
   return (nullSubst, t, ELit (a,t) lit)
 inferType' env (EVar a n) = do
-  t <- instantiateVar n env
+  t <- instantiateVar a n env
   return (nullSubst, t, EVar (a, t) n)
 inferType' env (EAbs a argName e2) =
   do tvarName <- fresh
@@ -595,8 +598,8 @@ inferType' env (ELet a n e1 e2) =
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign a n expr1 expr2) =
-  do varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
-     lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
+  do varId <- getVarId n env `failWith` throwError a ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
+     lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
      let ungeneralizedScheme = ungeneralize lvalueScheme
      lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
@@ -660,7 +663,7 @@ inferType' env (EProp a eObj propName) =
      applySubstInfer s3
      return (s3, t, EProp (a,t) eObj' propName)
 
-unifyAllInstances :: Show a => a -> TSubst -> [TVarName] -> Infer TSubst
+unifyAllInstances :: SourcePos -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
   m <- varInstances <$> get
   let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
@@ -674,7 +677,7 @@ minifyVars t = mapVarNames f t
     where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
           f n = maybe n id $ Map.lookup n vars
 
-typeInference :: Show a => TypeEnv -> Exp a -> Infer (Exp (a, Type TBody))
+typeInference :: TypeEnv -> Exp SourcePos -> Infer (Exp (SourcePos, Type TBody))
 typeInference env e = do
   (_s, _t, e') <- inferType env e
   return e'
@@ -751,6 +754,9 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
     prettyTab n (Left x) = "Error: " ++ prettyTab n x
     prettyTab n (Right x) = prettyTab n x
 
+instance Pretty TypeError where
+  prettyTab _ (TypeError p s) = sourceName p ++ ":" ++ (show $ sourceLine p) ++ ":" ++ (show $ sourceColumn p) ++ ": Error: " ++ s
+  
 ----------------------------------------------------------------------
 --
 -- | Mutable variable being assigned incompatible types:
@@ -855,7 +861,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 --
 -- >>> test $ ELet () "x" (EAbs () "a" (EVar () "a")) (ELet () "getX" (EAbs () "v" (EVar () "x")) (ELet () "setX" (EAbs () "v" (ELet () "_" (EAssign () "x" (EVar () "v") (EVar () "x")) (ELit () (LitBoolean True)))) (ELet () "_" (EApp () (EVar () "setX") (EAbs () "a" (ELit () (LitString "a")))) (EVar () "getX"))))
 -- "(a -> (TString -> TString))"
-test :: Show a => Exp a -> String
+test :: Exp SourcePos -> String
 test e = pretty $ runTypeInference e
          --in pretty e ++ " :: " ++ pretty t ++ "\n"
 --     case res of
@@ -863,7 +869,7 @@ test e = pretty $ runTypeInference e
 --       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
 
 
-runTypeInference :: Show a => Exp a -> Either String (Exp (a, Type TBody))
+runTypeInference :: Exp SourcePos -> Either TypeError (Exp (SourcePos, Type TBody))
 runTypeInference e = runInfer $ typeInference Map.empty e
 
 -- Test runner
