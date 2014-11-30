@@ -1,9 +1,8 @@
-module Parse where
+module Parse
+       (translate, zipByPos, indexList)
+       where
 
-import           Control.Arrow                    (second, (***))
-import           Data.Functor                     ((<$>))
-import qualified Data.Set                         as Set
-import qualified Language.ECMAScript3.Parser      as ES3Parser
+import           Control.Arrow                    ((***))
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
 import qualified Text.Parsec.Pos                  as Pos
@@ -106,28 +105,10 @@ zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
 indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
 
-parseFile :: String -> IO (Either TypeError [(ES3.SourcePos, Type TBody)])
-parseFile arg = do
-  js <- ES3Parser.parseFromFile arg
-  let src (ES3.Script a _) = a
-      emptySrcPos = src js -- hack
-      expr = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
-      expr' = runTypeInference expr
-      res = fmap getAnnotations expr'
-      prettyRes = fmap (Set.toList . Set.fromList . fmap (second pretty)) res
-  --print js
-  sourceCode <- lines <$> readFile arg
-  let annotatedSource = case prettyRes of
-                          Left e -> pretty e
-                          Right xs -> unlines $ zipByPos xs indexedSource
-                              where --indexedSource :: [(Int, [(Int, Char)])]
-                                    indexedSource = indexList sourceCode
-                                    --indexedAnno :: [(Int, [(Int, Char)])]
-                                    --indexedAnno = (map (\(s,t) -> (Pos.sourceLine s, t)) xs)
-  putStrLn annotatedSource
-  --putStrLn $ pretty expr
-  -- putStrLn . show $ prettyRes
-  return res
+translate :: Show a => ES3.JavaScript a -> Exp a
+translate js = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
+  where emptySrcPos = src js -- hack
+        src (ES3.Script a _) = a
 
 
 -- ex :: Body (Expr ()) -> Expr ()
