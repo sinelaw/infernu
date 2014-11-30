@@ -1,6 +1,6 @@
 module Parse where
 
-import           Control.Arrow                    ((***), second)
+import           Control.Arrow                    (second, (***))
 import           Data.Functor                     ((<$>))
 import qualified Data.Set                         as Set
 import qualified Language.ECMAScript3.Parser      as ES3Parser
@@ -70,10 +70,12 @@ fromExpression (ES3.CallExpr z expr argExprs) = chainApp (thisArg : argExprs)
                       ES3.DotRef _ objExpr _ -> objExpr
                       _ -> ES3.NullLit z -- TODO should be 'undefined'
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
+fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LDot _ objExpr name) expr) = EPropAssign z objExpr' name (fromExpression expr) (EProp z objExpr' name)
+  where objExpr' = fromExpression objExpr
 fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ "this" : map ES3.unId argNames
-    where chainAbs [] = EAbs z poo (foldStmts stmts $ empty z)
-          chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
-          chainAbs (x:xs) = EAbs z x (chainAbs xs)
+  where chainAbs [] = EAbs z poo (foldStmts stmts $ empty z)
+        chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
+        chainAbs (x:xs) = EAbs z x (chainAbs xs)
 --           where funcBody = Block $ map fromStatement stmts
 fromExpression (ES3.ListExpr z exprs) =
     case exprs of

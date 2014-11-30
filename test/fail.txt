@@ -2,6 +2,4 @@ ERROR y valid/map.js
 // FAIL y valid/objlit-func.js
 // FAIL y valid/promise.js
 // FAIL y valid/prop_access.js
-ERROR y valid/test.js
-ERROR n invalid/blo2.js
 // FAIL n invalid/var-recursive-nonfunc.js

@@ -86,6 +86,7 @@ data Exp a = EVar a EVarName
            | ELet a EVarName (Exp a) (Exp a)
            | ELit a LitVal
            | EAssign a EVarName (Exp a) (Exp a)
+           | EPropAssign a (Exp a) EPropName (Exp a) (Exp a)
            | EArray a [Exp a]
            | ETuple a [Exp a]
            | ERow a [(EPropName, Exp a)]
@@ -517,6 +518,7 @@ isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = True
 isExpansive (EApp _ _ _)      = True
 isExpansive (EAssign _ _ _ _) = True
+isExpansive (EPropAssign _ _ _ _ _) = True
 isExpansive (ELet _ _ _ _)    = True
 isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
@@ -605,7 +607,17 @@ inferType' env (EAssign a n expr1 expr2) =
      applySubstInfer s4
      (s5, tRest, expr2') <- inferType env expr2
      return (s5 `composeSubst` s4, tRest, EAssign (a, tRest) n expr1' expr2')
-
+inferType' env (EPropAssign a objExpr n expr1 expr2) =
+  do (s1, objT, objExpr') <- inferType env objExpr
+     applySubstInfer s1
+     (s2, rvalueT, expr1') <- inferType env expr1
+     applySubstInfer s2
+     rowVar <- fresh
+     s3 <- unify a objT $ TRow $ TRowProp n rvalueT $ TRowEnd (Just rowVar)
+     applySubstInfer s3
+     (s4, expr2T, expr2') <- inferType env expr2
+     let s5 = s4 `composeSubst` s3 `composeSubst` s2 `composeSubst` s1
+     return (s5, expr2T, EPropAssign (a,expr2T) objExpr' n expr1' expr2')
 inferType' env (EArray a exprs) =
   do tvName <- fresh
      let tv = TBody $ TVar tvName
@@ -697,6 +709,7 @@ instance Pretty (Exp a) where
   prettyTab t (ELet _ n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
   prettyTab t (ELit _ l) = prettyTab t l
   prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
+  prettyTab t (EPropAssign _ obj n e1 e2) = prettyTab t obj ++ "." ++ prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
   prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
   prettyTab t (ERow _ props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
