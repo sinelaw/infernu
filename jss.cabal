@@ -33,6 +33,14 @@ executable sjs-demo
   default-language:    Haskell2010
   ghc-options: -Wall
 
+executable sjs
+  main-is: Main.hs
+--  other-extensions:    DeriveGeneric
+  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec
+  --hs-source-dirs:      
+  default-language:    Haskell2010
+  ghc-options: -Wall
+
 -- executable sjs-test
 --   main-is: Main.hs
 --   other-extensions:    DeriveGeneric

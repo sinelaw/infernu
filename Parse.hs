@@ -1,11 +1,11 @@
 module Parse
-       (translate, zipByPos, indexList)
+       (translate)
        where
 
 import           Control.Arrow                    ((***))
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
-import qualified Text.Parsec.Pos                  as Pos
+import qualified Text.Parsec.Pos             as Pos
 
 import           Infer
 
@@ -93,22 +93,9 @@ fromProp (ES3.PropString _ x) = x
 fromProp (ES3.PropNum _ x) = show x
 
 -- -- ------------------------------------------------------------------------
-zipByPos :: [(ES3.SourcePos, String)] -> [(Int, String)] -> [String]
-zipByPos [] xs = map snd xs
-zipByPos _  [] = []
-zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
-                                            then ("//" ++ indentToColumn (Pos.sourceColumn pos) ++ s) : zipByPos ps xs'
-                                            else x : zipByPos ps' xs
-    where indentToColumn n = replicate (n - 3) ' '
 
-
-indexList :: [a] -> [(Int, a)]
-indexList = zip [1..]
-
-translate :: Show a => ES3.JavaScript a -> Exp a
-translate js = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
-  where emptySrcPos = src js -- hack
-        src (ES3.Script a _) = a
+translate :: [ES3.Statement Pos.SourcePos] -> Exp Pos.SourcePos
+translate js = (foldStmts $ js) (empty $ Pos.initialPos "<global>")
 
 
 -- ex :: Body (Expr ()) -> Expr ()
