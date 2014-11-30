@@ -1,10 +1,9 @@
 module Main where
 
-import Data.Functor((<$>))    
-import System.Environment(getArgs)    
-import Parse
-import Infer(pretty)
-    
+import           Data.Functor       ((<$>))
+import           Parse
+import           System.Environment (getArgs)
+
 isRight :: Either a b -> Bool
 isRight (Right _) = True
 isRight _ = False
@@ -12,11 +11,11 @@ isRight _ = False
 main :: IO ()
 main = do
   args <- getArgs
-  let (shouldPass:fileName:[]) = args
-  res <- fmap (head . reverse) <$> parseFile fileName
+  let [shouldPass, fileName] = args
+  res <- fmap last <$> parseFile fileName
   --print $ fmap (pretty . snd) res
-  putStrLn $ "// " ++ if isRight res 
-                      then if shouldPass == "y" 
+  putStrLn $ "// " ++ if isRight res
+                      then if shouldPass == "y"
                            then "OK"
                            else "FAIL"
                       else if shouldPass == "y"

@@ -4,8 +4,8 @@
 --{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 --{-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE TupleSections     #-}
-{-# LANGUAGE CPP #-}
 
 module Infer
     (Exp(..)
@@ -23,31 +23,32 @@ module Infer
     , minifyVars
     )
     where
-    
 
-import           Control.Monad       (forM, forM_, foldM)
+
+import           Control.Monad              (foldM, forM, forM_)
 --import           Control.Monad.State (State, evalState, get, modify)
-import           Data.Functor.Identity(Identity(..), runIdentity)
-import           Control.Monad.Trans(lift)
-import           Control.Monad.Trans.State (StateT(..), evalStateT, get, modify) --, EitherT(..))
-import           Control.Monad.Trans.Either (EitherT(..), runEitherT, left)
-import           Data.Functor        ((<$>))
-import           Data.List           (intercalate)
-import qualified Data.Map.Lazy       as Map
-import           Data.Maybe          (fromMaybe, mapMaybe)
-import qualified Data.Set            as Set
-import           Data.Char           (chr, ord)
-import           Data.Foldable       (Foldable(..))
-import qualified Data.Digits         as Digits
-    
-import Prelude hiding (foldr)
-    
+import           Control.Monad.Trans        (lift)
+import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
+import           Control.Monad.Trans.State  (StateT (..), evalStateT, get,
+                                             modify)
+import           Data.Char                  (chr, ord)
+import qualified Data.Digits                as Digits
+import           Data.Foldable              (Foldable (..))
+import           Data.Functor               ((<$>))
+import           Data.Functor.Identity      (Identity (..), runIdentity)
+import           Data.List                  (intercalate)
+import qualified Data.Map.Lazy              as Map
+import           Data.Maybe                 (fromMaybe, mapMaybe)
+import qualified Data.Set                   as Set
+
+import           Prelude                    hiding (foldr)
+
 -- import           Test.QuickCheck(choose)
---import           Test.QuickCheck.All    
+--import           Test.QuickCheck.All
 -- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 -- import           Data.DeriveTH
 #if TRACE
-import Debug.Trace(trace)
+import           Debug.Trace                (trace)
 #else
 trace :: a -> b -> b
 trace _ y = y
@@ -55,7 +56,7 @@ trace _ y = y
 
 trace' :: Show a => String -> a -> a
 trace' prefix x = trace (prefix ++ " " ++ show x) x
-           
+
 ----------------------------------------------------------------------
 
 -- var x = 2;    --> let x = ref 2 in    | x :: a
@@ -99,7 +100,7 @@ type TVarName = Int
 data TBody = TVar TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
              deriving (Show, Eq, Ord)
-                       
+
 data TConsName = TFunc | TArray | TTuple
                  deriving (Show, Eq, Ord)
 
@@ -107,7 +108,7 @@ data TConsName = TFunc | TArray | TTuple
 data TRowList t = TRowProp EPropName (Type t) (TRowList t)
                 | TRowEnd (Maybe TVarName)
                   deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
-            
+
 data Type t = TBody t
             | TCons TConsName [Type t]
             | TRow (TRowList t)
@@ -120,7 +121,7 @@ type TSubst = Map.Map TVarName (Type TBody)
 class VarNames a where
     mapVarNames :: (TVarName -> TVarName) -> a -> a
 
-instance VarNames (Type TBody) where                   
+instance VarNames (Type TBody) where
     mapVarNames f (TBody (TVar x)) = TBody . TVar $ f x
     mapVarNames _ t@(TBody _) = t
     mapVarNames f (TCons c ts) = TCons c $ map (mapVarNames f) ts
@@ -130,7 +131,7 @@ instance VarNames (TRowList TBody) where
     mapVarNames f (TRowProp n t l) = TRowProp n (mapVarNames f t) (mapVarNames f l)
     mapVarNames f (TRowEnd (Just x)) = TRowEnd (Just $ f x)
     mapVarNames _ (TRowEnd Nothing) = TRowEnd Nothing
-                                      
+
 ----------------------------------------------------------------------
 
 class Types a where
@@ -141,7 +142,7 @@ class Types a where
 instance Types a => Types (Maybe a) where
   freeTypeVars = maybe Set.empty freeTypeVars
   applySubst s = fmap $ applySubst s
-      
+
 instance Types a => Types [a] where
   freeTypeVars = Set.unions . map freeTypeVars
   applySubst s = map (applySubst s)
@@ -149,11 +150,11 @@ instance Types a => Types [a] where
 instance (Ord a, Types a) => Types (Set.Set a) where
   freeTypeVars = Set.foldr Set.union Set.empty . Set.map freeTypeVars
   applySubst s = Set.map (applySubst s)
-                   
+
 instance Types a => Types (Map.Map b a) where
   freeTypeVars m = freeTypeVars . Map.elems $ m
   applySubst s = Map.map (applySubst s)
-  
+
 ----------------------------------------------------------------------
 
 instance Types (Type TBody) where
@@ -166,7 +167,7 @@ instance Types (Type TBody) where
   applySubst _ t@(TBody _) = t
   applySubst s (TCons n ts) = TCons n (applySubst s ts)
   applySubst s (TRow r) = TRow $ applySubst s r
-                          
+
 -- instance (Functor f, Foldable f, Types a) => Types (f a) where
 --   freeTypeVars = foldr (Set.union . freeTypeVars) Set.empty
 --   applySubst s = fmap (applySubst s)
@@ -182,7 +183,7 @@ flattenRow = flattenRow' (Map.empty, Nothing)
 
 unflattenRow :: Map.Map EPropName (Type t) -> Maybe TVarName -> (EPropName -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if (f n) then TRowProp n t l else l) (TRowEnd r) m
-    
+
 -- | Types instance for TRowList
 --
 -- >>> freeTypeVars (TRowProp "x" (TBody TNumber) (TRowEnd $ Just 1))
@@ -203,7 +204,7 @@ instance Types (TRowList TBody) where
                                                Just (TRow t') -> t'
                                                Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
-                              
+
 ----------------------------------------------------------------------
 
 getAnnotations :: Exp a -> [a]
@@ -217,9 +218,9 @@ data TScheme = TScheme [TVarName] (Type TBody)
 
 instance Types TScheme where
   freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
-  -- | When subsituting on a TScheme, we allow replacing quantified vars! 
+  -- | When subsituting on a TScheme, we allow replacing quantified vars!
   -- (i.e. we don't do (foldr Map.delete s qvars) $ applySubst t)
-  applySubst s (TScheme qvars t) = TScheme qvars $ applySubst s t 
+  applySubst s (TScheme qvars t) = TScheme qvars $ applySubst s t
 
 ungeneralize :: TScheme -> TScheme
 ungeneralize (TScheme _ tbody) = TScheme [] tbody
@@ -227,11 +228,11 @@ ungeneralize (TScheme _ tbody) = TScheme [] tbody
 getQuantificands :: TScheme -> [TVarName]
 getQuantificands (TScheme tvars _) = tvars
 
--- alphaEquivalent :: TScheme -> TScheme -> Bool                                   
+-- alphaEquivalent :: TScheme -> TScheme -> Bool
 -- alphaEquivalent ts1@(TScheme tvn1 _) (TScheme tvn2 t2) = ts1 == TScheme tvn1 ts2'
 --     where TScheme _ ts2' = applySubst substVarNames (TScheme [] t2)
 --           substVarNames = Map.fromList . map (\(old,new) -> (old, TBody $ TVar new)) $ zip tvn2 tvn1
-    
+
 ----------------------------------------------------------------------
 
 nullSubst :: TSubst
@@ -245,22 +246,23 @@ composeSubst new old = applySubst new old `Map.union` new
 singletonSubst :: TVarName -> Type TBody -> TSubst
 singletonSubst = Map.singleton
 
+#ifdef QUICKCHECK
 prop_composeSubst :: TSubst -> TSubst -> Type TBody -> Bool
 prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst new (applySubst old t)
-
+#endif
 ----------------------------------------------------------------------
 
 type VarId = TVarName
-                     
+
 -- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
 --
--- Note: instance of Types 
+-- Note: instance of Types
 type TypeEnv = Map.Map EVarName VarId
 
 
 getVarId :: EVarName -> TypeEnv -> Maybe VarId
 getVarId = Map.lookup
-                 
+
 -- Used internally to generate fresh type variable names
 data NameSource = NameSource { lastName :: TVarName }
                 deriving (Show, Eq)
@@ -275,19 +277,19 @@ data NameSource = NameSource { lastName :: TVarName }
 addEquivalence :: TVarName -> TVarName -> Map.Map TVarName (Set.Set (Type TBody)) -> Map.Map TVarName (Set.Set (Type TBody))
 addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
     where updatedSet = Set.insert (TBody $ TVar x) . Set.insert (TBody $ TVar y) $ Set.union (getSet x) (getSet y)
-          getSet item = fromMaybe Set.empty $ Map.lookup item m 
+          getSet item = fromMaybe Set.empty $ Map.lookup item m
 
 
-data InferState = InferState { nameSource :: NameSource
+data InferState = InferState { nameSource   :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
-                             , varSchemes :: Map.Map VarId TScheme
+                             , varSchemes   :: Map.Map VarId TScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type TBody)) }
                   deriving (Show, Eq)
 
 instance Types InferState where
     freeTypeVars = freeTypeVars . varSchemes
     applySubst s is = is { varSchemes = applySubst s (varSchemes is) }
-                      
+
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT String Identity) a
 
@@ -296,7 +298,7 @@ runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either String a
 runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty }
-                           
+
 fresh :: Infer TVarName
 fresh = do
   modify $ \is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } }
@@ -337,10 +339,10 @@ addVarScheme n env scheme = do
 addVarInstance :: TVarName -> TVarName -> Infer ()
 addVarInstance x y = modify $ \is -> is { varInstances = trace' "updated equivs" $ addEquivalence x y (varInstances is) }
 
-getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)                                                
+getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)
 getFreeTVars env = do
-  let collectFreeTVs s varId = Set.union s <$> curFreeTVs 
-          where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId 
+  let collectFreeTVs s varId = Set.union s <$> curFreeTVs
+          where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId
   foldM collectFreeTVs Set.empty (Map.elems env)
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
@@ -356,7 +358,7 @@ getFreeTVars env = do
 -- Right (fromList [(1,TScheme [0] (TCons TFunc [TBody TString,TBody (TVar 1)]))])
 --
 applySubstInfer :: TSubst -> Infer ()
-applySubstInfer s = modify $ \is -> is { 
+applySubstInfer s = modify $ \is -> is {
                       varSchemes = trace' ("Updated env map using subst: " ++ show s ++ " --> ") . applySubst s $ varSchemes is
                     , varInstances = applySubst s $ varInstances is
                     }
@@ -427,7 +429,7 @@ instantiateVar n env = do
 -- TODO add tests for monotypes
 generalize :: TypeEnv -> Type TBody -> Infer TScheme
 generalize tenv t = do
-  unboundVars <- Set.difference (freeTypeVars t) <$> getFreeTVars tenv 
+  unboundVars <- Set.difference (freeTypeVars t) <$> getFreeTVars tenv
   return $ TScheme (Set.toList unboundVars) t
 
 ----------------------------------------------------------------------
@@ -437,7 +439,7 @@ unify a t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->
 
 unificationError :: (Show a, Pretty x, Pretty y) => a -> x -> y -> Infer b
 unificationError pos x y = throwError $ "At: " ++ show pos ++ " could not unify: " ++ pretty x ++ " with " ++ pretty y
-                       
+
 unify' :: Show a => a -> Type TBody -> Type TBody -> Infer TSubst
 unify' _ (TBody (TVar n)) t = varBind n t
 unify' _ t (TBody (TVar n)) = varBind n t
@@ -474,17 +476,17 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
 unifyRows :: (Show a, Pretty y, Pretty x) => a -> TVarName -> TSubst
                -> (x, Set.Set EPropName, Map.Map EPropName (Type TBody))
                -> (y, Set.Set EPropName, Maybe TVarName)
-               -> Infer TSubst              
+               -> Infer TSubst
 unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
            in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
-           
+
        case r2 of
          Nothing -> if Set.null in1NotIn2
                     then return nullSubst
                     else unificationError a t1 t2
          Just r2' -> unify a (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
-                                    
+
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: Show a => a -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
 unifyl a = foldM unifyl'
@@ -523,7 +525,7 @@ isExpansive (ETuple _ exprs)  = any isExpansive exprs
 isExpansive (ERow _ exprs)    = any isExpansive $ map snd exprs
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
 isExpansive (EProp _ expr _)  = isExpansive expr
-                                
+
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
@@ -550,7 +552,7 @@ inferType' _ (ELit a lit) = do
                     LitRegex _ _ _ -> TRegex
                     LitUndefined -> TUndefined
                     LitNull -> TNull
-  return (nullSubst, t, ELit (a,t) lit)  
+  return (nullSubst, t, ELit (a,t) lit)
 inferType' env (EVar a n) = do
   t <- instantiateVar n env
   return (nullSubst, t, EVar (a, t) n)
@@ -593,7 +595,7 @@ inferType' env (ELet a n e1 e2) =
 inferType' env (EAssign a n expr1 expr2) =
   do varId <- getVarId n env `failWith` throwError ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
      lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
-     let ungeneralizedScheme = ungeneralize lvalueScheme 
+     let ungeneralizedScheme = ungeneralize lvalueScheme
      lvalueT <- instantiate ungeneralizedScheme
      setVarScheme n varId ungeneralizedScheme
      (s1, rvalueT, expr1') <- inferType env expr1
@@ -603,7 +605,7 @@ inferType' env (EAssign a n expr1 expr2) =
      applySubstInfer s4
      (s5, tRest, expr2') <- inferType env expr2
      return (s5 `composeSubst` s4, tRest, EAssign (a, tRest) n expr1' expr2')
-                      
+
 inferType' env (EArray a exprs) =
   do tvName <- fresh
      let tv = TBody $ TVar tvName
@@ -621,7 +623,7 @@ inferType' env (ERow a propExprs) =
   do (s, te) <- accumInfer env $ map snd propExprs
      applySubstInfer s
      let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)
-         rowType = TRow $ foldr (\(n,t) r -> TRowProp n t r) (TRowEnd Nothing) propNamesTypes
+         rowType = TRow $ foldr (\(n,t') r -> TRowProp n t' r) (TRowEnd Nothing) propNamesTypes
          t = applySubst s rowType
      return (s, t, ERow (a,t) $ zip (map fst propExprs) (map snd te))
 inferType' env (EIfThenElse a ePred eThen eElse) =
@@ -635,7 +637,7 @@ inferType' env (EIfThenElse a ePred eThen eElse) =
      s6 <- unify a tThen tElse
      let s' = s6 `composeSubst` s5 `composeSubst` s4 `composeSubst` s3
      applySubstInfer s'
-     return (s', tThen, EIfThenElse (a, tThen) ePred' eThen' eElse')      
+     return (s', tThen, EIfThenElse (a, tThen) ePred' eThen' eElse')
 inferType' env (EProp a eObj propName) =
   do (s1, tObj, eObj') <- inferType env eObj
      rowVar <- fresh
@@ -645,7 +647,7 @@ inferType' env (EProp a eObj propName) =
          t = applySubst s3 (TBody $ TVar propVar)
      applySubstInfer s3
      return (s3, t, EProp (a,t) eObj' propName)
-     
+
 unifyAllInstances :: Show a => a -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
   m <- varInstances <$> get
@@ -659,10 +661,10 @@ minifyVars :: Type TBody -> Type TBody
 minifyVars t = mapVarNames f t
     where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
           f n = maybe n id $ Map.lookup n vars
-         
+
 typeInference :: Show a => TypeEnv -> Exp a -> Infer (Exp (a, Type TBody))
 typeInference env e = do
-  (s, t, e') <- inferType env e 
+  (_s, _t, e') <- inferType env e
   return e'
 
 ----------------------------------------------------------------------
@@ -684,7 +686,7 @@ instance Pretty LitVal where
   prettyTab _ (LitRegex x g i) = "/" ++ x ++ "/" ++ (if g then "g" else "") ++ (if i then "i" else "") ++ (if g || i then "/" else "")
   prettyTab _ LitUndefined = "undefined"
   prettyTab _ LitNull = "null"
-                                 
+
 instance Pretty EVarName where
   prettyTab _ x = x
 
@@ -702,7 +704,7 @@ instance Pretty (Exp a) where
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
 
 
-toChr :: Int -> Char                              
+toChr :: Int -> Char
 toChr n = chr (ord 'a' + n - 1)
 
 -- |
@@ -717,7 +719,7 @@ instance Pretty TBody where
 
 instance Pretty TConsName where
   prettyTab _ = show
-            
+
 instance Pretty t => Pretty (Type t) where
   prettyTab n (TBody t) = prettyTab n t
   prettyTab n (TCons TFunc [t1, t2]) = "(" ++ prettyTab n t1 ++ " -> " ++ prettyTab n t2 ++ ")"
@@ -739,7 +741,7 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
 ----------------------------------------------------------------------
 --
 -- | Mutable variable being assigned incompatible types:
--- 
+--
 -- x is known to have type forall a. a -> a, and to have been used in a context requiring bool -> bool (e.g. `x True`)
 --
 -- we now try to assign x := \y -> 2
@@ -859,4 +861,4 @@ runTypeInference e = runInfer $ typeInference Map.empty e
 -- $( derive makeArbitrary ''Type )
 
 --runAllTests = $(quickCheckAll)
-       
+

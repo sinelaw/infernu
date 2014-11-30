@@ -1,12 +1,14 @@
 module Parse where
 
-import Data.Functor((<$>))
-import qualified Data.Set as Set
+import           Control.Arrow                    ((***), second)
+import           Data.Functor                     ((<$>))
+import qualified Data.Set                         as Set
+import qualified Language.ECMAScript3.Parser      as ES3Parser
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
-import qualified Language.ECMAScript3.Syntax as ES3
-import qualified Language.ECMAScript3.Parser as ES3Parser
-import qualified Text.Parsec.Pos as Pos
-import Infer
+import qualified Language.ECMAScript3.Syntax      as ES3
+import qualified Text.Parsec.Pos                  as Pos
+
+import           Infer
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
@@ -14,16 +16,16 @@ poo = " "
 
 -- | A dummy expression that does nothing (but has a type).
 empty :: a -> Exp a
-empty z = (EVar z poo)
+empty z = EVar z poo
 
 errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
-errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ (show sourcePos) ++ " in\n" ++ (show $ ES3PP.prettyPrint expr)
-        
+errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES3PP.prettyPrint expr)
+
 foldStmts :: Show a => [ES3.Statement a] -> Exp a -> Exp a
 foldStmts [] k = k
 foldStmts [x] k = fromStatement x k
 foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
-                  
+
 fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
@@ -45,19 +47,19 @@ fromStatement (ES3.VarDeclStmt _ decls) = chain decls
           chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
           chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chain xs k)
 fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) $ foldl (\expr arg -> EAbs z (ES3.unId arg) expr) body (ES3.Id z "this" : args)
-                                                         where body = (foldStmts stmts $ empty z)
--- TODO: return statements must be added to the core language to be handled correctly.                                                     
+                                                         where body = foldStmts stmts $ empty z
+-- TODO: return statements must be added to the core language to be handled correctly.
 fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z poo) fromExpression x
-                 
+
 fromExpression :: Show a => ES3.Expression a -> Exp a
-fromExpression (ES3.StringLit z s) = ELit z (LitString s)
-fromExpression (ES3.RegexpLit z s g i) = ELit z (LitRegex s g i)
-fromExpression (ES3.BoolLit z s) = ELit z (LitBoolean s)
+fromExpression (ES3.StringLit z s) = ELit z $ LitString s
+fromExpression (ES3.RegexpLit z s g i) = ELit z $ LitRegex s g i
+fromExpression (ES3.BoolLit z s) = ELit z $ LitBoolean s
 fromExpression (ES3.IntLit z s) = ELit z (LitNumber $ fromIntegral s)
-fromExpression (ES3.NumLit z s) = ELit z (LitNumber s)
+fromExpression (ES3.NumLit z s) = ELit z $ LitNumber s
 fromExpression (ES3.NullLit z) = ELit z LitNull
-fromExpression (ES3.ArrayLit z exprs) = EArray z (map fromExpression exprs)
-fromExpression (ES3.ObjectLit z props) = ERow z $ zip (map (fromProp . fst) props) (map (fromExpression . snd) props)
+fromExpression (ES3.ArrayLit z exprs) = EArray z $ map fromExpression exprs
+fromExpression (ES3.ObjectLit z props) = ERow z $ map (fromProp *** fromExpression) props
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
 fromExpression (ES3.CallExpr z expr argExprs) = chainApp (thisArg : argExprs)
@@ -72,7 +74,7 @@ fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ "t
     where chainAbs [] = EAbs z poo (foldStmts stmts $ empty z)
           chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
           chainAbs (x:xs) = EAbs z x (chainAbs xs)
---           where funcBody = Block $ map fromStatement stmts 
+--           where funcBody = Block $ map fromStatement stmts
 fromExpression (ES3.ListExpr z exprs) =
     case exprs of
       [] -> empty z
@@ -93,23 +95,23 @@ zipByPos :: [(ES3.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
 zipByPos _  [] = []
 zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
-                                            then (("//" ++ (indentToColumn $ Pos.sourceColumn pos) ++ s):zipByPos ps xs')
-                                            else (x:zipByPos ps' xs)
-    where indentToColumn n = take (n - 3) $ repeat ' '
+                                            then ("//" ++ indentToColumn (Pos.sourceColumn pos) ++ s) : zipByPos ps xs'
+                                            else x : zipByPos ps' xs
+    where indentToColumn n = replicate (n - 3) ' '
 
-                    
+
 indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
-            
-parseFile :: String -> IO (Either String [(ES3.SourcePos, (Type TBody))])
+
+parseFile :: String -> IO (Either String [(ES3.SourcePos, Type TBody)])
 parseFile arg = do
-  js <- ES3Parser.parseFromFile arg 
+  js <- ES3Parser.parseFromFile arg
   let src (ES3.Script a _) = a
       emptySrcPos = src js -- hack
       expr = (foldStmts $ ES3.unJavaScript js) (empty emptySrcPos)
       expr' = runTypeInference expr
       res = fmap getAnnotations expr'
-      prettyRes = fmap (Set.toList . Set.fromList . fmap (\(a,t) -> (a, pretty $ t))) res
+      prettyRes = fmap (Set.toList . Set.fromList . fmap (second pretty)) res
   print js
   sourceCode <- lines <$> readFile arg
   let annotatedSource = case prettyRes of
@@ -119,11 +121,11 @@ parseFile arg = do
                                     indexedSource = indexList sourceCode
                                     --indexedAnno :: [(Int, [(Int, Char)])]
                                     --indexedAnno = (map (\(s,t) -> (Pos.sourceLine s, t)) xs)
-  putStrLn $ annotatedSource
+  putStrLn annotatedSource
   putStrLn $ pretty expr
   -- putStrLn . show $ prettyRes
   return res
-                           
+
 
 -- ex :: Body (Expr ()) -> Expr ()
 -- ex expr = Expr expr ()
@@ -142,10 +144,10 @@ parseFile arg = do
 -- fromStatement (ES3.WhileStmt _ pred' stmt) = While (fromExpression pred') (fromStatement stmt)
 -- fromStatement (ES3.ReturnStmt _ x) = Return . fmap fromExpression $ x
 -- --fromStatement (ES3.LabelledStmt _ _ s) =
--- --fromStatement (ES3.ForInStmt _ x) = 
--- fromStatement (ES3.ForStmt _ forInit pred' incr stmt) = 
+-- --fromStatement (ES3.ForInStmt _ x) =
+-- fromStatement (ES3.ForStmt _ forInit pred' incr stmt) =
 --     Block [ fromForInit forInit
---           , While (maybe (ex $ LitBoolean True) fromExpression pred') 
+--           , While (maybe (ex $ LitBoolean True) fromExpression pred')
 --                       (Block $ fromStatement stmt : incr'')
 --           ]
 --     where incr'' = maybe [] (\x -> [Expression $ fromExpression x]) incr
@@ -175,7 +177,7 @@ parseFile arg = do
 --     where forVars = case forInit' of
 --                       ES3.VarInit varDecls -> map getVarName varDecls
 --                       _ -> []
--- collectVarDecls (ES3.TryStmt _ sTry msCatch msFinally) = 
+-- collectVarDecls (ES3.TryStmt _ sTry msCatch msFinally) =
 --     collectVarDecls sTry ++ maybe [] (collectVarDecls . getCatchStatement) msCatch ++ maybe [] collectVarDecls msFinally
 --     where getCatchStatement (ES3.CatchClause _ _ s') = s'
 -- collectVarDecls (ES3.ThrowStmt _ _) = []
@@ -204,12 +206,12 @@ parseFile arg = do
 -- --fromStatement
 
 -- -- fromVarDecl :: ES3.VarDecl a -> Statement (Expr ())
--- -- fromVarDecl (VarDecl _ (Id _ name) expr) = 
+-- -- fromVarDecl (VarDecl _ (Id _ name) expr) =
 -- --     case expr of
--- --       Nothing -> 
+-- --       Nothing ->
 
 -- fromExpression :: ES3.Expression a -> Expr ()
--- fromExpression es3x = 
+-- fromExpression es3x =
 --     ex $ case es3x of
 --       ES3.StringLit _ s -> LitString s
 --       ES3.RegexpLit _ s _ _ -> LitRegex s
@@ -219,7 +221,7 @@ parseFile arg = do
 --       ES3.ArrayLit _ xs -> LitArray $ map fromExpression xs
 --       ES3.ObjectLit _ props -> LitObject $ map (fromProp *** fromExpression) props
 --       ES3.FuncExpr _ name argNames stmts -> LitFunc (fmap ES3.unId name) (map ES3.unId argNames) (concatMap collectVarDecls stmts) funcBody
---           where funcBody = Block $ map fromStatement stmts 
+--           where funcBody = Block $ map fromStatement stmts
 --       ES3.VarRef _ name -> Var $ ES3.unId name
 --       ES3.DotRef _ expr name -> Property (fromExpression expr) (ES3.unId name)
 --       ES3.AssignExpr _ ES3.OpAssign lvalue expr -> Assign (fromLValue lvalue) (fromExpression expr)
