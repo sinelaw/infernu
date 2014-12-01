@@ -41,7 +41,7 @@ import           Data.List                  (intercalate)
 import qualified Data.Map.Lazy              as Map
 import           Data.Maybe                 (fromMaybe, mapMaybe)
 import qualified Data.Set                   as Set
-import           Text.Parsec.Pos            (SourcePos(..), sourceName, sourceLine, sourceColumn)
+import qualified Text.Parsec.Pos            as Pos
 import           Prelude                    hiding (foldr)
 
 -- import           Test.QuickCheck(choose)
@@ -118,7 +118,7 @@ data Type t = TBody t
 
 type TSubst = Map.Map TVarName (Type TBody)
 
-data TypeError = TypeError { source :: SourcePos, message :: String }
+data TypeError = TypeError { source :: Pos.SourcePos, message :: String }
                deriving (Show, Eq, Ord)
                         
 ----------------------------------------------------------------------
@@ -309,7 +309,7 @@ fresh = do
   modify $ \is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } }
   lastName . nameSource <$> get
 
-throwError :: SourcePos -> String -> Infer a
+throwError :: Pos.SourcePos -> String -> Infer a
 throwError p s = lift . left $ TypeError p s
 
 failWith :: Maybe a -> Infer a -> Infer a
@@ -325,7 +325,7 @@ failWithM action err = do
 getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
 
-getVarScheme :: SourcePos -> EVarName -> TypeEnv -> Infer (Maybe TScheme)
+getVarScheme :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Maybe TScheme)
 getVarScheme a n env = case getVarId n env of
                        Nothing -> throwError a $ "Unbound variable: '" ++ show n ++ "'"
                        Just varId -> getVarSchemeByVarId varId
@@ -382,7 +382,7 @@ applySubstInfer s = modify $ \is -> is {
 --     let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
 --     let tenv = Map.empty
 --     tenv' <- addVarScheme "x" tenv t
---     instantiateVar "x" tenv'
+--     instantiateVar (Pos.initialPos "") "x" tenv'
 -- :}
 -- Right (TCons TFunc [TBody (TVar 2),TBody (TVar 1)])
 --
@@ -398,7 +398,7 @@ instantiate (TScheme tvarNames t) = do
 
   return $ mapVarNames replaceVar t
 
-instantiateVar :: SourcePos -> EVarName -> TypeEnv -> Infer (Type TBody)
+instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Type TBody)
 instantiateVar a n env = do
   varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
@@ -413,12 +413,13 @@ instantiateVar a n env = do
 -- >>> runInfer $ generalize Map.empty $ TCons TFunc [TBody (TVar 0),TBody (TVar 1)]
 -- Right (TScheme [0,1] (TCons TFunc [TBody (TVar 0),TBody (TVar 1)]))
 --
--- >>> let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
--- >>> let tenv = Map.insert "x" t Map.empty
--- >>> tenv
--- fromList [("x",TScheme [0] (TCons TFunc [TBody (TVar 0),TBody (TVar 1)]))]
--- >>> runInfer $ generalize tenv (TCons TFunc [TBody (TVar 1), TBody (TVar 2)])
--- Right (TScheme [2] (TCons TFunc [TBody (TVar 1),TBody (TVar 2)]))
+-- >>> :{
+-- runInfer $ do
+--     let t = TScheme [1] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
+--     tenv <- addVarScheme "x" Map.empty t
+--     generalize tenv (TCons TFunc [TBody (TVar 0), TBody (TVar 2)])
+-- :}
+-- Right (TScheme [2] (TCons TFunc [TBody (TVar 0),TBody (TVar 2)]))
 --
 -- In this example the steps were:
 --
@@ -439,13 +440,13 @@ generalize tenv t = do
 
 ----------------------------------------------------------------------
 
-unify :: SourcePos -> Type TBody -> Type TBody -> Infer TSubst
+unify :: Pos.SourcePos -> Type TBody -> Type TBody -> Infer TSubst
 unify a t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' a t1 t2
 
-unificationError :: (Pretty x, Pretty y) => SourcePos -> x -> y -> Infer b
+unificationError :: (Pretty x, Pretty y) => Pos.SourcePos -> x -> y -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
 
-unify' :: SourcePos -> Type TBody -> Type TBody -> Infer TSubst
+unify' :: Pos.SourcePos -> Type TBody -> Type TBody -> Infer TSubst
 unify' a (TBody (TVar n)) t = varBind a n t
 unify' a t (TBody (TVar n)) = varBind a n t
 unify' a (TBody x) (TBody y) = if x == y
@@ -478,7 +479,7 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
        s3 <- unifyRows a r s2 (t2, names2, m2) (t1, names1, r1)
        return $ s3 `composeSubst` s2 `composeSubst` s1
 
-unifyRows :: (Pretty y, Pretty x) => SourcePos -> TVarName -> TSubst
+unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
                -> (x, Set.Set EPropName, Map.Map EPropName (Type TBody))
                -> (y, Set.Set EPropName, Maybe TVarName)
                -> Infer TSubst
@@ -493,14 +494,14 @@ unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
          Just r2' -> unify a (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
 
 -- | Unifies pairs of types, accumulating the substs
-unifyl :: SourcePos -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
+unifyl :: Pos.SourcePos -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
 unifyl a = foldM unifyl'
     where unifyl' s (x, y) = do
             s' <- unify' a (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
 
 
-varBind :: SourcePos -> TVarName -> Type TBody -> Infer TSubst
+varBind :: Pos.SourcePos -> TVarName -> Type TBody -> Infer TSubst
 varBind a n t | t == TBody (TVar n) = return nullSubst
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
@@ -514,7 +515,7 @@ dropLast [] = []
 dropLast [_] = []
 dropLast (x:xs) = x : dropLast xs
 
-unifyAll :: SourcePos -> TSubst -> [Type TBody] -> Infer TSubst
+unifyAll :: Pos.SourcePos -> TSubst -> [Type TBody] -> Infer TSubst
 unifyAll a s ts = unifyl a s $ zip (dropLast ts) (drop 1 ts)
 
 
@@ -535,21 +536,21 @@ isExpansive (EProp _ expr _)  = isExpansive expr
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp SourcePos] -> Infer (TSubst, [(Type TBody, Exp (SourcePos, Type TBody))])
+accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer (TSubst, [(Type TBody, Exp (Pos.SourcePos, Type TBody))])
 accumInfer env = foldM accumInfer' (nullSubst, [])
     where accumInfer' (subst, types) expr = do
             (subst', t, e) <- inferType env expr
             applySubstInfer subst'
             return (subst' `composeSubst` subst, (t,e):types)
 
-inferType  :: TypeEnv -> Exp SourcePos -> Infer (TSubst, Type TBody, Exp (SourcePos, Type TBody))
+inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type TBody, Exp (Pos.SourcePos, Type TBody))
 inferType env expr = do
   (s, t, e) <- inferType' env expr
   state <- get
   let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n\t" ++ show state ++ "\n\t Environment: " ++ show env ++ "\n----------"
   return . tr $ (s, t, e)
 
-inferType' :: TypeEnv -> Exp SourcePos -> Infer (TSubst, Type TBody, Exp (SourcePos, Type TBody))
+inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type TBody, Exp (Pos.SourcePos, Type TBody))
 inferType' _ (ELit a lit) = do
   let t = TBody $ case lit of
                     LitNumber _ -> TNumber
@@ -664,7 +665,7 @@ inferType' env (EProp a eObj propName) =
      applySubstInfer s3
      return (s3, t, EProp (a,t) eObj' propName)
 
-unifyAllInstances :: SourcePos -> TSubst -> [TVarName] -> Infer TSubst
+unifyAllInstances :: Pos.SourcePos -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
   m <- varInstances <$> get
   let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
@@ -678,7 +679,7 @@ minifyVars t = mapVarNames f t
     where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
           f n = maybe n id $ Map.lookup n vars
 
-typeInference :: TypeEnv -> Exp SourcePos -> Infer (Exp (SourcePos, Type TBody))
+typeInference :: TypeEnv -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type TBody))
 typeInference env e = do
   (_s, _t, e') <- inferType env e
   return e'
@@ -726,7 +727,7 @@ toChr n = chr (ord 'a' + n - 1)
 
 -- |
 -- >>> prettyTab 0 (27 :: TVarName)
--- aa
+-- "aa"
 instance Pretty TVarName where
   prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 n)
 
@@ -756,11 +757,21 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
     prettyTab n (Right x) = prettyTab n x
 
 instance Pretty TypeError where
-  prettyTab _ (TypeError p s) = sourceName p ++ ":" ++ (show $ sourceLine p) ++ ":" ++ (show $ sourceColumn p) ++ ": Error: " ++ s
+  prettyTab _ (TypeError p s) = Pos.sourceName p ++ ":" ++ (show $ Pos.sourceLine p) ++ ":" ++ (show $ Pos.sourceColumn p) ++ ": Error: " ++ s
   
 ----------------------------------------------------------------------
 --
 -- | Mutable variable being assigned incompatible types:
+--
+-- >>> let p = Pos.initialPos "<dummy>"
+-- >>> let fun = EAbs p
+-- >>> let var = EVar p
+-- >>> let let' = ELet p
+-- >>> let tuple = ETuple p
+-- >>> let app = EApp p
+-- >>> let lit = ELit p
+-- >>> let assign = EAssign p
+-- >>> let array = EArray p
 --
 -- x is known to have type forall a. a -> a, and to have been used in a context requiring bool -> bool (e.g. `x True`)
 --
@@ -768,109 +779,102 @@ instance Pretty TypeError where
 --
 -- This should fail because it "collapses" x to be Number -> Number which is not compatible with bool -> bool
 --
--- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "y" (ELit (LitNumber 0))) (ETuple [EVar "x", EVar "y"])))
--- "Error: Could not unify: TBoolean with TNumber"
+-- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (assign "x" (fun "y" (lit (LitNumber 0))) (tuple [var "x", var "y"])))
+-- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
 -- The following should succeed because x is immutable and thus polymorphic:
 --
--- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (ETuple [EVar "x", EVar "y"]))
--- "((8 -> 8), (TNumber, TBoolean))"
+-- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (tuple [var "x", var "y"]))
+-- "((a -> a), (TNumber, TBoolean))"
 --
 -- The following should fail because x is mutable and therefore a monotype:
 --
--- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (ETuple [EApp (EVar "x") (ELit (LitNumber 2)), EApp (EVar "x") (ELit (LitBoolean True))]) (EAssign "x" (EAbs "z1" (EVar "z1")) (ETuple [EVar "x", EVar "y"])))
--- "Error: Could not unify: TBoolean with TNumber"
+-- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (assign "x" (fun "z1" (var "z1")) (tuple [var "x", var "y"])))
+-- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
-
--- |
 -- The following should also succeed because "x" is only ever used like this: (x True). The second assignment to x is: x := \z1 -> False, which is specific but matches the usage. Note that x's type is collapsed to: Boolean -> Boolean.
 --
--- >>> test $ ELet "x" (EAbs "z" (EVar "z")) (ELet "y" (EApp (EVar "x") (ELit (LitBoolean True))) (EAssign "x" (EAbs "z1" (ELit (LitBoolean False))) (ETuple [EVar "x", EVar "y"])))
+-- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (app (var "x") (lit (LitBoolean True))) (assign "x" (fun "z1" (lit (LitBoolean False))) (tuple [var "x", var "y"])))
 -- "((TBoolean -> TBoolean), TBoolean)"
 --
-
--- | Tests a setter for x being called with something more specific than x's original definition:
+-- Tests a setter for x being called with something more specific than x's original definition:
 -- >>> :{
--- >>> test $ ELet
--- >>> "x" (EAbs "a" (EVar "a"))
--- >>> (ELet "setX"
--- >>>    (EAbs "v"
--- >>>             (ELet
--- >>>          "_" (EAssign "x" (EVar "v") (EVar "x")) (ELit (LitBoolean False))))
--- >>>    (ELet
--- >>>       "_" (EApp (EVar "setX") (EAbs "a" (ELit (LitString "a"))))
--- >>>       (EApp (EVar "x") (ELit (LitBoolean True)))))
+-- >>> test $ let'
+-- >>> "x" (fun "a" (var "a"))
+-- >>> (let' "setX"
+-- >>>    (fun "v"
+-- >>>             (let'
+-- >>>          "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean False))))
+-- >>>    (let'
+-- >>>       "_" (app (var "setX") (fun "a" (lit (LitString "a"))))
+-- >>>       (app (var "x") (lit (LitBoolean True)))))
 -- >>> :}
--- "Error: Could not unify: TString with TBoolean"
-
--- | 'test' is a utility function for running the following tests:
+-- "<dummy>:1:1: Error: Could not unify: TString with TBoolean"
 --
--- >>> test $ ETuple () [ELit () (LitBoolean True), ELit () (LitNumber 2)]
+-- >>> test $ tuple [lit (LitBoolean True), lit (LitNumber 2)]
 -- "(TBoolean, TNumber)"
 --
--- >>> test $ ELet () "id" (EAbs () "x" (EVar () "x")) (EAssign () "id" (EAbs () "y" (EVar () "y")) (EVar () "id"))
+-- >>> test $ let' "id" (fun "x" (var "x")) (assign "id" (fun "y" (var "y")) (var "id"))
 -- "(a -> a)"
 --
--- >>> test $ ELet () "id" (EAbs () "x" (EVar () "x")) (EAssign () "id" (ELit () (LitBoolean True)) (EVar () "id"))
--- "Error: Could not unify: TBoolean with (c -> c)"
+-- >>> test $ let' "id" (fun "x" (var "x")) (assign "id" (lit (LitBoolean True)) (var "id"))
+-- "<dummy>:1:1: Error: Could not unify: TBoolean with (c -> c)"
 --
--- >>> test $ ELet () "x" (ELit () (LitBoolean True)) (EAssign () "x" (ELit () (LitBoolean False)) (EVar () "x"))
+-- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitBoolean False)) (var "x"))
 -- "TBoolean"
 --
--- >>> test $ ELet () "x" (ELit () (LitBoolean True)) (EAssign () "x" (ELit () (LitNumber 3)) (EVar () "x"))
--- "Error: Could not unify: TNumber with TBoolean"
+-- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitNumber 3)) (var "x"))
+-- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
--- >>> test $ ELet () "x" (EArray () [ELit () (LitBoolean True)]) (EVar () "x")
+-- >>> test $ let' "x" (array [lit (LitBoolean True)]) (var "x")
 -- "[TBoolean]"
 --
--- >>> test $ ELet () "x" (EArray () [ELit () $ LitBoolean True, ELit () $ LitBoolean False]) (EVar () "x")
+-- >>> test $ let' "x" (array [lit $ LitBoolean True, lit $ LitBoolean False]) (var "x")
 -- "[TBoolean]"
 --
--- >>> test $ ELet () "x" (EArray () []) (EAssign () "x" (EArray () []) (EVar () "x"))
+-- >>> test $ let' "x" (array []) (assign "x" (array []) (var "x"))
 -- "[a]"
 --
--- >>> test $ ELet () "x" (EArray () [ELit () $ LitBoolean True, ELit () $ LitNumber 2]) (EVar () "x")
--- "Error: Could not unify: TNumber with TBoolean"
+-- >>> test $ let' "x" (array [lit $ LitBoolean True, lit $ LitNumber 2]) (var "x")
+-- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
--- >>> test $ ELet () "id" (EAbs () "x" (ELet () "y" (EVar () "x") (EVar () "y"))) (EApp () (EVar () "id") (EVar () "id"))
+-- >>> test $ let' "id" (fun "x" (let' "y" (var "x") (var "y"))) (app (var "id") (var "id"))
 -- "(a -> a)"
 --
--- >>> test $ ELet () "id" (EAbs () "x" (ELet () "y" (EVar () "x") (EVar () "y"))) (EApp () (EApp () (EVar () "id") (EVar () "id")) (ELit () (LitNumber 2)))
+-- >>> test $ let' "id" (fun "x" (let' "y" (var "x") (var "y"))) (app (app (var "id") (var "id")) (lit (LitNumber 2)))
 -- "TNumber"
 --
--- >>> test $ ELet () "id" (EAbs () "x" (EApp () (EVar () "x") (EVar () "x"))) (EVar () "id")
--- "Error: Occurs check failed: a in (a -> b)"
+-- >>> test $ let' "id" (fun "x" (app (var "x") (var "x"))) (var "id")
+-- "<dummy>:1:1: Error: Occurs check failed: c in (c -> e)"
 --
--- >>> test $ EAbs () "m" (ELet () "y" (EVar () "m") (ELet () "x" (EApp () (EVar () "y") (ELit () (LitBoolean True))) (EVar () "x")))
+-- >>> test $ fun "m" (let' "y" (var "m") (let' "x" (app (var "y") (lit (LitBoolean True))) (var "x")))
 -- "((TBoolean -> a) -> a)"
 --
--- >>> test $ EApp () (ELit () (LitNumber 2)) (ELit () (LitNumber 2))
--- "Error: Could not unify: TNumber with (TNumber -> 1)"
-
--- | EAssign
--- >>> test $ ELet () "x" (EAbs () "y" (ELit () (LitNumber 0))) (EAssign () "x" (EAbs () "y" (EVar () "y")) (EVar () "x"))
+-- >>> test $ app (lit (LitNumber 2)) (lit (LitNumber 2))
+-- "<dummy>:1:1: Error: Could not unify: TNumber with (TNumber -> a)"
+--
+-- EAssign tests
+-- >>> test $ let' "x" (fun "y" (lit (LitNumber 0))) (assign "x" (fun "y" (var "y")) (var "x"))
 -- "(TNumber -> TNumber)"
 --
--- >>> test $ ELet () "x" (EAbs () "y" (EVar () "y")) (EAssign () "x" (EAbs () "y" (ELit () (LitNumber 0))) (EVar () "x"))
+-- >>> test $ let' "x" (fun "y" (var "y")) (assign "x" (fun "y" (lit (LitNumber 0))) (var "x"))
 -- "(TNumber -> TNumber)"
 --
--- >>> test $ ELet () "x" (EAbs () "y" (EVar () "y")) (ETuple () [EApp () (EVar () "x") (ELit () (LitNumber 2)), EApp () (EVar () "x") (ELit () (LitBoolean True))])
+-- >>> test $ let' "x" (fun "y" (var "y")) (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))])
 -- "(TNumber, TBoolean)"
 --
--- >>> test $ ELet () "x" (EAbs () "y" (EVar () "y")) (EApp () (EVar () "x") (EVar () "x"))
+-- >>> test $ let' "x" (fun "y" (var "y")) (app (var "x") (var "x"))
 -- "(a -> a)"
 --
--- >>> test $ ELet () "x" (EAbs () "a" (EVar () "a")) (ELet () "getX" (EAbs () "v" (EVar () "x")) (ELet () "setX" (EAbs () "v" (ELet () "_" (EAssign () "x" (EVar () "v") (EVar () "x")) (ELit () (LitBoolean True)))) (ELet () "_" (EApp () (EVar () "setX") (EAbs () "a" (ELit () (LitString "a")))) (EVar () "getX"))))
+-- >>> test $ let' "x" (fun "a" (var "a")) (let' "getX" (fun "v" (var "x")) (let' "setX" (fun "v" (let' "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean True)))) (let' "_" (app (var "setX") (fun "a" (lit (LitString "a")))) (var "getX"))))
 -- "(a -> (TString -> TString))"
-test :: Exp SourcePos -> String
-test e = pretty $ runTypeInference e
-         --in pretty e ++ " :: " ++ pretty t ++ "\n"
---     case res of
---       Left err -> putStrLn $ show e ++ "\n " ++ err ++ "\n"
---       Right t -> putStrLn $ show e ++ " :: " ++ show t ++ "\n"
+test :: Exp Pos.SourcePos -> String
+test e = case runTypeInference e of
+          Left err -> pretty err
+          Right expr -> pretty . minifyVars . snd . head $ getAnnotations expr
 
 
-runTypeInference :: Exp SourcePos -> Either TypeError (Exp (SourcePos, Type TBody))
+runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type TBody))
 runTypeInference e = runInfer $ typeInference Map.empty e
 
 -- Test runner
