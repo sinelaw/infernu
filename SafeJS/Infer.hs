@@ -1,18 +1,8 @@
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE TupleSections     #-}
 
 module SafeJS.Infer
-    (Exp(..)
-    , LitVal(..)
-    , EVarName
-    , TVarName
-    , TBody(..)
-    , TConsName
-    , Type(..)
-    , runTypeInference
+    ( runTypeInference
     , test
     , Pretty(..)
     , pretty
@@ -32,12 +22,9 @@ import           Control.Monad.Trans        (lift)
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get,
                                              modify)
-import           Data.Char                  (chr, ord)
-import qualified Data.Digits                as Digits
 import           Data.Foldable              (Foldable (..))
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
-import           Data.List                  (intercalate)
 import qualified Data.Map.Lazy              as Map
 import           Data.Maybe                 (fromMaybe, mapMaybe)
 import qualified Data.Set                   as Set
@@ -51,6 +38,8 @@ import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 import           Data.DeriveTH
 #endif
 
+import SafeJS.Types
+import SafeJS.Pretty
 
 #if TRACE
 import           Debug.Trace                (trace)
@@ -74,168 +63,21 @@ trace' prefix x = trace (prefix ++ " " ++ show x) x
 
 ----------------------------------------------------------------------
 
-type EVarName = String
-type EPropName = String
-
-data LitVal = LitNumber Double
-            | LitBoolean Bool
-            | LitString String
-            | LitRegex String Bool Bool
-            | LitUndefined
-            | LitNull
-            deriving (Show, Eq, Ord)
-
-data Exp a = EVar a EVarName
-           | EApp a (Exp a) (Exp a)
-           | EAbs a EVarName (Exp a)
-           | ELet a EVarName (Exp a) (Exp a)
-           | ELit a LitVal
-           | EAssign a EVarName (Exp a) (Exp a)
-           | EPropAssign a (Exp a) EPropName (Exp a) (Exp a)
-           | EArray a [Exp a]
-           | ETuple a [Exp a]
-           | ERow a [(EPropName, Exp a)]
-           | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
-           | EProp a (Exp a) EPropName
-             deriving (Show, Eq, Ord, Functor, Foldable)
-
-----------------------------------------------------------------------
-
-type TVarName = Int
-
-data TBody = TVar TVarName
-           | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
-             deriving (Show, Eq, Ord)
-
-data TConsName = TFunc | TArray | TTuple
-                 deriving (Show, Eq, Ord)
-
--- | Row type.
-data TRowList t = TRowProp EPropName (Type t) (TRowList t)
-                | TRowEnd (Maybe TVarName)
-                  deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
-
-data Type t = TBody t
-            | TCons TConsName [Type t]
-            | TRow (TRowList t)
-              deriving (Show, Eq, Ord, Functor)--, Foldable, Traversable)
-
-type TSubst = Map.Map TVarName (Type TBody)
-
-data TypeError = TypeError { source :: Pos.SourcePos, message :: String }
-               deriving (Show, Eq, Ord)
-                        
-----------------------------------------------------------------------
-
-class VarNames a where
-    mapVarNames :: (TVarName -> TVarName) -> a -> a
-
-instance VarNames (Type TBody) where
-    mapVarNames f (TBody (TVar x)) = TBody . TVar $ f x
-    mapVarNames _ t@(TBody _) = t
-    mapVarNames f (TCons c ts) = TCons c $ map (mapVarNames f) ts
-    mapVarNames f (TRow l) = TRow $ mapVarNames f l
-
-instance VarNames (TRowList TBody) where
-    mapVarNames f (TRowProp n t l) = TRowProp n (mapVarNames f t) (mapVarNames f l)
-    mapVarNames f (TRowEnd (Just x)) = TRowEnd (Just $ f x)
-    mapVarNames _ (TRowEnd Nothing) = TRowEnd Nothing
-
-----------------------------------------------------------------------
-
-class Types a where
-  freeTypeVars :: a -> Set.Set TVarName
-  applySubst :: TSubst -> a -> a
-
--- for convenience only:
-instance Types a => Types (Maybe a) where
-  freeTypeVars = maybe Set.empty freeTypeVars
-  applySubst s = fmap $ applySubst s
-
-instance Types a => Types [a] where
-  freeTypeVars = Set.unions . map freeTypeVars
-  applySubst s = map (applySubst s)
-
-instance (Ord a, Types a) => Types (Set.Set a) where
-  freeTypeVars = Set.foldr Set.union Set.empty . Set.map freeTypeVars
-  applySubst s = Set.map (applySubst s)
-
-instance Types a => Types (Map.Map b a) where
-  freeTypeVars m = freeTypeVars . Map.elems $ m
-  applySubst s = Map.map (applySubst s)
-
-----------------------------------------------------------------------
-
-instance Types (Type TBody) where
-  freeTypeVars (TBody (TVar n)) = Set.singleton n
-  freeTypeVars (TBody _) = Set.empty
-  freeTypeVars (TCons _ ts) = Set.unions $ map freeTypeVars ts
-  freeTypeVars (TRow r) = freeTypeVars r
-
-  applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
-  applySubst _ t@(TBody _) = t
-  applySubst s (TCons n ts) = TCons n (applySubst s ts)
-  applySubst s (TRow r) = TRow $ applySubst s r
 
 -- instance (Functor f, Foldable f, Types a) => Types (f a) where
 --   freeTypeVars = foldr (Set.union . freeTypeVars) Set.empty
 --   applySubst s = fmap (applySubst s)
-
-sortRow :: TRowList TBody -> TRowList TBody
-sortRow row = row -- TODO implement
-
-flattenRow :: TRowList t -> (Map.Map EPropName (Type t), Maybe TVarName)
-flattenRow = flattenRow' (Map.empty, Nothing)
-    where flattenRow' :: (Map.Map EPropName (Type t), Maybe TVarName) -> TRowList t -> (Map.Map EPropName (Type t), Maybe TVarName)
-          flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
-          flattenRow' (m,_) (TRowEnd r') = (m, r')
-
-unflattenRow :: Map.Map EPropName (Type t) -> Maybe TVarName -> (EPropName -> Bool) -> TRowList t
-unflattenRow m r f = Map.foldrWithKey (\n t l -> if (f n) then TRowProp n t l else l) (TRowEnd r) m
-
--- | Types instance for TRowList
---
--- >>> freeTypeVars (TRowProp "x" (TBody TNumber) (TRowEnd $ Just 1))
--- fromList [1]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd Nothing))
--- fromList [2]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd $ Just 1))
--- fromList [1,2]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowProp "y" (TBody $ TVar 3) (TRowEnd $ Just 1)))
--- fromList [1,2,3]
-instance Types (TRowList TBody) where
-  freeTypeVars (TRowProp _ propType rest) = freeTypeVars propType `Set.union` freeTypeVars rest
-  freeTypeVars (TRowEnd tvarName) = maybe Set.empty Set.singleton tvarName
-
-  applySubst s (TRowProp propName propType rest) = sortRow $ TRowProp propName (applySubst s propType) (applySubst s rest)
-  applySubst s t@(TRowEnd (Just tvarName)) = case Map.lookup tvarName s of
-                                               Nothing -> t
-                                               Just (TRow t') -> t'
-                                               Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
-  applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
-
 ----------------------------------------------------------------------
-
-getAnnotations :: Exp a -> [a]
-getAnnotations = foldr (:) []
-
-----------------------------------------------------------------------
-
--- | Type scheme: a type expression with a "forall" over some type variables that may appear in it (universal quantification).
-data TScheme = TScheme [TVarName] (Type TBody)
-             deriving (Show, Eq)
-
-instance Types TScheme where
-  freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
-  -- | When subsituting on a TScheme, we allow replacing quantified vars!
-  -- (i.e. we don't do (foldr Map.delete s qvars) $ applySubst t)
-  applySubst s (TScheme qvars t) = TScheme qvars $ applySubst s t
 
 ungeneralize :: TScheme -> TScheme
 ungeneralize (TScheme _ tbody) = TScheme [] tbody
 
 getQuantificands :: TScheme -> [TVarName]
 getQuantificands (TScheme tvars _) = tvars
+
+getAnnotations :: Exp a -> [a]
+getAnnotations = foldr (:) []
+
 
 -- alphaEquivalent :: TScheme -> TScheme -> Bool
 -- alphaEquivalent ts1@(TScheme tvn1 _) (TScheme tvn2 t2) = ts1 == TScheme tvn1 ts2'
@@ -261,20 +103,8 @@ prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst 
 #endif
 ----------------------------------------------------------------------
 
-type VarId = TVarName
-
--- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
---
--- Note: instance of Types
-type TypeEnv = Map.Map EVarName VarId
-
-
 getVarId :: EVarName -> TypeEnv -> Maybe VarId
 getVarId = Map.lookup
-
--- Used internally to generate fresh type variable names
-data NameSource = NameSource { lastName :: TVarName }
-                deriving (Show, Eq)
 
 ----------------------------------------------------------------------
 -- | Adds a pair of equivalent items to an equivalence map.
@@ -288,16 +118,6 @@ addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
     where updatedSet = Set.insert (TBody $ TVar x) . Set.insert (TBody $ TVar y) $ Set.union (getSet x) (getSet y)
           getSet item = fromMaybe Set.empty $ Map.lookup item m
 
-
-data InferState = InferState { nameSource   :: NameSource
-                             -- must be stateful because we sometimes discover that a variable is mutable.
-                             , varSchemes   :: Map.Map VarId TScheme
-                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody)) }
-                  deriving (Show, Eq)
-
-instance Types InferState where
-    freeTypeVars = freeTypeVars . varSchemes
-    applySubst s is = is { varSchemes = applySubst s (varSchemes is) }
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a
@@ -681,88 +501,13 @@ unifyAllInstances a s tvs = do
 minifyVars :: Type TBody -> Type TBody
 minifyVars t = mapVarNames f t
     where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
-          f n = maybe n id $ Map.lookup n vars
+          f n = fromMaybe n $ Map.lookup n vars
 
 typeInference :: TypeEnv -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type TBody))
 typeInference env e = do
   (_s, _t, e') <- inferType env e
   return e'
 
-----------------------------------------------------------------------
-
-
-tab :: Int -> String
-tab t = replicate (t*4) ' '
-
-class Pretty a where
-  prettyTab :: Int -> a -> String
-
-pretty :: Pretty a => a -> String
-pretty = prettyTab 0
-
-instance Pretty LitVal where
-  prettyTab _ (LitNumber x) = show x
-  prettyTab _ (LitBoolean x) = show x
-  prettyTab _ (LitString x) = show x
-  prettyTab _ (LitRegex x g i) = "/" ++ x ++ "/" ++ (if g then "g" else "") ++ (if i then "i" else "") ++ (if g || i then "/" else "")
-  prettyTab _ LitUndefined = "undefined"
-  prettyTab _ LitNull = "null"
-
-instance Pretty EVarName where
-  prettyTab _ x = x
-
-instance Pretty (Exp a) where
-  prettyTab t (EVar _ n) = prettyTab t n
-  prettyTab t (EApp _ e1 e2) = prettyTab t e1 ++ " " ++ prettyTab t e2
-  prettyTab t (EAbs _ n e) = "(\\" ++ prettyTab t n ++ " -> " ++ prettyTab t e ++ ")"
-  prettyTab t (ELet _ n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
-  prettyTab t (ELit _ l) = prettyTab t l
-  prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
-  prettyTab t (EPropAssign _ obj n e1 e2) = prettyTab t obj ++ "." ++ prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
-  prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
-  prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
-  prettyTab t (ERow _ props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
-  prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
-  prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
-
-
-toChr :: Int -> Char
-toChr n = chr (ord 'a' + n - 1)
-
--- |
--- >>> prettyTab 0 (27 :: TVarName)
--- "aa"
-instance Pretty TVarName where
-  prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 n)
-
-instance Pretty TBody where
-  prettyTab t (TVar n) = prettyTab t n
-  prettyTab _ x = show x
-
-instance Pretty TConsName where
-  prettyTab _ = show
-
-instance Pretty t => Pretty (Type t) where
-  prettyTab n (TBody t) = prettyTab n t
-  prettyTab n (TCons TFunc [t1, t2]) = "(" ++ prettyTab n t1 ++ " -> " ++ prettyTab n t2 ++ ")"
-  prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
-  prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
-  prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
-  prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-  prettyTab t (TRow list) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props)) ++ maybe "" ((", "++) . const "...") r ++ "}"
-    where (props, r) = flattenRow list
-
-instance Pretty TScheme where
-  prettyTab n (TScheme vars t) = forall ++ prettyTab n t
-      where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
-
-instance (Pretty a, Pretty b) => Pretty (Either a b) where
-    prettyTab n (Left x) = "Error: " ++ prettyTab n x
-    prettyTab n (Right x) = prettyTab n x
-
-instance Pretty TypeError where
-  prettyTab _ (TypeError p s) = Pos.sourceName p ++ ":" ++ (show $ Pos.sourceLine p) ++ ":" ++ (show $ Pos.sourceColumn p) ++ ": Error: " ++ s
-  
 ----------------------------------------------------------------------
 --
 -- | Mutable variable being assigned incompatible types:

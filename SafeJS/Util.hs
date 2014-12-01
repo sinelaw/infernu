@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP               #-}
+{-# LANGUAGE CPP #-}
 module SafeJS.Util (checkFiles, annotatedSource) where
 
 import           Control.Arrow               (second)
@@ -11,9 +11,9 @@ import qualified Text.Parsec.Pos             as Pos
 
 import           SafeJS.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
-import           SafeJS.Infer                 (TBody (..), Type (..), TypeError,
-                                              getAnnotations, pretty,
-                                              runTypeInference)
+import           SafeJS.Infer                (getAnnotations, runTypeInference)
+import           SafeJS.Pretty               (pretty)
+import           SafeJS.Types                (TBody (..), Type (..), TypeError)
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -34,9 +34,9 @@ checkFiles fileNames = do
   let expr' = translate $ expr
       expr'' = runTypeInference expr'
       res = fmap getAnnotations expr''
-#ifdef TRACE      
+#ifdef TRACE
   putStrLn $ pretty expr'
-#endif  
+#endif
   return res
 
 annotatedSource :: [(Pos.SourcePos, Type TBody)] -> [String] -> String
