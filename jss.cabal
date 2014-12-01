@@ -1,4 +1,4 @@
-name:                jss
+name:                sjs
 version:             0.1.0.0
 -- synopsis:            
 -- description:         
@@ -22,32 +22,36 @@ flag trace
   manual: True
 
 library
-  exposed-modules:     Infer, Parse
+  exposed-modules:     SafeJS.Infer, SafeJS.Parse, SafeJS.Util
   build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec
+  default-language:    Haskell2010
+  ghc-options: -Wall
+
+executable sjs
+  main-is: SafeJS/Main.hs
+  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec, sjs
   default-language:    Haskell2010
   ghc-options: -Wall
 
 executable sjs-demo
   main-is: Demo.hs
-  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec
+  hs-source-dirs: test
+  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec, sjs
   default-language:    Haskell2010
   ghc-options: -Wall -main-is Demo
 
-executable sjs
-  main-is: Main.hs
-  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec
-  default-language:    Haskell2010
-  ghc-options: -Wall
-
 executable test
-  main-is: Test.hs
-  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec
-  default-language:    Haskell2010
-  ghc-options: -Wall -main-is Test
   if flag(quickcheck)
     cpp-options: -DQUICKCHECK
     build-depends: QuickCheck, derive
     default-extensions: TemplateHaskell, DeriveGeneric
+  else
+    buildable: False
+  main-is: Test.hs
+  hs-source-dirs: test
+  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec, sjs
+  default-language:    Haskell2010
+  ghc-options: -Wall -main-is Test
   if flag(trace)
     cpp-options: -DTRACE
 

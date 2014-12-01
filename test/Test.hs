@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, TypeSynonymInstances, FlexibleInstances #-}
 module Test where
 
-import Infer
+import SafeJS.Infer
 
 main = do
   runAllTests

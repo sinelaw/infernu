@@ -4,7 +4,7 @@
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE TupleSections     #-}
 
-module Infer
+module SafeJS.Infer
     (Exp(..)
     , LitVal(..)
     , EVarName

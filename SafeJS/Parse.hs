@@ -1,4 +1,4 @@
-module Parse
+module SafeJS.Parse
        (translate)
        where
 
@@ -7,7 +7,7 @@ import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
 import qualified Text.Parsec.Pos             as Pos
 
-import           Infer
+import           SafeJS.Infer
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
