@@ -15,7 +15,7 @@ poo = "_/_"
 
 -- | A dummy expression that does nothing (but has a type).
 empty :: a -> Exp a
-empty z = EVar z poo
+empty z = ELit z LitUndefined -- EVar z poo
 
 errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
 errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES3PP.prettyPrint expr)
@@ -25,16 +25,19 @@ foldStmts [] k = k
 foldStmts [x] k = fromStatement x k
 foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
 
+chainExprs :: Show a => a -> Exp a -> (Exp a -> Exp a) -> Exp a -> Exp a
+chainExprs a init' getK k = ETuple a [init', getK k]
+
 
 fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
-fromStatement (ES3.ExprStmt z e) = ELet z poo (fromExpression e)
--- TODO: The if/while/do conversion is hacky and introduces dummy poo names into the scope.
-fromStatement (ES3.IfStmt z pred' thenS elseS) = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . foldStmts [thenS, elseS]
-fromStatement (ES3.IfSingleStmt z pred' thenS) = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement thenS
-fromStatement (ES3.WhileStmt z pred' loopS) = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
-fromStatement (ES3.DoWhileStmt z loopS pred') = ELet z poo (EArray z [fromExpression pred', ELit z (LitBoolean False)]) . fromStatement loopS
+fromStatement (ES3.ExprStmt z e) = \k -> ETuple z [fromExpression e, k]
+-- TODO: The if/while/do conversion is hacky
+fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ foldStmts [thenS, elseS]
+fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement thenS
+fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement loopS
+fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement loopS
 fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ThrowStmt _ _) = id
@@ -79,10 +82,11 @@ fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ ma
 --           where funcBody = Block $ map fromStatement stmts
 fromExpression (ES3.ListExpr z exprs) =
     case exprs of
-      [] -> empty z
+      [] -> error "Unexpected empty list expression"
       [x] -> fromExpression x
-      xs -> ELet z poo (ETuple z . map fromExpression $ tail revXs) (fromExpression $ head revXs)
-          where revXs = reverse xs
+      -- Should the let here use an allocated name here?
+      xs -> ELet z poo (ETuple z (tail exprs')) (head exprs')
+          where exprs' = reverse . map fromExpression $ xs
 fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
 --fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
