@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP               #-}
+
 module Main (main, checkFiles) where
 
 import           Control.Arrow               (second)
@@ -38,7 +40,9 @@ checkFiles fileNames = do
   let expr' = translate $ expr
       expr'' = runTypeInference expr'
       res = fmap getAnnotations expr''
+#ifdef TRACE      
   putStrLn $ pretty expr'
+#endif  
   return res
 
 annotatedSource :: [(Pos.SourcePos, Type TBody)] -> [String] -> String
