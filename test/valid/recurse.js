@@ -1,2 +1,2 @@
-function f() { return f(); }
+function f(x) { return f(x); }
 f;

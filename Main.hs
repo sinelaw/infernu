@@ -35,8 +35,10 @@ indexList = zip [1..]
 checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, Type TBody)])
 checkFiles fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
-  let expr' = runTypeInference . translate $ expr
-      res = fmap getAnnotations expr'
+  let expr' = translate $ expr
+      expr'' = runTypeInference expr'
+      res = fmap getAnnotations expr''
+  putStrLn $ pretty expr'
   return res
 
 annotatedSource :: [(Pos.SourcePos, Type TBody)] -> [String] -> String

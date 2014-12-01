@@ -2,7 +2,7 @@ var f = function(obj, x) {
     return obj.doStuff(x);
 };
 
-f({bla: 3, doStuff: function(r) { return false;}});
+f({bla: 3, doStuff: function(r) { return false;}}, 'b');
 
 f = function(obj, x) {
     return obj.doStuff('a'); // ignores x, uses 2 instead.

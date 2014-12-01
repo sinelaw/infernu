@@ -1,4 +1,4 @@
 ERROR y valid/map.js
-// FAIL valid/objlit-func.js:2:24: Error: Occurs check failed: j in ({doStuff: (c -> j), ...} -> i) y valid/objlit-func.js
-ERROR y valid/promise.js
+// FAIL valid/promise.js:15:14: Error: Could not unify: TUndefined with TString y valid/promise.js
+// FAIL valid/this.js:1:53: Error: Unbound variable: "this" y valid/this.js
 // FAIL  n invalid/var-recursive-nonfunc.js

@@ -11,7 +11,7 @@ import           Infer
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
-poo = " "
+poo = "_/_"
 
 -- | A dummy expression that does nothing (but has a type).
 empty :: a -> Exp a
@@ -46,7 +46,7 @@ fromStatement (ES3.VarDeclStmt _ decls) = chain decls
     where chain [] k = k
           chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
           chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chain xs k)
-fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) $ foldl (\expr arg -> EAbs z (ES3.unId arg) expr) body (ES3.Id z "this" : args)
+fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) $ foldl (\expr arg -> EAbs z (ES3.unId arg) expr) body args -- $ (ES3.Id z "this" : args)
                                                          where body = foldStmts stmts $ empty z
 -- TODO: return statements must be added to the core language to be handled correctly.
 fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z poo) fromExpression x
@@ -62,8 +62,8 @@ fromExpression (ES3.ArrayLit z exprs) = EArray z $ map fromExpression exprs
 fromExpression (ES3.ObjectLit z props) = ERow z $ map (fromProp *** fromExpression) props
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
-fromExpression (ES3.CallExpr z expr argExprs) = chainApp (thisArg : argExprs)
-    where chainApp [] = EApp z (fromExpression expr) (empty z) -- TODO handle functions that take no parameter
+fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs -- (thisArg : argExprs)
+    where chainApp [] = EApp z (fromExpression expr) (empty z) --error $ "Assetion failed: expecting at least 'this'"
           chainApp [x] = EApp z (fromExpression expr) (fromExpression x)
           chainApp (x:xs) = EApp z (chainApp xs) (fromExpression x)
           thisArg = case expr of
@@ -72,7 +72,7 @@ fromExpression (ES3.CallExpr z expr argExprs) = chainApp (thisArg : argExprs)
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LDot _ objExpr name) expr) = EPropAssign z objExpr' name (fromExpression expr) (EProp z objExpr' name)
   where objExpr' = fromExpression objExpr
-fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ "this" : map ES3.unId argNames
+fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ map ES3.unId  argNames -- "this" : map ES3.unId argNames
   where chainAbs [] = EAbs z poo (foldStmts stmts $ empty z)
         chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
         chainAbs (x:xs) = EAbs z x (chainAbs xs)
