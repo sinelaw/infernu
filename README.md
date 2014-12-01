@@ -2,7 +2,18 @@
 
 Safe JavaScript
 
-## Two approaches
+
+## TODO
+
+- [ ] add support for CommonJS modules
+- [ ] support all ES3 statement types (or reject them, but handle all)
+- [ ] in inferred types, preserve source code context info and use it for more readable unification errors
+- [ ] handle funcs with no return statement (should be same as return;)
+- [ ] handle multiple return statements
+
+# Discussions
+
+## AST translation to core language: yes or no?
 
 There are two general approaches to implement type inference on a new syntax:
 
@@ -161,15 +172,3 @@ Examples:
     g = f(2); // g has type [number]
     h = f('a'); // h has type [string] -- crucial point! function calls cause instantiation of type scheme
 
-
-
-## TODO
-
-- [ ] add "module" primitive that allows vardecls, use it to map ES3 Scripts (should cause trivial.js to pass)
-- [ ] support all ES3 statement types (or reject them, but handle all)
-- [ ] preserve source code context info and use it for errors
-- [ ] support warnings
-- [ ] handle funcs with no return statement (should be same as return;)
-- [x] get fix.js to infer correctly
-- [ ] implement the type system described below
-- [ ] function return types should be like vars (use type sigs)
