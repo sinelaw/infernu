@@ -1,9 +1,6 @@
 {-# LANGUAGE DeriveFoldable    #-}
 {-# LANGUAGE DeriveFunctor     #-}
---{-# LANGUAGE DeriveGeneric     #-}
---{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
---{-# LANGUAGE TemplateHaskell   #-} -- for quickcheck all
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE TupleSections     #-}
 
@@ -22,6 +19,9 @@ module Infer
     , getAnnotations
     , minifyVars
     , TypeError
+#ifdef QUICKCHECK
+    , runAllTests
+#endif
     )
     where
 
@@ -44,10 +44,14 @@ import qualified Data.Set                   as Set
 import qualified Text.Parsec.Pos            as Pos
 import           Prelude                    hiding (foldr)
 
--- import           Test.QuickCheck(choose)
---import           Test.QuickCheck.All
--- import           Test.QuickCheck.Arbitrary(Arbitrary(..))
--- import           Data.DeriveTH
+#ifdef QUICKCHECK
+import           Test.QuickCheck(choose, resize)
+import           Test.QuickCheck.All
+import           Test.QuickCheck.Arbitrary(Arbitrary(..))
+import           Data.DeriveTH
+#endif
+
+
 #if TRACE
 import           Debug.Trace                (trace)
 #else
@@ -877,12 +881,25 @@ test e = case runTypeInference e of
 runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type TBody))
 runTypeInference e = runInfer $ typeInference Map.empty e
 
+
+#ifdef QUICKCHECK
+
 -- Test runner
 
---return []
+return []
 
--- $( derive makeArbitrary ''TBody )
--- $( derive makeArbitrary ''Type )
 
---runAllTests = $(quickCheckAll)
+instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Map.Map k v) where
+    arbitrary = Map.fromList <$> resize 2 arbitrary
+    shrink m = map (flip Map.delete m) (Map.keys m)
 
+$( derive makeArbitrary ''TRowList )
+$( derive makeArbitrary ''TConsName )
+$( derive makeArbitrary ''TBody )
+$( derive makeArbitrary ''Type )
+
+runAllTests :: IO Bool
+runAllTests = $(quickCheckAll)
+
+
+#endif
