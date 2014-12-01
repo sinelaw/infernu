@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE CPP             #-}
+{-# LANGUAGE TupleSections   #-}
 
 module SafeJS.Infer
     ( runTypeInference
@@ -28,18 +28,18 @@ import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
 import           Data.Maybe                 (fromMaybe, mapMaybe)
 import qualified Data.Set                   as Set
-import qualified Text.Parsec.Pos            as Pos
 import           Prelude                    hiding (foldr)
+import qualified Text.Parsec.Pos            as Pos
 
 #ifdef QUICKCHECK
-import           Test.QuickCheck(choose, resize)
-import           Test.QuickCheck.All
-import           Test.QuickCheck.Arbitrary(Arbitrary(..))
 import           Data.DeriveTH
+import           Test.QuickCheck            (choose, resize)
+import           Test.QuickCheck.All
+import           Test.QuickCheck.Arbitrary  (Arbitrary (..))
 #endif
 
-import SafeJS.Types
-import SafeJS.Pretty
+import           SafeJS.Pretty
+import           SafeJS.Types
 
 #if TRACE
 import           Debug.Trace                (trace)
