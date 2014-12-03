@@ -32,7 +32,7 @@ sayType :: String -> String
 sayType rest = case  runTypeInference . translate . ES3.unJavaScript <$> ES3Parser.parseFromString rest of
                 Left e -> show e
                 Right res -> case getAnnotations <$> res of
-                              Left e' -> show e'
+                              Left e' -> pretty e'
                               Right [] -> show "There is nothing there."
-                              Right xs -> show . snd $ last xs
+                              Right xs -> pretty . snd $ head xs
                        

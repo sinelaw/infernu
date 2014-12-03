@@ -26,13 +26,13 @@ foldStmts [x] k = fromStatement x k
 foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
 
 chainExprs :: Show a => a -> Exp a -> (Exp a -> Exp a) -> Exp a -> Exp a
-chainExprs a init' getK k = ETuple a [init', getK k]
+chainExprs a init' getK k = ELet a poo init' $ getK k
 
 
 fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
-fromStatement (ES3.ExprStmt z e) = \k -> ETuple z [fromExpression e, k]
+fromStatement (ES3.ExprStmt z e) = ELet z poo (fromExpression e)
 -- TODO: The if/while/do conversion is hacky
 fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ foldStmts [thenS, elseS]
 fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement thenS
