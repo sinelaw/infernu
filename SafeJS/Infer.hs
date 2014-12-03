@@ -309,13 +309,14 @@ unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
                -> Infer TSubst
 unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
-           in1NotIn2row = unflattenRow m1 (Just r) (flip Set.member in1NotIn2)
+           rowTail = fmap (const r) r2
+           in1NotIn2row = trace' "in1NotIn2row" $ applySubst s1 . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
 
        case r2 of
          Nothing -> if Set.null in1NotIn2
-                    then return nullSubst
+                    then varBind a r (TRow $ TRowEnd Nothing)
                     else unificationError a t1 t2
-         Just r2' -> unify a (applySubst s1 $ TRow in1NotIn2row) (applySubst s1 $ TBody $ TVar r2')
+         Just r2' -> unify a in1NotIn2row (applySubst s1 $ TBody $ TVar r2')
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: Pos.SourcePos -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
