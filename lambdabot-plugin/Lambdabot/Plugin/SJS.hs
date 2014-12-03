@@ -1,16 +1,19 @@
-{-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 -- | SJS
 module Lambdabot.Plugin.SJS (sjsPlugin) where
 
-import Lambdabot.Plugin
-import Data.Functor ((<$>))
-import qualified Data.Map as Map
-import qualified Data.ByteString.Char8 as P
-import Data.List(intersperse)
+import qualified Data.ByteString.Char8       as P
+import           Data.Functor                ((<$>))
+import           Data.List                   (intersperse)
+import qualified Data.Map                    as Map
+import           Lambdabot.Plugin
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 
-import           SafeJS.Infer       (pretty, runTypeInference, getAnnotations)
+import           SafeJS.Infer                (getAnnotations, minifyVars,
+                                              pretty, runTypeInference)
 --import           SafeJS.Util        (chec
 import           SafeJS.Parse                (translate)
 
@@ -34,5 +37,5 @@ sayType rest = case  runTypeInference . translate . ES3.unJavaScript <$> ES3Pars
                 Right res -> case getAnnotations <$> res of
                               Left e' -> pretty e'
                               Right [] -> show "There is nothing there."
-                              Right xs -> pretty . snd $ head xs
-                       
+                              Right xs -> pretty . minifyVars . snd $ head xs
+
