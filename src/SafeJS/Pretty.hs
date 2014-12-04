@@ -41,7 +41,7 @@ instance Pretty (Exp a) where
   prettyTab t (ERow _ props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ "}"
   prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
-
+  prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
 
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + n - 1)

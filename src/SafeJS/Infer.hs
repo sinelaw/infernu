@@ -360,7 +360,7 @@ isExpansive (ETuple _ exprs)  = any isExpansive exprs
 isExpansive (ERow _ exprs)    = any isExpansive $ map snd exprs
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
 isExpansive (EProp _ expr _)  = isExpansive expr
-
+isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and that's it?
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
@@ -492,7 +492,19 @@ inferType' env (EProp a eObj propName) =
          t = applySubst s3 (TBody $ TVar propVar)
      applySubstInfer s3
      return (s3, t, EProp (a,t) eObj' propName)
-
+inferType' env (EIndex a eArr eIdx) = 
+  do (s1, tArr, eArr') <- inferType env eArr
+     elemType <- TBody . TVar <$> fresh
+     s1' <- unify a (TCons TArray [elemType]) tArr
+     let s1'' = s1' `composeSubst` s1
+     applySubstInfer s1''
+     (s2, tId, eIdx') <- inferType env eIdx
+     s2' <- unify a (TBody TNumber) tId
+     let s2'' = s2' `composeSubst` s2
+     applySubstInfer s2''
+     let elemType' = applySubst s2'' elemType
+     return (s2'' `composeSubst` s1'', elemType' , EIndex (a, elemType')  eArr' eIdx')
+     
 unifyAllInstances :: Pos.SourcePos -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
   m <- varInstances <$> get

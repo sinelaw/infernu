@@ -56,6 +56,9 @@ data Exp a = EVar a EVarName
            | ERow a [(EPropName, Exp a)]
            | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
            | EProp a (Exp a) EPropName
+             -- TODO EIndex should not be part of the AST. should be a builtin function using
+             -- pattern matching instead
+           | EIndex a (Exp a) (Exp a) 
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------

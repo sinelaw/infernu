@@ -64,6 +64,7 @@ fromExpression (ES3.NumLit z s) = ELit z $ LitNumber s
 fromExpression (ES3.NullLit z) = ELit z LitNull
 fromExpression (ES3.ArrayLit z exprs) = EArray z $ map fromExpression exprs
 fromExpression (ES3.ObjectLit z props) = ERow z $ map (fromProp *** fromExpression) props
+fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex z (fromExpression arrExpr) (fromExpression indexExpr)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
 fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs -- (thisArg : argExprs)
