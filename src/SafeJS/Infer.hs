@@ -19,6 +19,7 @@ module SafeJS.Infer
 import           Control.Monad              (foldM, forM, forM_)
 --import           Control.Monad.State (State, evalState, get, modify)
 import           Control.Monad.Trans        (lift)
+-- Use Control.Monad.Trans.Except
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get,
                                              modify)
@@ -26,8 +27,10 @@ import           Data.Foldable              (Foldable (..))
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
+import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe, mapMaybe)
 import qualified Data.Set                   as Set
+import           Data.Set                   (Set)
 import           Prelude                    hiding (foldr)
 import qualified Text.Parsec.Pos            as Pos
 
@@ -113,7 +116,7 @@ getVarId = Map.lookup
 -- >>> m1
 -- fromList [(1,fromList [TBody (TVar 1),TBody (TVar 2)]),(2,fromList [TBody (TVar 1),TBody (TVar 2)])]
 --
-addEquivalence :: TVarName -> TVarName -> Map.Map TVarName (Set.Set (Type TBody)) -> Map.Map TVarName (Set.Set (Type TBody))
+addEquivalence :: TVarName -> TVarName -> Map TVarName (Set (Type TBody)) -> Map TVarName (Set (Type TBody))
 addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
     where updatedSet = Set.insert (TBody $ TVar x) . Set.insert (TBody $ TVar y) $ Set.union (getSet x) (getSet y)
           getSet item = fromMaybe Set.empty $ Map.lookup item m
@@ -168,7 +171,7 @@ addVarScheme n env scheme = do
 addVarInstance :: TVarName -> TVarName -> Infer ()
 addVarInstance x y = modify $ \is -> is { varInstances = trace' "updated equivs" $ addEquivalence x y (varInstances is) }
 
-getFreeTVars :: TypeEnv -> Infer (Set.Set TVarName)
+getFreeTVars :: TypeEnv -> Infer (Set TVarName)
 getFreeTVars env = do
   let collectFreeTVs s varId = Set.union s <$> curFreeTVs
           where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId
@@ -293,7 +296,7 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
            (m1, r1) = flattenRow row1
            names1 = Set.fromList $ Map.keys m1
            commonNames = Set.toList $ names1 `Set.intersection` names2
-           namesToTypes :: Map.Map EPropName (Type a) -> [EPropName] -> [Type a]
+           namesToTypes :: Map EPropName (Type a) -> [EPropName] -> [Type a]
            namesToTypes m = mapMaybe (flip Map.lookup m)
            commonTypes :: [(Type TBody, Type TBody)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
@@ -304,8 +307,8 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
        return $ s3 `composeSubst` s2 `composeSubst` s1
 
 unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
-               -> (x, Set.Set EPropName, Map.Map EPropName (Type TBody))
-               -> (y, Set.Set EPropName, Maybe TVarName)
+               -> (x, Set EPropName, Map EPropName (Type TBody))
+               -> (y, Set EPropName, Maybe TVarName)
                -> Infer TSubst
 unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
@@ -635,7 +638,7 @@ runTypeInference e = runInfer $ typeInference Map.empty e
 return []
 
 
-instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Map.Map k v) where
+instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Map k v) where
     arbitrary = Map.fromList <$> resize 2 arbitrary
     shrink m = map (flip Map.delete m) (Map.keys m)
 
@@ -646,6 +649,5 @@ $( derive makeArbitrary ''Type )
 
 runAllTests :: IO Bool
 runAllTests = $(quickCheckAll)
-
 
 #endif

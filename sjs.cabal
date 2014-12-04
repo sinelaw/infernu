@@ -22,16 +22,18 @@ flag trace
   manual: True
 
 library
+  hs-source-dirs:      src
   exposed-modules:     SafeJS.Infer, SafeJS.Parse, SafeJS.Util, SafeJS.Pretty, SafeJS.Types
-  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec
+  -- TODO: use only mtl (not transformers)
+  build-depends:       base, mtl, containers, transformers, either, language-ecmascript, digits, parsec
   default-language:    Haskell2010
   ghc-options: -Wall
   if flag(trace)
     cpp-options: -DTRACE
 
 executable sjs
-  main-is: SafeJS/Main.hs
-  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec, sjs
+  main-is: Main.hs
+  build-depends:       base, parsec, sjs
   default-language:    Haskell2010
   ghc-options: -Wall
   if flag(trace)
@@ -40,7 +42,7 @@ executable sjs
 executable sjs-demo
   main-is: Demo.hs
   hs-source-dirs: test
-  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec, sjs
+  build-depends:       base, sjs
   default-language:    Haskell2010
   ghc-options: -Wall -main-is Demo
   if flag(trace)
@@ -55,17 +57,9 @@ executable test
     buildable: False
   main-is: Test.hs
   hs-source-dirs: test
-  build-depends:       base >=4.7 && <4.8, mtl, containers, transformers, either, language-ecmascript, digits, parsec, sjs
+  build-depends:       base, sjs
   default-language:    Haskell2010
   ghc-options: -Wall -main-is Test
   if flag(trace)
     cpp-options: -DTRACE
-
--- executable sjs-test
---   main-is: Main.hs
---   other-extensions:    DeriveGeneric
---   build-depends:       base >=4.7 && <4.8, GenericPretty, mtl, containers, language-ecmascript, errors, either, transformers, QuickCheck, derive, test-framework-th, test-framework-quickcheck2, derive
---   hs-source-dirs:      ., test
---   default-language:    Haskell2010
---   ghc-options: -Wall
 
