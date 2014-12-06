@@ -1,19 +1,14 @@
 function once(f) {
     var ran = true;
-    var result;
+    var result = [];
     return function(x) {
         if (ran) {
             ran = false;
-            result = f(x);
+            result = [f(x)];
         }
-        return result;
+        return result[0];
     };
 }
 
-//var g = once(function(x) { return x; })
-
 var h = once(function(x) { return 'shimon'; });
-//var j = g('moshe');
-
-//g(2);
-//h(false);
+h;
