@@ -297,7 +297,7 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
            names1 = Set.fromList $ Map.keys m1
            commonNames = Set.toList $ names1 `Set.intersection` names2
            namesToTypes :: Map EPropName (Type a) -> [EPropName] -> [Type a]
-           namesToTypes m = mapMaybe (flip Map.lookup m)
+           namesToTypes m = mapMaybe $ flip Map.lookup m
            commonTypes :: [(Type TBody, Type TBody)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
        s1 <- unifyl a nullSubst commonTypes
@@ -413,7 +413,7 @@ inferType' env (ELet a n e1 e2) =
   do recType <- TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
      (s1, t1, e1') <- inferType recEnv e1
-     s1rec <- unify a t1 recType
+     s1rec <- unify a t1 (applySubst s1 recType)
      let s1' = s1rec `composeSubst` s1
      applySubstInfer s1'
      let generalizeScheme = trace' ("let generalized '" ++ show n ++ "' --") <$> generalize env t1
