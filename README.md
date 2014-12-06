@@ -5,11 +5,17 @@ Safe JavaScript
 
 ## TODO
 
-- [ ] add support for CommonJS modules
-- [ ] support all ES3 statement types (or reject them, but handle all)
+- [ ] find a new name!
 - [ ] in inferred types, preserve source code context info and use it for more readable unification errors
 - [ ] handle funcs with no return statement (should be same as return;)
 - [ ] handle multiple return statements
+- [ ] support all ES3 statement types (or reject them, but handle all)
+
+
+### Future
+
+- [ ] type annotations
+- [ ] add support for CommonJS modules
 
 # Discussions
 
