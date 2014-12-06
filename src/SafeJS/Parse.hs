@@ -50,11 +50,18 @@ fromStatement (ES3.VarDeclStmt _ decls) = chain decls
           chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
           chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chain xs k)
 -- $ (ES3.Id z "this" : args)
-fromStatement (ES3.FunctionStmt z name args stmts) = ELet z (ES3.unId name) $ foldl (\expr arg -> EAbs z (ES3.unId arg) expr) body args
-                                                         where body = foldStmts stmts $ empty z
+fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
 -- TODO: return statements must be added to the core language to be handled correctly.
 fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z poo) fromExpression x
 
+-- | Creates an EAbs (function abstraction)
+toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
+toAbs z args stmts = EAbs z (map ES3.unId args) $ foldStmts stmts $ empty z
+
+toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
+toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
+                                       in ELet z (ES3.unId name) abs' letBody
+                                          
 fromExpression :: Show a => ES3.Expression a -> Exp a
 fromExpression (ES3.StringLit z s) = ELit z $ LitString s
 fromExpression (ES3.RegexpLit z s g i) = ELit z $ LitRegex s g i
@@ -67,21 +74,16 @@ fromExpression (ES3.ObjectLit z props) = ERow z $ map (fromProp *** fromExpressi
 fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex z (fromExpression arrExpr) (fromExpression indexExpr)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
-fromExpression (ES3.CallExpr z expr argExprs) = chainApp argExprs -- (thisArg : argExprs)
-    where chainApp [] = EApp z (fromExpression expr) (empty z) --error $ "Assetion failed: expecting at least 'this'"
-          chainApp [x] = EApp z (fromExpression expr) (fromExpression x)
-          chainApp (x:xs) = EApp z (chainApp xs) (fromExpression x)
-          thisArg = case expr of
-                      ES3.DotRef _ objExpr _ -> objExpr
-                      _ -> ES3.NullLit z -- TODO should be 'undefined'
+fromExpression (ES3.CallExpr z expr argExprs) = EApp z (fromExpression expr) (map fromExpression argExprs)
+                                                --error $ "Assetion failed: expecting at least 'this'"
+          -- thisArg = case expr of
+          --             ES3.DotRef _ objExpr _ -> objExpr
+          --             _ -> ES3.NullLit z -- TODO should be 'undefined'
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LDot _ objExpr name) expr) = EPropAssign z objExpr' name (fromExpression expr) (EProp z objExpr' name)
   where objExpr' = fromExpression objExpr
-fromExpression (ES3.FuncExpr z Nothing argNames stmts) = chainAbs . reverse $ map ES3.unId  argNames -- "this" : map ES3.unId argNames
-  where chainAbs [] = EAbs z poo (foldStmts stmts $ empty z)
-        chainAbs [x] = EAbs z x (foldStmts stmts $ empty z)
-        chainAbs (x:xs) = EAbs z x (chainAbs xs)
---           where funcBody = Block $ map fromStatement stmts
+fromExpression (ES3.FuncExpr z Nothing     argNames stmts) = toAbs z argNames stmts
+fromExpression (ES3.FuncExpr z (Just name) argNames stmts) = toNamedAbs z argNames stmts name (EVar z $ ES3.unId name)
 fromExpression (ES3.ListExpr z exprs) =
     case exprs of
       [] -> error "Unexpected empty list expression"

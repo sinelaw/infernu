@@ -14,6 +14,11 @@ tab t = replicate (t*4) ' '
 class Pretty a where
   prettyTab :: Int -> a -> String
 
+instance Pretty [String] where
+  prettyTab _ [] = "[]"
+  prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
+
+
 pretty :: Pretty a => a -> String
 pretty = prettyTab 0
 
@@ -30,7 +35,7 @@ instance Pretty EVarName where
 
 instance Pretty (Exp a) where
   prettyTab t (EVar _ n) = prettyTab t n
-  prettyTab t (EApp _ e1 e2) = prettyTab t e1 ++ " " ++ prettyTab t e2
+  prettyTab t (EApp _ e1 args) = prettyTab t e1 ++ unwords (map (prettyTab t) args)
   prettyTab t (EAbs _ n e) = "(\\" ++ prettyTab t n ++ " -> " ++ prettyTab t e ++ ")"
   prettyTab t (ELet _ n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
   prettyTab t (ELit _ l) = prettyTab t l
@@ -61,8 +66,8 @@ instance Pretty TConsName where
 
 instance Pretty t => Pretty (Type t) where
   prettyTab n (TBody t) = prettyTab n t
-  prettyTab n (TCons TFunc [t1, t2]) = "(" ++ prettyTab n t1 ++ " -> " ++ prettyTab n t2 ++ ")"
-  prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
+  prettyTab n (TCons TFunc ts) = "(" ++ intercalate " -> " (map (prettyTab n) ts) ++ ")"
+--  prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
   prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"

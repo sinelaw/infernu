@@ -1,5 +1,3 @@
-// FAIL valid/func-stmt-expr-erisco.js:3:9: Error: Could not unify: TNumber with (l -> TNumber) y valid/func-stmt-expr-erisco.js
 ERROR y valid/map.js
 // FAIL valid/promise.js:15:14: Error: Could not unify: TUndefined with TString y valid/promise.js
 // FAIL valid/this.js:1:53: Error: Unbound variable: "this" y valid/this.js
-// FAIL  n invalid/func-no-currying.js

@@ -45,8 +45,8 @@ data LitVal = LitNumber Double
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar a EVarName
-           | EApp a (Exp a) (Exp a)
-           | EAbs a EVarName (Exp a)
+           | EApp a (Exp a) [Exp a]
+           | EAbs a [EVarName] (Exp a)
            | ELet a EVarName (Exp a) (Exp a)
            | ELit a LitVal
            | EAssign a EVarName (Exp a) (Exp a)

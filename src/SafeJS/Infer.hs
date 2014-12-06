@@ -281,10 +281,10 @@ unify' a (TBody x) (TBody y) = if x == y
                              else unificationError a x y
 unify' a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TCons _ _) t2@(TBody _) = unify' a t2 t1
-unify' a (TCons n1 ts1) (TCons n2 ts2) =
+unify' a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then unifyl a nullSubst $ zip ts1 ts2
-    else unificationError a n1 n2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
+    else unificationError a t1 t2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
 unify' a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
 unify' a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
@@ -391,24 +391,26 @@ inferType' _ (ELit a lit) = do
 inferType' env (EVar a n) = do
   t <- instantiateVar a n env
   return (nullSubst, t, EVar (a, t) n)
-inferType' env (EAbs a argName e2) =
-  do tvarName <- fresh
-     let tvar = TBody (TVar tvarName)
-     env' <- addVarScheme argName env $ TScheme [] tvar
+inferType' env (EAbs a argNames e2) =
+  do argTypes <- forM argNames (const $ TBody . TVar <$> fresh)
+     env' <- foldM (\e (n, t) -> addVarScheme n e $ TScheme [] t) env $ zip argNames argTypes
      (s1, t1, e2') <- inferType env' e2
-     let t = TCons TFunc [applySubst s1 tvar, t1]
-     return (s1, t, EAbs (a, t) argName e2')
-inferType' env (EApp a e1 e2) =
+     let t = TCons TFunc $ map (applySubst s1) argTypes ++ [t1]
+     return (s1, t, EAbs (a, t) argNames e2')
+inferType' env (EApp a e1 eArgs) =
   do tvarName <- fresh
      let tvar = TBody (TVar tvarName)
      (s1, t1, e1') <- inferType env e1
      applySubstInfer s1
-     (s2, t2, e2') <- inferType env e2
+     (s2, argsTE) <- accumInfer env eArgs
+     let tArgs = map fst rargsTE
+         eArgs' = map snd rargsTE
+         rargsTE = reverse argsTE
      applySubstInfer s2
-     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2 t1) (TCons TFunc [t2, tvar])
+     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2 t1) (TCons TFunc $ tArgs ++ [tvar])
      applySubstInfer s3
      let t = applySubst s3 tvar
-     return (s3 `composeSubst` s2 `composeSubst` s1, t, EApp (a, t) e1' e2')
+     return (s3 `composeSubst` s2 `composeSubst` s1, t, EApp (a, t) e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
