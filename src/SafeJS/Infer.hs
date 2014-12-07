@@ -516,9 +516,9 @@ unifyAllInstances a s tvs = do
   let unifyAll' s' equivs = unifyAll a s' . trace' "equivalence:" $ Set.toList equivs
   trace' "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
-minifyVars :: (VarNames a, Foldable t, Functor t) => t a -> t a
-minifyVars xs = fmap (mapVarNames f) xs
-    where vars = Map.fromList $ zip (Set.toList $ foldr (Set.union . freeTypeVars) Set.empty xs) ([1..] :: [TVarName])
+minifyVars :: (VarNames a) => a -> a
+minifyVars xs = mapVarNames f xs
+    where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) ([1..] :: [TVarName])
           f n = fromMaybe n $ Map.lookup n vars
           
 
