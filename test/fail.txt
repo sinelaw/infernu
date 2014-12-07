@@ -1,2 +1,4 @@
 ERROR y valid/map.js
 // FAIL valid/this.js:1:53: Error: Unbound variable: "this" y valid/this.js
+// FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
+// FAIL  n invalid/debounce.js
