@@ -42,7 +42,7 @@ nakedSingleOrTuple xs = "(" ++ intercalate ", " xs ++ ")"
 instance Pretty (Exp a) where
   prettyTab t (EVar _ n) = prettyTab t n
   prettyTab t (EApp _ e1 args) = prettyTab t e1 ++ " " ++ unwords (map (prettyTab t) args)
-  prettyTab t (EAbs _ args e) = "(" ++ nakedSingleOrTuple (map (prettyTab t) args) ++ " -> " ++ prettyTab t e ++ ")"
+  prettyTab t (EAbs _ args e) = "(\\" ++ nakedSingleOrTuple (map (prettyTab t) args) ++ " -> " ++ prettyTab t e ++ ")"
   prettyTab t (ELet _ n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
   prettyTab t (ELit _ l) = prettyTab t l
   prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
