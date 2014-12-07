@@ -11,7 +11,7 @@ import qualified Text.Parsec.Pos             as Pos
 
 import           SafeJS.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
-import           SafeJS.Infer                (getAnnotations, runTypeInference)
+import           SafeJS.Infer                (getAnnotations, runTypeInference, minifyVars)
 import           SafeJS.Pretty               (pretty)
 import           SafeJS.Types                (TBody (..), Type (..), TypeError)
 
@@ -32,7 +32,7 @@ checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, Type TBody)])
 checkFiles fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   let expr' = translate $ expr
-      expr'' = runTypeInference expr'
+      expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
 #ifdef TRACE
   putStrLn $ pretty expr'

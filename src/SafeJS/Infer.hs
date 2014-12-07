@@ -516,15 +516,17 @@ unifyAllInstances a s tvs = do
   let unifyAll' s' equivs = unifyAll a s' . trace' "equivalence:" $ Set.toList equivs
   trace' "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
-minifyVars :: Type TBody -> Type TBody
-minifyVars t = mapVarNames f t
-    where vars = Map.fromList $ zip (Set.toList $ freeTypeVars t) ([1..] :: [TVarName])
+minifyVars :: (VarNames a, Foldable t, Functor t) => t a -> t a
+minifyVars xs = fmap (mapVarNames f) xs
+    where vars = Map.fromList $ zip (Set.toList $ foldr (Set.union . freeTypeVars) Set.empty xs) ([1..] :: [TVarName])
           f n = fromMaybe n $ Map.lookup n vars
+          
 
 typeInference :: TypeEnv -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type TBody))
 typeInference env e = do
   (_s, _t, e') <- inferType env e
-  return e'
+  let e'' = (fmap . fmap) (applySubst _s) e'
+  return e''
 
 ----------------------------------------------------------------------
 --
@@ -535,7 +537,7 @@ typeInference env e = do
 -- >>> let var = EVar p
 -- >>> let let' = ELet p
 -- >>> let tuple = ETuple p
--- >>> let app = EApp p
+-- >>> let app a b = EApp p a [b]
 -- >>> let lit = ELit p
 -- >>> let assign = EAssign p
 -- >>> let array = EArray p
@@ -546,34 +548,34 @@ typeInference env e = do
 --
 -- This should fail because it "collapses" x to be Number -> Number which is not compatible with bool -> bool
 --
--- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (assign "x" (fun "y" (lit (LitNumber 0))) (tuple [var "x", var "y"])))
+-- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (assign "x" (fun ["y"] (lit (LitNumber 0))) (tuple [var "x", var "y"])))
 -- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
 -- The following should succeed because x is immutable and thus polymorphic:
 --
--- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (tuple [var "x", var "y"]))
--- "((a -> a), (TNumber, TBoolean))"
+-- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (tuple [var "x", var "y"]))
+-- "((b -> b), (TNumber, TBoolean))"
 --
 -- The following should fail because x is mutable and therefore a monotype:
 --
--- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (assign "x" (fun "z1" (var "z1")) (tuple [var "x", var "y"])))
+-- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (assign "x" (fun ["z1"] (var "z1")) (tuple [var "x", var "y"])))
 -- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
 -- The following should also succeed because "x" is only ever used like this: (x True). The second assignment to x is: x := \z1 -> False, which is specific but matches the usage. Note that x's type is collapsed to: Boolean -> Boolean.
 --
--- >>> test $ let' "x" (fun "z" (var "z")) (let' "y" (app (var "x") (lit (LitBoolean True))) (assign "x" (fun "z1" (lit (LitBoolean False))) (tuple [var "x", var "y"])))
+-- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (app (var "x") (lit (LitBoolean True))) (assign "x" (fun ["z1"] (lit (LitBoolean False))) (tuple [var "x", var "y"])))
 -- "((TBoolean -> TBoolean), TBoolean)"
 --
 -- Tests a setter for x being called with something more specific than x's original definition:
 -- >>> :{
 -- >>> test $ let'
--- >>> "x" (fun "a" (var "a"))
+-- >>> "x" (fun ["a"] (var "a"))
 -- >>> (let' "setX"
--- >>>    (fun "v"
+-- >>>    (fun ["v"]
 -- >>>             (let'
 -- >>>          "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean False))))
 -- >>>    (let'
--- >>>       "_" (app (var "setX") (fun "a" (lit (LitString "a"))))
+-- >>>       "_" (app (var "setX") (fun ["a"] (lit (LitString "a"))))
 -- >>>       (app (var "x") (lit (LitBoolean True)))))
 -- >>> :}
 -- "<dummy>:1:1: Error: Could not unify: TString with TBoolean"
@@ -581,10 +583,10 @@ typeInference env e = do
 -- >>> test $ tuple [lit (LitBoolean True), lit (LitNumber 2)]
 -- "(TBoolean, TNumber)"
 --
--- >>> test $ let' "id" (fun "x" (var "x")) (assign "id" (fun "y" (var "y")) (var "id"))
+-- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (fun ["y"] (var "y")) (var "id"))
 -- "(a -> a)"
 --
--- >>> test $ let' "id" (fun "x" (var "x")) (assign "id" (lit (LitBoolean True)) (var "id"))
+-- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (lit (LitBoolean True)) (var "id"))
 -- "<dummy>:1:1: Error: Could not unify: TBoolean with (c -> c)"
 --
 -- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitBoolean False)) (var "x"))
@@ -605,40 +607,40 @@ typeInference env e = do
 -- >>> test $ let' "x" (array [lit $ LitBoolean True, lit $ LitNumber 2]) (var "x")
 -- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
--- >>> test $ let' "id" (fun "x" (let' "y" (var "x") (var "y"))) (app (var "id") (var "id"))
--- "(a -> a)"
+-- >>> test $ let' "id" (fun ["x"] (let' "y" (var "x") (var "y"))) (app (var "id") (var "id"))
+-- "(b -> b)"
 --
--- >>> test $ let' "id" (fun "x" (let' "y" (var "x") (var "y"))) (app (app (var "id") (var "id")) (lit (LitNumber 2)))
+-- >>> test $ let' "id" (fun ["x"] (let' "y" (var "x") (var "y"))) (app (app (var "id") (var "id")) (lit (LitNumber 2)))
 -- "TNumber"
 --
--- >>> test $ let' "id" (fun "x" (app (var "x") (var "x"))) (var "id")
+-- >>> test $ let' "id" (fun ["x"] (app (var "x") (var "x"))) (var "id")
 -- "<dummy>:1:1: Error: Occurs check failed: c in (c -> e)"
 --
--- >>> test $ fun "m" (let' "y" (var "m") (let' "x" (app (var "y") (lit (LitBoolean True))) (var "x")))
+-- >>> test $ fun ["m"] (let' "y" (var "m") (let' "x" (app (var "y") (lit (LitBoolean True))) (var "x")))
 -- "((TBoolean -> a) -> a)"
 --
 -- >>> test $ app (lit (LitNumber 2)) (lit (LitNumber 2))
 -- "<dummy>:1:1: Error: Could not unify: TNumber with (TNumber -> a)"
 --
 -- EAssign tests
--- >>> test $ let' "x" (fun "y" (lit (LitNumber 0))) (assign "x" (fun "y" (var "y")) (var "x"))
+-- >>> test $ let' "x" (fun ["y"] (lit (LitNumber 0))) (assign "x" (fun ["y"] (var "y")) (var "x"))
 -- "(TNumber -> TNumber)"
 --
--- >>> test $ let' "x" (fun "y" (var "y")) (assign "x" (fun "y" (lit (LitNumber 0))) (var "x"))
+-- >>> test $ let' "x" (fun ["y"] (var "y")) (assign "x" (fun ["y"] (lit (LitNumber 0))) (var "x"))
 -- "(TNumber -> TNumber)"
 --
--- >>> test $ let' "x" (fun "y" (var "y")) (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))])
+-- >>> test $ let' "x" (fun ["y"] (var "y")) (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))])
 -- "(TNumber, TBoolean)"
 --
--- >>> test $ let' "x" (fun "y" (var "y")) (app (var "x") (var "x"))
--- "(a -> a)"
+-- >>> test $ let' "x" (fun ["y"] (var "y")) (app (var "x") (var "x"))
+-- "(b -> b)"
 --
--- >>> test $ let' "x" (fun "a" (var "a")) (let' "getX" (fun "v" (var "x")) (let' "setX" (fun "v" (let' "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean True)))) (let' "_" (app (var "setX") (fun "a" (lit (LitString "a")))) (var "getX"))))
--- "(a -> (TString -> TString))"
+-- >>> test $ let' "x" (fun ["a"] (var "a")) (let' "getX" (fun ["v"] (var "x")) (let' "setX" (fun ["v"] (let' "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean True)))) (let' "_" (app (var "setX") (fun ["a"] (lit (LitString "a")))) (var "getX"))))
+-- "(b -> (TString -> TString))"
 test :: Exp Pos.SourcePos -> String
 test e = case runTypeInference e of
           Left err -> pretty err
-          Right expr -> pretty . minifyVars . snd . head $ getAnnotations expr
+          Right expr -> pretty $ snd . head . getAnnotations . minifyVars $ expr
 
 
 runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type TBody))
