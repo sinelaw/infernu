@@ -204,7 +204,7 @@ instance Substable (TRowList TBody) where
 ----------------------------------------------------------------------
 
 -- | Type scheme: a type expression with a "forall" over some type variables that may appear in it (universal quantification).
-data TScheme = TScheme [TVarName] (Type TBody)
+data TScheme = TScheme { schemeVars :: [TVarName], schemeType :: Type TBody }
              deriving (Show, Eq)
 
 instance VarNames TScheme where

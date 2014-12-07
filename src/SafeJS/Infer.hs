@@ -187,7 +187,7 @@ getFreeTVars env = do
 --     applySubstInfer $ Map.singleton 0 (TBody TString)
 --     varSchemes <$> get
 -- :}
--- Right (fromList [(1,TScheme [0] (TCons TFunc [TBody TString,TBody (TVar 1)]))])
+-- Right (fromList [(1,TScheme {schemeVars = [0], schemeType = TCons TFunc [TBody TString,TBody (TVar 1)]})])
 --
 applySubstInfer :: TSubst -> Infer ()
 applySubstInfer s = modify $ \is -> is {
@@ -238,7 +238,7 @@ instantiateVar a n env = do
 -- Example:
 --
 -- >>> runInfer $ generalize Map.empty $ TCons TFunc [TBody (TVar 0),TBody (TVar 1)]
--- Right (TScheme [0,1] (TCons TFunc [TBody (TVar 0),TBody (TVar 1)]))
+-- Right (TScheme {schemeVars = [0,1], schemeType = TCons TFunc [TBody (TVar 0),TBody (TVar 1)]})
 --
 -- >>> :{
 -- runInfer $ do
@@ -246,7 +246,7 @@ instantiateVar a n env = do
 --     tenv <- addVarScheme "x" Map.empty t
 --     generalize tenv (TCons TFunc [TBody (TVar 0), TBody (TVar 2)])
 -- :}
--- Right (TScheme [2] (TCons TFunc [TBody (TVar 0),TBody (TVar 2)]))
+-- Right (TScheme {schemeVars = [2], schemeType = TCons TFunc [TBody (TVar 0),TBody (TVar 2)]})
 --
 -- In this example the steps were:
 --
@@ -257,7 +257,7 @@ instantiateVar a n env = do
 -- 3. result: forall 2. 1 -> 2
 --
 -- >>> runInfer $ generalize Map.empty (TCons TFunc [TBody (TVar 0), TBody (TVar 0)])
--- Right (TScheme [0] (TCons TFunc [TBody (TVar 0),TBody (TVar 0)]))
+-- Right (TScheme {schemeVars = [0], schemeType = TCons TFunc [TBody (TVar 0),TBody (TVar 0)]})
 --
 -- TODO add tests for monotypes
 generalize :: TypeEnv -> Type TBody -> Infer TScheme
