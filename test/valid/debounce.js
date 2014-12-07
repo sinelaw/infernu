@@ -3,8 +3,9 @@ var $timeout = {
     cancel: function(t) { t=0; }
 };
 
-function debounce(f, millis) {
+function debounce(f, initial, millis) {
     var timer = 0;
+    var res = initial;
     var timerSet = false;
     var scheduledArgs = [];
     function resetTimeout() {
@@ -14,18 +15,20 @@ function debounce(f, millis) {
         timerSet = true;
         timer = $timeout.set(function() {
             // Note: f may end up running more than once per args set.
-            f(scheduledArgs[0]);//.apply(null, scheduledArgs);
+            res = f(scheduledArgs[0]);//.apply(null, scheduledArgs);
         }, millis);
+        return res;
     }
     return function(arg) {
         scheduledArgs = [arg]; //Array.prototype.slice.call(arguments, 0);
         return {
             invoke: function() {
-                resetTimeout();
+                return resetTimeout();
             }
         };
     };
 }
-var fonce = debounce(function (x) {  x = 0; }, 0);
-fonce(2);
-return fonce;
+var fonce = debounce(function (x) {  x = 0; return 'a'; }, 'c', 3);
+var y = fonce(2).invoke();
+y;
+return debounce;
