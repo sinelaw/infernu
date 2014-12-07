@@ -108,18 +108,6 @@ instance VarNames (TBody) where
   freeTypeVars (TVar n) = Set.singleton n
   freeTypeVars _ = Set.empty
 
-
--- | VarNames instance for TRowList
---
--- >>> freeTypeVars (TRowProp "x" (TBody TNumber) (TRowEnd $ Just 1))
--- fromList [1]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd Nothing))
--- fromList [2]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd $ Just 1))
--- fromList [1,2]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowProp "y" (TBody $ TVar 3) (TRowEnd $ Just 1)))
--- fromList [1,2,3]
-
 instance VarNames t => VarNames (Map.Map a t) where
   freeTypeVars = freeTypeVars'
   mapVarNames = mapVarNames'
@@ -133,6 +121,16 @@ instance VarNames t => VarNames (Exp (a, t)) where
   freeTypeVars = freeTypeVars'
   mapVarNames = mapVarNames'
 
+-- | VarNames instance for TRowList
+--
+-- >>> freeTypeVars (TRowProp "x" (TBody TNumber) (TRowEnd $ Just 1))
+-- fromList [1]
+-- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd Nothing))
+-- fromList [2]
+-- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd $ Just 1))
+-- fromList [1,2]
+-- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowProp "y" (TBody $ TVar 3) (TRowEnd $ Just 1)))
+-- fromList [1,2,3]
 instance VarNames t => VarNames (TRowList t) where
   freeTypeVars (TRowEnd (Just n)) = Set.singleton n
   freeTypeVars (TRowEnd _) = Set.empty
@@ -141,6 +139,18 @@ instance VarNames t => VarNames (TRowList t) where
   mapVarNames f (TRowEnd n) = TRowEnd $ fmap f n
   mapVarNames f (TRowProp n t r) = TRowProp n (mapVarNames f t) (mapVarNames f r)
 
+-- | VarNames instance for Type t
+--
+-- >>> freeTypeVars (TBody TNumber)
+-- fromList []
+-- >>> freeTypeVars (TBody $ TVar 0)
+-- fromList [0]
+-- >>> freeTypeVars (TCons TFunc [TBody $ TVar 0, TBody $ TVar 1])
+-- fromList [0,1]
+-- >>> freeTypeVars (TCons TFunc [TBody $ TVar 1])
+-- fromList [1]
+-- >>> freeTypeVars $ ((TRow (TRowEnd (Just 3))) :: Type TBody)
+-- fromList [3]
 instance VarNames t => VarNames (Type t) where
   freeTypeVars (TBody t) = freeTypeVars t
   freeTypeVars (TCons _ ts) = freeTypeVars ts
@@ -207,6 +217,22 @@ instance Substable (TRowList TBody) where
 data TScheme = TScheme { schemeVars :: [TVarName], schemeType :: Type TBody }
              deriving (Show, Eq)
 
+-- | VarNames instance for TScheme
+--
+-- >>> freeTypeVars $ TScheme [0, 1] (TBody $ TVar 2)
+-- fromList [2]
+-- >>> freeTypeVars $ TScheme [0, 1] (TBody $ TVar 1)
+-- fromList []
+-- >>> freeTypeVars $ TScheme [0] (TBody $ TVar 1)
+-- fromList [1]
+-- >>> freeTypeVars $ TScheme [0] (TBody $ TVar 0)
+-- fromList []
+-- >>> freeTypeVars $ TScheme [] (TBody $ TVar 1)
+-- fromList [1]
+-- >>> freeTypeVars $ TScheme [] (TBody $ TNumber)
+-- fromList []
+-- >>> freeTypeVars $ TScheme [1] (TBody $ TNumber)
+-- fromList []
 instance VarNames TScheme where
   freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
