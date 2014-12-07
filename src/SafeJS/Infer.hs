@@ -395,6 +395,7 @@ inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ TBody . TVar <$> fresh)
      env' <- foldM (\e (n, t) -> addVarScheme n e $ TScheme [] t) env $ zip argNames argTypes
      (s1, t1, e2') <- inferType env' e2
+     applySubstInfer s1
      let t = TCons TFunc $ map (applySubst s1) argTypes ++ [t1]
      return (s1, t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
@@ -407,7 +408,7 @@ inferType' env (EApp a e1 eArgs) =
          eArgs' = map snd rargsTE
          rargsTE = reverse argsTE
      applySubstInfer s2
-     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2 t1) (TCons TFunc $ tArgs ++ [tvar])
+     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2 t1) (applySubst s2 $ TCons TFunc $ tArgs ++ [tvar])
      applySubstInfer s3
      let t = applySubst s3 tvar
      return (s3 `composeSubst` s2 `composeSubst` s1, t, EApp (a, t) e1' eArgs')
