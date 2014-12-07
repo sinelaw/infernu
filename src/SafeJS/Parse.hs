@@ -40,6 +40,13 @@ fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray z [fromExpres
 fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement loopS
 fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
+fromStatement (ES3.TryStmt _ stmt mCatch mFinally) = foldStmts $ [stmt] ++ catchS ++ finallyS
+  where catchS = case mCatch of
+                  Just (ES3.CatchClause _ _ s) -> [s]
+                  Nothing -> []
+        finallyS = case mFinally of
+                    Just f -> [f]
+                    Nothing -> []
 fromStatement (ES3.ThrowStmt _ _) = id
 fromStatement s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
