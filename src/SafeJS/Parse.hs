@@ -51,8 +51,8 @@ fromStatement (ES3.TryStmt _ stmt mCatch mFinally) = foldStmts $ [stmt] ++ catch
                     Nothing -> []
 fromStatement (ES3.ThrowStmt _ _) = id
 fromStatement s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
+fromStatement s@(ES3.ForInStmt z _ _ _) = errorNotSupported "for .. in" z s
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
---fromStatement (ES3.ForInStmt z init' obj loopS) =
 fromStatement (ES3.ForStmt z init' test increment body) = case init' of
                                                            ES3.NoInit -> forBody
                                                            ES3.VarInit varDecls -> chainDecls varDecls . forBody
