@@ -6,7 +6,7 @@ import           Control.Arrow                    ((***))
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
 import qualified Text.Parsec.Pos                  as Pos
-
+import Data.Maybe (mapMaybe)
 import           SafeJS.Types
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
@@ -65,12 +65,20 @@ fromStatement (ES3.ForStmt z init' test increment body) = case init' of
           rest = case increment of
                    Nothing -> body'
                    Just increment' -> chainExprs z (fromExpression increment') body'
-                   
+
+fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray z tests) . foldStmts $ concatMap getCaseBody cases
+    where tests = fromExpression switch : mapMaybe (fmap fromExpression . getCaseTest) cases
+          getCaseTest (ES3.CaseDefault _ _) = Nothing
+          getCaseTest (ES3.CaseClause _ test' _) = Just test'
+          getCaseBody (ES3.CaseDefault _ body') = body'
+          getCaseBody (ES3.CaseClause _ _ body') = body'
+          
+          
 fromStatement (ES3.VarDeclStmt _ decls) = chainDecls decls
 -- $ (ES3.Id z "this" : args)
 fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
 -- TODO: return statements must be added to the core language to be handled correctly.
-fromStatement (ES3.ReturnStmt z x) = \k -> maybe (EVar z poo) fromExpression x
+fromStatement (ES3.ReturnStmt z x) = \k -> ELet z poo k $ maybe (empty z) fromExpression x
 
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
