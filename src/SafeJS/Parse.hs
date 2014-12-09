@@ -28,11 +28,13 @@ foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
 chainExprs :: Show a => a -> Exp a -> (Exp a -> Exp a) -> Exp a -> Exp a
 chainExprs a init' getK k = ELet a poo init' $ getK k
 
+singleStmt :: Show a => a -> Exp a -> Exp a -> Exp a
+singleStmt a exp' = ELet a poo exp'
 
 fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
-fromStatement (ES3.ExprStmt z e) = ELet z poo (fromExpression e)
+fromStatement (ES3.ExprStmt z e) = singleStmt z $ fromExpression e
 -- TODO: The if/while/do conversion is hacky
 fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ foldStmts [thenS, elseS]
 fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement thenS
@@ -51,11 +53,20 @@ fromStatement (ES3.ThrowStmt _ _) = id
 fromStatement s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
 --fromStatement (ES3.ForInStmt z init' obj loopS) =
---omStatement (ES3.ForStmt z init' test increment body) = ELet z poo (
-fromStatement (ES3.VarDeclStmt _ decls) = chain decls
-    where chain [] k = k
-          chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
-          chain (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chain xs k)
+fromStatement (ES3.ForStmt z init' test increment body) = case init' of
+                                                           ES3.NoInit -> forBody
+                                                           ES3.VarInit varDecls -> chainDecls varDecls . forBody
+                                                           ES3.ExprInit expr -> chainExprs z (fromExpression expr) forBody
+    where forBody = chainExprs z test'' rest
+          test'' = case test of
+                    Nothing -> EVar z poo
+                    Just test' -> EArray z [fromExpression test', ELit z (LitBoolean False)]
+          body' = fromStatement body
+          rest = case increment of
+                   Nothing -> body'
+                   Just increment' -> chainExprs z (fromExpression increment') body'
+                   
+fromStatement (ES3.VarDeclStmt _ decls) = chainDecls decls
 -- $ (ES3.Id z "this" : args)
 fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
 -- TODO: return statements must be added to the core language to be handled correctly.
@@ -68,7 +79,13 @@ toAbs z args stmts = EAbs z (map ES3.unId args) $ foldStmts stmts $ empty z
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
                                        in ELet z (ES3.unId name) abs' letBody
-                                          
+
+chainDecls :: Show a => [ES3.VarDecl a] -> Exp a -> Exp a
+chainDecls [] k = k
+chainDecls (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chainDecls xs k)
+chainDecls (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chainDecls xs k)
+
+
 fromExpression :: Show a => ES3.Expression a -> Exp a
 fromExpression (ES3.StringLit z s) = ELit z $ LitString s
 fromExpression (ES3.RegexpLit z s g i) = ELit z $ LitRegex s g i
