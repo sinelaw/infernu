@@ -23,4 +23,4 @@ function debounce(f) {
 }
 var fonce = debounce(function (x) {  return x[0]; }, 0);
 fonce('a');
-return debounce;
+//return debounce;

@@ -1,1 +1,1 @@
-while (false) { 1; continue; 2; }
+while (false) { 1; continue; }

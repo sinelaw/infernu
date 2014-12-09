@@ -31,4 +31,4 @@ function debounce(f, initial, millis) {
 var fonce = debounce(function (x) {  x = 0; return 'a'; }, 'c', 3);
 var y = fonce(2).invoke();
 y;
-return debounce;
+//return debounce;

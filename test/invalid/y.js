@@ -1,4 +1,4 @@
-function (f) {
+function h(f) {
 	 var g = function(x) {
 	 	f(x(x));
          };
