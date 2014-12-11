@@ -357,7 +357,7 @@ isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
 isExpansive (EArray _ exprs)  = any isExpansive exprs
 isExpansive (ETuple _ exprs)  = any isExpansive exprs
-isExpansive (ERow _ exprs)    = any isExpansive $ map snd exprs
+isExpansive (ERow _ _ exprs)    = any isExpansive $ map snd exprs
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
 isExpansive (EProp _ expr _)  = isExpansive expr
 isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and that's it?
@@ -404,14 +404,16 @@ inferType' env (EApp a e1 eArgs) =
      (s1, t1, e1') <- inferType env e1
      applySubstInfer s1
      (s2, argsTE) <- accumInfer env eArgs
+     applySubstInfer s2
      let tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          rargsTE = reverse argsTE
-     applySubstInfer s2
-     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2 t1) (applySubst s2 $ TCons TFunc $ tArgs ++ [tvar])
+         s2' = s2 `composeSubst` s1
+     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2' t1) (applySubst s2' $ TCons TFunc $ tArgs ++ [tvar])
      applySubstInfer s3
-     let t = applySubst s3 tvar
-     return (s3 `composeSubst` s2 `composeSubst` s1, t, EApp (a, t) e1' eArgs')
+     let s3' = s3 `composeSubst` s2'
+         t = applySubst s3' tvar
+     return (s3', t, EApp (a, t) e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
@@ -467,13 +469,15 @@ inferType' env (ETuple a exprs) =
   do (subst, te) <- accumInfer env exprs
      let t = TCons TTuple . reverse $ map fst te
      return (subst, t, ETuple (a,t) $ map snd te)
-inferType' env (ERow a propExprs) =
+inferType' env (ERow a isOpen propExprs) =
   do (s, te) <- accumInfer env $ map snd propExprs
      applySubstInfer s
+     endVar <- fresh
      let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)
-         rowType = TRow $ foldr (\(n,t') r -> TRowProp n t' r) (TRowEnd Nothing) propNamesTypes
+         rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
+         rowType = TRow $ foldr (\(n,t') r -> TRowProp n t' r) rowEnd' propNamesTypes
          t = applySubst s rowType
-     return (s, t, ERow (a,t) $ zip (map fst propExprs) (map snd te))
+     return (s, t, ERow (a,t) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (EIfThenElse a ePred eThen eElse) =
   do (s1, tp, ePred') <- inferType env ePred
      s2 <- unify a (TBody TBoolean) tp

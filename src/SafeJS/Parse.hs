@@ -82,7 +82,7 @@ fromStatement (ES3.ReturnStmt z x) = \k -> ELet z poo k $ maybe (empty z) fromEx
 
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
-toAbs z args stmts = EAbs z (map ES3.unId args) $ foldStmts stmts $ empty z
+toAbs z args stmts = EAbs z ("this" : map ES3.unId args) $ foldStmts stmts $ empty z
 
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
@@ -102,15 +102,15 @@ fromExpression (ES3.IntLit z s) = ELit z (LitNumber $ fromIntegral s)
 fromExpression (ES3.NumLit z s) = ELit z $ LitNumber s
 fromExpression (ES3.NullLit z) = ELit z LitNull
 fromExpression (ES3.ArrayLit z exprs) = EArray z $ map fromExpression exprs
-fromExpression (ES3.ObjectLit z props) = ERow z $ map (fromProp *** fromExpression) props
+fromExpression (ES3.ObjectLit z props) = ERow z False $ map (fromProp *** fromExpression) props
 fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex z (fromExpression arrExpr) (fromExpression indexExpr)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
-fromExpression (ES3.CallExpr z expr argExprs) = EApp z (fromExpression expr) (map fromExpression argExprs)
+fromExpression (ES3.CallExpr z expr argExprs) = EApp z (fromExpression expr) (map fromExpression $ thisArg : argExprs)
+                                                where thisArg = case expr of
+                                                        ES3.DotRef _ objExpr _ -> objExpr
+                                                        _ -> ES3.NullLit z -- TODO should be 'undefined'
                                                 --error $ "Assetion failed: expecting at least 'this'"
-          -- thisArg = case expr of
-          --             ES3.DotRef _ objExpr _ -> objExpr
-          --             _ -> ES3.NullLit z -- TODO should be 'undefined'
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
 fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LDot _ objExpr name) expr) = EPropAssign z objExpr' name (fromExpression expr) (EProp z objExpr' name)
   where objExpr' = fromExpression objExpr
@@ -125,7 +125,12 @@ fromExpression (ES3.ListExpr z exprs) =
           where exprs' = reverse . map fromExpression $ xs
 fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
---fromExpression e = error $ "Not implemented: expression = " ++ show (ES3PP.prettyPrint e)
+-- new Constr(args..) = Constr(newobj, args..), return newobj
+fromExpression (ES3.NewExpr z expr argExprs) = ELet z tempThis (ERow z True [])  appExpr
+  where appExpr = ELet z poo app' $ EVar z tempThis
+        app' = EApp z (fromExpression expr) (EVar z tempThis : map fromExpression argExprs)
+        tempThis = "__this__" -- TODO replace with globally unique name
+fromExpression e = error $ "Not implemented: expression = " ++ show  (ES3PP.prettyPrint e)
 
 fromProp :: ES3.Prop a -> String
 fromProp (ES3.PropId _ (ES3.Id _ x)) = x
