@@ -1,8 +1,4 @@
-// FAIL valid/debounce.js:32:25: Error: Occurs check failed: du in {invoke: (du -> TString)} y valid/debounce.js
 ERROR y valid/map.js
-// FAIL valid/method.js:1:40: Error: Occurs check failed: n in (({method: n, ...}, e) -> l) y valid/method.js
-// FAIL valid/objlit-func.js:2:24: Error: Occurs check failed: n in (({doStuff: n, ...}, e) -> l) y valid/objlit-func.js
-// FAIL valid/ok7.js:7:10: Error: Occurs check failed: am in {getX: (an -> [al]), setX: ((am, al) -> TBoolean)} y valid/ok7.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
 // FAIL  n invalid/new.js
 // FAIL  n invalid/num.js

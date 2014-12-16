@@ -328,10 +328,17 @@ unifyl a = foldM unifyl'
             s' <- unify' a (applySubst s x) (applySubst s y)
             return $ s' `composeSubst` s
 
+-- TODO: This implementation is wrong. The right thing to do here is check that the type variable appears inside a TRow, somewhere deep inside the type.
+isInsideRowType :: TVarName -> Type TBody -> Bool
+isInsideRowType _ (TCons TFunc ((TRow _):_)) = True
+isInsideRowType _ (TRow _) = True
+isInsideRowType _ _ = False
 
 varBind :: Pos.SourcePos -> TVarName -> Type TBody -> Infer TSubst
 varBind a n t | t == TBody (TVar n) = return nullSubst
-              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
+              | n `Set.member` freeTypeVars t = if isInsideRowType n t
+                                                then return nullSubst
+                                                else throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
 
 
