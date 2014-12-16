@@ -345,6 +345,10 @@ instance Monoid OrBool where
 -- True
 -- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just 1)))
 -- False
+-- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TRow $ TRowEnd (Just 1)]))
+-- False
+-- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TRow $ TRowEnd (Just 0)]))
+-- True
 isInsideRowType :: TVarName -> Type -> Bool
 isInsideRowType n (Fix t) =
   case t of
