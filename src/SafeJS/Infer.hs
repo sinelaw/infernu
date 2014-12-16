@@ -15,7 +15,7 @@ module SafeJS.Infer
     )
     where
 
-
+import           Data.Monoid                (Monoid(..))
 import           Control.Monad              (foldM, forM, forM_)
 --import           Control.Monad.State (State, evalState, get, modify)
 import           Control.Monad.Trans        (lift)
@@ -24,6 +24,7 @@ import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get,
                                              modify)
 import           Data.Foldable              (Foldable (..))
+import           Data.Traversable              (Traversable (..))
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
@@ -114,7 +115,7 @@ getVarId = Map.lookup
 --
 -- >>> let m1 = addEquivalence 1 2 Map.empty
 -- >>> m1
--- fromList [(1,fromList [TBody (TVar 1),TBody (TVar 2)]),(2,fromList [TBody (TVar 1),TBody (TVar 2)])]
+-- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]
 --
 addEquivalence :: TVarName -> TVarName -> Map TVarName (Set (Type)) -> Map TVarName (Set (Type))
 addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
@@ -181,13 +182,13 @@ getFreeTVars env = do
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
+--     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 --     let tenv = Map.empty
 --     tenv' <- addVarScheme "x" tenv t
---     applySubstInfer $ Map.singleton 0 (TBody TString)
+--     applySubstInfer $ Map.singleton 0 (Fix $ TBody TString)
 --     varSchemes <$> get
 -- :}
--- Right (fromList [(1,TScheme {schemeVars = [0], schemeType = TCons TFunc [TBody TString,TBody (TVar 1)]})])
+-- Right (fromList [(1,TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody TString),Fix (TBody (TVar 1))])})])
 --
 applySubstInfer :: TSubst -> Infer ()
 applySubstInfer s = modify $ \is -> is {
@@ -199,19 +200,19 @@ applySubstInfer s = modify $ \is -> is {
 --
 -- For example:
 --
--- >>> runInferWith (InferState { nameSource = NameSource 2, varInstances = Map.empty, varSchemes = Map.empty }) . instantiate $ TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
--- Right (TCons TFunc [TBody (TVar 3),TBody (TVar 1)])
+-- >>> runInferWith (InferState { nameSource = NameSource 2, varInstances = Map.empty, varSchemes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+-- Right Fix (TCons TFunc [Fix (TBody (TVar 3)),Fix (TBody (TVar 1))])
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [0] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
+--     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 --     let tenv = Map.empty
 --     tenv' <- addVarScheme "x" tenv t
 --     instantiateVar (Pos.initialPos "") "x" tenv'
 -- :}
--- Right (TCons TFunc [TBody (TVar 2),TBody (TVar 1)])
+-- Right Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 1))])
 --
 instantiate :: TScheme -> Infer (Type)
 instantiate (TScheme tvarNames t) = do
@@ -237,16 +238,16 @@ instantiateVar a n env = do
 --
 -- Example:
 --
--- >>> runInfer $ generalize Map.empty $ TCons TFunc [TBody (TVar 0),TBody (TVar 1)]
--- Right (TScheme {schemeVars = [0,1], schemeType = TCons TFunc [TBody (TVar 0),TBody (TVar 1)]})
+-- >>> runInfer $ generalize Map.empty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
+-- Right (TScheme {schemeVars = [0,1], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 1))])})
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [1] (TCons TFunc [TBody (TVar 0), TBody (TVar 1)])
+--     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 --     tenv <- addVarScheme "x" Map.empty t
---     generalize tenv (TCons TFunc [TBody (TVar 0), TBody (TVar 2)])
+--     generalize tenv (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
 -- :}
--- Right (TScheme {schemeVars = [2], schemeType = TCons TFunc [TBody (TVar 0),TBody (TVar 2)]})
+-- Right (TScheme {schemeVars = [2], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 2))])})
 --
 -- In this example the steps were:
 --
@@ -256,8 +257,8 @@ instantiateVar a n env = do
 --
 -- 3. result: forall 2. 1 -> 2
 --
--- >>> runInfer $ generalize Map.empty (TCons TFunc [TBody (TVar 0), TBody (TVar 0)])
--- Right (TScheme {schemeVars = [0], schemeType = TCons TFunc [TBody (TVar 0),TBody (TVar 0)]})
+-- >>> runInfer $ generalize Map.empty (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 0)])
+-- Right (TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 0))])})
 --
 -- TODO add tests for monotypes
 generalize :: TypeEnv -> Type -> Infer TScheme
@@ -330,17 +331,30 @@ unifyl' a s (x, y) = do
   s' <- unify' a (unFix $ applySubst s x) (unFix $ applySubst s y)
   return $ s' `composeSubst` s
 
--- TODO: This implementation is wrong. The right thing to do here is check that the type variable appears inside a TRow, somewhere deep inside the type.
+newtype OrBool = OrBool { unOrBool :: Bool }
+                 deriving (Eq, Show, Ord)
+instance Monoid OrBool where
+  mempty = OrBool False
+  (OrBool x) `mappend` (OrBool y) = OrBool (x || y)
+
+-- | Checks if a type var name appears as a free type variable nested somewhere inside a row type.
+--
+-- >>> isInsideRowType 0 (Fix (TBody $ TVar 0))
+-- False
+-- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just 0)))
+-- True
+-- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just 1)))
+-- False
 isInsideRowType :: TVarName -> Type -> Bool
-isInsideRowType _ (Fix (TCons TFunc ((Fix (TRow _)):_))) = True
-isInsideRowType _ (Fix (TRow _)) = True
-isInsideRowType _ _ = False
+isInsideRowType n (Fix t) =
+  case t of
+   TRow t' -> n `Set.member` freeTypeVars t'
+   _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
-              | n `Set.member` freeTypeVars t = if isInsideRowType n t
-                                                then return nullSubst
-                                                else throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
+              | isInsideRowType n t = return nullSubst
+              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
 
 

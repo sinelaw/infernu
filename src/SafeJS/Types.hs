@@ -93,7 +93,7 @@ data FType t = TBody TBody
 newtype Fix f = Fix { unFix :: f (Fix f) }
 
 instance Show (f (Fix f)) => Show (Fix f) where
-  show = show . unFix
+  show (Fix x) = "Fix (" ++ (show x) ++ ")"
 instance Eq (f (Fix f)) => Eq (Fix f) where
   a == b = unFix a == unFix b
 instance Ord (f (Fix f)) => Ord (Fix f) where
