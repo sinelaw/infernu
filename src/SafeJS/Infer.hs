@@ -97,11 +97,11 @@ nullSubst = Map.empty
 composeSubst :: TSubst -> TSubst -> TSubst
 composeSubst new old = applySubst new old `Map.union` new
 
-singletonSubst :: TVarName -> Type TBody -> TSubst
+singletonSubst :: TVarName -> Type -> TSubst
 singletonSubst = Map.singleton
 
 #ifdef QUICKCHECK
-prop_composeSubst :: TSubst -> TSubst -> Type TBody -> Bool
+prop_composeSubst :: TSubst -> TSubst -> Type -> Bool
 prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst new (applySubst old t)
 #endif
 ----------------------------------------------------------------------
@@ -116,9 +116,9 @@ getVarId = Map.lookup
 -- >>> m1
 -- fromList [(1,fromList [TBody (TVar 1),TBody (TVar 2)]),(2,fromList [TBody (TVar 1),TBody (TVar 2)])]
 --
-addEquivalence :: TVarName -> TVarName -> Map TVarName (Set (Type TBody)) -> Map TVarName (Set (Type TBody))
+addEquivalence :: TVarName -> TVarName -> Map TVarName (Set (Type)) -> Map TVarName (Set (Type))
 addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
-    where updatedSet = Set.insert (TBody $ TVar x) . Set.insert (TBody $ TVar y) $ Set.union (getSet x) (getSet y)
+    where updatedSet = Set.insert (Fix $ TBody $ TVar x) . Set.insert (Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
           getSet item = fromMaybe Set.empty $ Map.lookup item m
 
 
@@ -213,7 +213,7 @@ applySubstInfer s = modify $ \is -> is {
 -- :}
 -- Right (TCons TFunc [TBody (TVar 2),TBody (TVar 1)])
 --
-instantiate :: TScheme -> Infer (Type TBody)
+instantiate :: TScheme -> Infer (Type)
 instantiate (TScheme tvarNames t) = do
   allocNames <- forM tvarNames $ \tvName -> do
     freshName <- fresh
@@ -225,7 +225,7 @@ instantiate (TScheme tvarNames t) = do
 
   return $ mapVarNames replaceVar t
 
-instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Type TBody)
+instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Type)
 instantiateVar a n env = do
   varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
@@ -260,22 +260,22 @@ instantiateVar a n env = do
 -- Right (TScheme {schemeVars = [0], schemeType = TCons TFunc [TBody (TVar 0),TBody (TVar 0)]})
 --
 -- TODO add tests for monotypes
-generalize :: TypeEnv -> Type TBody -> Infer TScheme
+generalize :: TypeEnv -> Type -> Infer TScheme
 generalize tenv t = do
   unboundVars <- Set.difference (freeTypeVars t) <$> getFreeTVars tenv
   return $ TScheme (Set.toList unboundVars) t
 
 ----------------------------------------------------------------------
 
-unify :: Pos.SourcePos -> Type TBody -> Type TBody -> Infer TSubst
-unify a t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' a t1 t2
+unify :: Pos.SourcePos -> Type -> Type -> Infer TSubst
+unify a t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' a (unFix t1) (unFix t2)
 
 unificationError :: (Pretty x, Pretty y) => Pos.SourcePos -> x -> y -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
 
-unify' :: Pos.SourcePos -> Type TBody -> Type TBody -> Infer TSubst
-unify' a (TBody (TVar n)) t = varBind a n t
-unify' a t (TBody (TVar n)) = varBind a n t
+unify' :: Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer TSubst
+unify' a (TBody (TVar n)) t = varBind a n (Fix t)
+unify' a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' a (TBody x) (TBody y) = if x == y
                              then return nullSubst
                              else unificationError a x y
@@ -296,9 +296,9 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
            (m1, r1) = flattenRow row1
            names1 = Set.fromList $ Map.keys m1
            commonNames = Set.toList $ names1 `Set.intersection` names2
-           namesToTypes :: Map EPropName (Type a) -> [EPropName] -> [Type a]
+--           namesToTypes :: Map EPropName (Type a) -> [EPropName] -> [Type a]
            namesToTypes m = mapMaybe $ flip Map.lookup m
-           commonTypes :: [(Type TBody, Type TBody)]
+--           commonTypes :: [(Type, Type)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
        s1 <- unifyl a nullSubst commonTypes
        r <- fresh
@@ -307,35 +307,37 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
        return $ s3 `composeSubst` s2 `composeSubst` s1
 
 unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
-               -> (x, Set EPropName, Map EPropName (Type TBody))
+               -> (x, Set EPropName, Map EPropName (Type))
                -> (y, Set EPropName, Maybe TVarName)
                -> Infer TSubst
 unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
            rowTail = fmap (const r) r2
-           in1NotIn2row = trace' "in1NotIn2row" $ applySubst s1 . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
+           in1NotIn2row = trace' "in1NotIn2row" $ applySubst s1 . Fix . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
 
        case r2 of
          Nothing -> if Set.null in1NotIn2
-                    then varBind a r (TRow $ TRowEnd Nothing)
+                    then varBind a r (Fix $ TRow $ TRowEnd Nothing)
                     else unificationError a t1 t2
-         Just r2' -> unify a in1NotIn2row (applySubst s1 $ TBody $ TVar r2')
+         Just r2' -> unify a (in1NotIn2row) (applySubst s1 $ Fix $ TBody $ TVar r2')
 
 -- | Unifies pairs of types, accumulating the substs
-unifyl :: Pos.SourcePos -> TSubst -> [(Type TBody, Type TBody)] -> Infer TSubst
-unifyl a = foldM unifyl'
-    where unifyl' s (x, y) = do
-            s' <- unify' a (applySubst s x) (applySubst s y)
-            return $ s' `composeSubst` s
+unifyl :: Pos.SourcePos -> TSubst -> [(Type, Type)] -> Infer TSubst
+unifyl a s ts = foldM (unifyl' a) s ts
+
+unifyl' :: Pos.SourcePos -> TSubst -> (Type, Type) -> Infer TSubst
+unifyl' a s (x, y) = do
+  s' <- unify' a (unFix $ applySubst s x) (unFix $ applySubst s y)
+  return $ s' `composeSubst` s
 
 -- TODO: This implementation is wrong. The right thing to do here is check that the type variable appears inside a TRow, somewhere deep inside the type.
-isInsideRowType :: TVarName -> Type TBody -> Bool
-isInsideRowType _ (TCons TFunc ((TRow _):_)) = True
-isInsideRowType _ (TRow _) = True
+isInsideRowType :: TVarName -> Type -> Bool
+isInsideRowType _ (Fix (TCons TFunc ((Fix (TRow _)):_))) = True
+isInsideRowType _ (Fix (TRow _)) = True
 isInsideRowType _ _ = False
 
-varBind :: Pos.SourcePos -> TVarName -> Type TBody -> Infer TSubst
-varBind a n t | t == TBody (TVar n) = return nullSubst
+varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
+varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | n `Set.member` freeTypeVars t = if isInsideRowType n t
                                                 then return nullSubst
                                                 else throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
@@ -350,7 +352,7 @@ dropLast [] = []
 dropLast [_] = []
 dropLast (x:xs) = x : dropLast xs
 
-unifyAll :: Pos.SourcePos -> TSubst -> [Type TBody] -> Infer TSubst
+unifyAll :: Pos.SourcePos -> TSubst -> [Type] -> Infer TSubst
 unifyAll a s ts = unifyl a s $ zip (dropLast ts) (drop 1 ts)
 
 
@@ -371,23 +373,23 @@ isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and 
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer (TSubst, [(Type TBody, Exp (Pos.SourcePos, Type TBody))])
+accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer (TSubst, [(Type, Exp (Pos.SourcePos, Type))])
 accumInfer env = foldM accumInfer' (nullSubst, [])
     where accumInfer' (subst, types) expr = do
             (subst', t, e) <- inferType env expr
             applySubstInfer subst'
             return (subst' `composeSubst` subst, (t,e):types)
 
-inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type TBody, Exp (Pos.SourcePos, Type TBody))
+inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type, Exp (Pos.SourcePos, Type))
 inferType env expr = do
   (s, t, e) <- inferType' env expr
   state <- get
   let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n\t" ++ show state ++ "\n\t Environment: " ++ show env ++ "\n----------"
   return . tr $ (s, t, e)
 
-inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type TBody, Exp (Pos.SourcePos, Type TBody))
+inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type, Exp (Pos.SourcePos, Type))
 inferType' _ (ELit a lit) = do
-  let t = TBody $ case lit of
+  let t = Fix $ TBody $ case lit of
                     LitNumber _ -> TNumber
                     LitBoolean _ -> TBoolean
                     LitString _ -> TString
@@ -399,15 +401,15 @@ inferType' env (EVar a n) = do
   t <- instantiateVar a n env
   return (nullSubst, t, EVar (a, t) n)
 inferType' env (EAbs a argNames e2) =
-  do argTypes <- forM argNames (const $ TBody . TVar <$> fresh)
+  do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
      env' <- foldM (\e (n, t) -> addVarScheme n e $ TScheme [] t) env $ zip argNames argTypes
      (s1, t1, e2') <- inferType env' e2
      applySubstInfer s1
-     let t = TCons TFunc $ map (applySubst s1) argTypes ++ [t1]
+     let t = Fix $ TCons TFunc $ map (applySubst s1) argTypes ++ [t1]
      return (s1, t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvarName <- fresh
-     let tvar = TBody (TVar tvarName)
+     let tvar = Fix $ TBody (TVar tvarName)
      (s1, t1, e1') <- inferType env e1
      applySubstInfer s1
      (s2, argsTE) <- accumInfer env eArgs
@@ -416,13 +418,13 @@ inferType' env (EApp a e1 eArgs) =
          eArgs' = map snd rargsTE
          rargsTE = reverse argsTE
          s2' = s2 `composeSubst` s1
-     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2' t1) (applySubst s2' $ TCons TFunc $ tArgs ++ [tvar])
+     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2' t1) (applySubst s2' $ Fix . TCons TFunc $ tArgs ++ [tvar])
      applySubstInfer s3
      let s3' = s3 `composeSubst` s2'
          t = applySubst s3' tvar
      return (s3', t, EApp (a, t) e1' eArgs')
 inferType' env (ELet a n e1 e2) =
-  do recType <- TBody . TVar <$> fresh
+  do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
      (s1, t1, e1') <- inferType recEnv e1
      s1rec <- unify a t1 (applySubst s1 recType)
@@ -458,23 +460,23 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      (s2, rvalueT, expr1') <- inferType env expr1
      applySubstInfer s2
      rowVar <- fresh
-     s3 <- unify a objT $ TRow $ TRowProp n rvalueT $ TRowEnd (Just rowVar)
+     s3 <- unify a objT $ Fix . TRow $ TRowProp n rvalueT $ TRowEnd (Just rowVar)
      applySubstInfer s3
      (s4, expr2T, expr2') <- inferType env expr2
      let s5 = s4 `composeSubst` s3 `composeSubst` s2 `composeSubst` s1
      return (s5, expr2T, EPropAssign (a,expr2T) objExpr' n expr1' expr2')
 inferType' env (EArray a exprs) =
   do tvName <- fresh
-     let tv = TBody $ TVar tvName
+     let tv = Fix . TBody $ TVar tvName
      (subst, te) <- accumInfer env exprs
      let types = map fst te
      subst' <- unifyl a subst $ zip (tv:types) types
      applySubstInfer subst'
-     let t = TCons TArray [applySubst subst' $ TBody $ TVar tvName]
+     let t = Fix $ TCons TArray [applySubst subst' $ Fix . TBody $ TVar tvName]
      return (subst', t, EArray (a,t) $ map snd te)
 inferType' env (ETuple a exprs) =
   do (subst, te) <- accumInfer env exprs
-     let t = TCons TTuple . reverse $ map fst te
+     let t = Fix . TCons TTuple . reverse $ map fst te
      return (subst, t, ETuple (a,t) $ map snd te)
 inferType' env (ERow a isOpen propExprs) =
   do (s, te) <- accumInfer env $ map snd propExprs
@@ -482,12 +484,12 @@ inferType' env (ERow a isOpen propExprs) =
      endVar <- fresh
      let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
-         rowType = TRow $ foldr (\(n,t') r -> TRowProp n t' r) rowEnd' propNamesTypes
+         rowType = Fix . TRow $ foldr (\(n,t') r -> TRowProp n t' r) rowEnd' propNamesTypes
          t = applySubst s rowType
      return (s, t, ERow (a,t) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (EIfThenElse a ePred eThen eElse) =
   do (s1, tp, ePred') <- inferType env ePred
-     s2 <- unify a (TBody TBoolean) tp
+     s2 <- unify a (Fix $ TBody TBoolean) tp
      let s3 = s2 `composeSubst` s1
      applySubstInfer s3
      (s4, tThen, eThen') <- inferType env eThen
@@ -501,19 +503,19 @@ inferType' env (EProp a eObj propName) =
   do (s1, tObj, eObj') <- inferType env eObj
      rowVar <- fresh
      propVar <- fresh
-     s2 <- unify a tObj $ TRow $ TRowProp propName (TBody $ TVar propVar) $ TRowEnd (Just rowVar)
+     s2 <- unify a tObj $ Fix . TRow $ TRowProp propName (Fix . TBody $ TVar propVar) $ TRowEnd (Just rowVar)
      let s3 = s2 `composeSubst` s1
-         t = applySubst s3 (TBody $ TVar propVar)
+         t = applySubst s3 (Fix . TBody $ TVar propVar)
      applySubstInfer s3
      return (s3, t, EProp (a,t) eObj' propName)
 inferType' env (EIndex a eArr eIdx) = 
   do (s1, tArr, eArr') <- inferType env eArr
-     elemType <- TBody . TVar <$> fresh
-     s1' <- unify a (TCons TArray [elemType]) tArr
+     elemType <- Fix . TBody . TVar <$> fresh
+     s1' <- unify a (Fix $ TCons TArray [elemType]) tArr
      let s1'' = s1' `composeSubst` s1
      applySubstInfer s1''
      (s2, tId, eIdx') <- inferType env eIdx
-     s2' <- unify a (TBody TNumber) tId
+     s2' <- unify a (Fix $ TBody TNumber) tId
      let s2'' = s2' `composeSubst` s2
      applySubstInfer s2''
      let elemType' = applySubst s2'' elemType
@@ -534,7 +536,7 @@ minifyVars xs = mapVarNames f xs
           f n = fromMaybe n $ Map.lookup n vars
           
 
-typeInference :: TypeEnv -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type TBody))
+typeInference :: TypeEnv -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type))
 typeInference env e = do
   (_s, _t, e') <- inferType env e
   let e'' = (fmap . fmap) (applySubst _s) e'
@@ -655,7 +657,7 @@ test e = case runTypeInference e of
           Right expr -> pretty $ snd . head . getAnnotations . minifyVars $ expr
 
 
-runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type TBody))
+runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type))
 runTypeInference e = runInfer $ typeInference Map.empty e
 
 

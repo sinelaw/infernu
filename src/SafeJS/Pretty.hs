@@ -70,7 +70,7 @@ instance Pretty TBody where
 instance Pretty TConsName where
   prettyTab _ = show
 
-instance Pretty t => Pretty (Type t) where
+instance Pretty t => Pretty (FType t) where
   prettyTab n (TBody t) = prettyTab n t
   prettyTab n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple (map (prettyTab n) $ init ts) ++ " -> " ++ prettyTab n (last ts) ++ ")"
 --  prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
@@ -80,6 +80,10 @@ instance Pretty t => Pretty (Type t) where
   prettyTab t (TRow list) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props)) ++ maybe "" ((", "++) . const "...") r ++ "}"
     where (props, r) = flattenRow list
 
+--instance Pretty t => Pretty (Fix t) where
+instance Pretty Type where
+  prettyTab n (Fix t) = prettyTab n t
+  
 instance Pretty TScheme where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "

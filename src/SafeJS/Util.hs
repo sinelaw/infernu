@@ -13,7 +13,7 @@ import           SafeJS.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
 import           SafeJS.Infer                (getAnnotations, runTypeInference, minifyVars)
 import           SafeJS.Pretty               (pretty)
-import           SafeJS.Types                (TBody (..), Type (..), TypeError)
+import           SafeJS.Types                (Type, TypeError)
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -28,7 +28,7 @@ indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
 
 
-checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, Type TBody)])
+checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, Type)])
 checkFiles fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   let expr' = translate $ expr
@@ -39,7 +39,7 @@ checkFiles fileNames = do
 #endif
   return res
 
-annotatedSource :: [(Pos.SourcePos, Type TBody)] -> [String] -> String
+annotatedSource :: [(Pos.SourcePos, Type)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos prettyRes indexedSource
   where indexedSource = indexList sourceCode
         prettyRes = (Set.toList . Set.fromList . fmap (second pretty)) xs

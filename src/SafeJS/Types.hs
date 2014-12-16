@@ -1,8 +1,12 @@
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE DeriveFoldable    #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor     #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE InstanceSigs  #-}
 
 module SafeJS.Types
        (Exp(..)
@@ -11,7 +15,9 @@ module SafeJS.Types
        , TVarName
        , TBody(..)
        , TConsName(..)
-       , Type(..)
+       , Type
+       , Fix(..)
+       , FType(..)
        , TypeError(..)
        , InferState(..)
        , TRowList(..)
@@ -28,6 +34,7 @@ module SafeJS.Types
        ) where
 
 import           Data.Foldable   (Foldable (..), foldr)
+import           Data.Traversable   (Traversable (..))
 import qualified Data.Map.Lazy   as Map
 import           Data.Maybe      (fromMaybe)
 import qualified Data.Set        as Set
@@ -74,16 +81,27 @@ data TConsName = TFunc | TArray | TTuple
                  deriving (Show, Eq, Ord)
 
 -- | Row type.
-data TRowList t = TRowProp EPropName (Type t) (TRowList t)
+data TRowList t = TRowProp EPropName t (TRowList t)
                 | TRowEnd (Maybe TVarName)
-                  deriving (Show, Eq, Ord, Functor, Foldable)--, Foldable, Traversable)
+                  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-data Type t = TBody t
-            | TCons TConsName [Type t]
-            | TRow (TRowList t)
-              deriving (Show, Eq, Ord, Functor, Foldable)--, Foldable, Traversable)
+data FType t = TBody TBody
+             | TCons TConsName [t]
+             | TRow (TRowList t)
+               deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-type TSubst = Map.Map TVarName (Type TBody)
+newtype Fix f = Fix { unFix :: f (Fix f) }
+
+instance Show (f (Fix f)) => Show (Fix f) where
+  show = show . unFix
+instance Eq (f (Fix f)) => Eq (Fix f) where
+  a == b = unFix a == unFix b
+instance Ord (f (Fix f)) => Ord (Fix f) where
+  (Fix x) `compare` (Fix y) = x `compare` y
+  
+type Type = Fix FType
+
+type TSubst = Map.Map TVarName (Type)
 
 data TypeError = TypeError { source :: Pos.SourcePos, message :: String }
                deriving (Show, Eq, Ord)
@@ -123,13 +141,13 @@ instance VarNames t => VarNames (Exp (a, t)) where
 
 -- | VarNames instance for TRowList
 --
--- >>> freeTypeVars (TRowProp "x" (TBody TNumber) (TRowEnd $ Just 1))
+-- >>> freeTypeVars (TRowProp "x" (Fix $ TBody TNumber) (TRowEnd $ Just 1))
 -- fromList [1]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd Nothing))
+-- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowEnd Nothing))
 -- fromList [2]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowEnd $ Just 1))
+-- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowEnd $ Just 1))
 -- fromList [1,2]
--- >>> freeTypeVars (TRowProp "x" (TBody $ TVar 2) (TRowProp "y" (TBody $ TVar 3) (TRowEnd $ Just 1)))
+-- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowProp "y" (Fix $ TBody $ TVar 3) (TRowEnd $ Just 1)))
 -- fromList [1,2,3]
 instance VarNames t => VarNames (TRowList t) where
   freeTypeVars (TRowEnd (Just n)) = Set.singleton n
@@ -141,24 +159,36 @@ instance VarNames t => VarNames (TRowList t) where
 
 -- | VarNames instance for Type t
 --
--- >>> freeTypeVars (TBody TNumber)
+-- >>> freeTypeVars (Fix $ TBody TNumber)
 -- fromList []
--- >>> freeTypeVars (TBody $ TVar 0)
+-- >>> freeTypeVars (Fix $ TBody $ TVar 0)
 -- fromList [0]
--- >>> freeTypeVars (TCons TFunc [TBody $ TVar 0, TBody $ TVar 1])
+-- >>> freeTypeVars (Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])
 -- fromList [0,1]
--- >>> freeTypeVars (TCons TFunc [TBody $ TVar 1])
+-- >>> freeTypeVars (Fix $ TCons TFunc [Fix $ TBody $ TVar 1])
 -- fromList [1]
--- >>> freeTypeVars $ ((TRow (TRowEnd (Just 3))) :: Type TBody)
+-- >>> freeTypeVars $ (Fix $ (TRow (TRowEnd (Just 3))) :: Type)
 -- fromList [3]
-instance VarNames t => VarNames (Type t) where
-  freeTypeVars (TBody t) = freeTypeVars t
-  freeTypeVars (TCons _ ts) = freeTypeVars ts
-  freeTypeVars (TRow r) = freeTypeVars r
+instance VarNames Type where
+  freeTypeVars (Fix (TBody b)) = freeTypeVars b
+  freeTypeVars (Fix (TRow trlist)) = freeTypeVars trlist
+  freeTypeVars (Fix t) = freeTypeVars' t
 
-  mapVarNames f (TBody t) = TBody $ mapVarNames f t
-  mapVarNames f (TCons n ts) = TCons n $ mapVarNames f ts
-  mapVarNames f (TRow r) = TRow $ mapVarNames f r
+  mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
+  mapVarNames f (Fix (TRow trlist)) = Fix $ TRow $ mapVarNames f trlist
+  mapVarNames f (Fix t) = Fix $ mapVarNames' f t
+
+-- instance VarNames a => VarNames (FType a) where
+--   freeTypeVars = freeTypeVars'
+--   --                (TBody t) = freeTypeVars t
+--   -- freeTypeVars (TCons _ ts) = freeTypeVars ts
+--   -- freeTypeVars (TRow r) = freeTypeVars r
+
+--   mapVarNames = mapVarNames' 
+--   -- mapVarNames f (TBody t) = TBody $ mapVarNames f t
+--   -- mapVarNames f (TCons n ts) = TCons n $ mapVarNames f ts
+--   -- mapVarNames f (TRow r) = TRow $ mapVarNames f r
+
 
 ----------------------------------------------------------------------
 
@@ -183,55 +213,64 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 
 ----------------------------------------------------------------------
 
-instance Substable (Type TBody) where
-  applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
-  applySubst _ t@(TBody _) = t
-  applySubst s (TCons n ts) = TCons n (applySubst s ts)
-  applySubst s (TRow r) = TRow $ applySubst s r
+instance Substable Type where
+  applySubst :: TSubst -> Type -> Type
+  applySubst s (Fix t) =
+    case t of
+     TBody (TVar n) -> fromMaybe (Fix t) $ Map.lookup n s
+     _ -> Fix $ fmap (applySubst s) t
+     
+    --traverse (fmap f) t
+    --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
+     --     f t = t
+  -- applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
+  -- applySubst _ t@(TBody _) = t
+  -- applySubst s (TCons n ts) = TCons n (applySubst s ts)
+  -- applySubst s (TRow r) = TRow $ applySubst s r
 
 ----------------------------------------------------------------------
 
-sortRow :: TRowList TBody -> TRowList TBody
+sortRow :: TRowList t -> TRowList t
 sortRow row = row -- TODO implement
 
-flattenRow :: TRowList t -> (Map.Map EPropName (Type t), Maybe TVarName)
+flattenRow :: TRowList t -> (Map.Map EPropName t, Maybe TVarName)
 flattenRow = flattenRow' (Map.empty, Nothing)
-    where flattenRow' :: (Map.Map EPropName (Type t), Maybe TVarName) -> TRowList t -> (Map.Map EPropName (Type t), Maybe TVarName)
+    where flattenRow' :: (Map.Map EPropName t, Maybe TVarName) -> TRowList t -> (Map.Map EPropName t, Maybe TVarName)
           flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
           flattenRow' (m,_) (TRowEnd r') = (m, r')
 
-unflattenRow :: Map.Map EPropName (Type t) -> Maybe TVarName -> (EPropName -> Bool) -> TRowList t
+unflattenRow :: Map.Map EPropName t -> Maybe TVarName -> (EPropName -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) (TRowEnd r) m
 
-instance Substable (TRowList TBody) where
+instance Substable (TRowList Type) where
   applySubst s (TRowProp propName propType rest) = sortRow $ TRowProp propName (applySubst s propType) (applySubst s rest)
   applySubst s t@(TRowEnd (Just tvarName)) = case Map.lookup tvarName s of
                                                Nothing -> t
-                                               Just (TRow t') -> t'
+                                               Just (Fix (TRow tRowList)) -> tRowList
                                                Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
 
 ----------------------------------------------------------------------
 
 -- | Type scheme: a type expression with a "forall" over some type variables that may appear in it (universal quantification).
-data TScheme = TScheme { schemeVars :: [TVarName], schemeType :: Type TBody }
+data TScheme = TScheme { schemeVars :: [TVarName], schemeType :: Type }
              deriving (Show, Eq)
 
 -- | VarNames instance for TScheme
 --
--- >>> freeTypeVars $ TScheme [0, 1] (TBody $ TVar 2)
+-- >>> freeTypeVars $ TScheme [0, 1] (Fix $ TBody $ TVar 2)
 -- fromList [2]
--- >>> freeTypeVars $ TScheme [0, 1] (TBody $ TVar 1)
+-- >>> freeTypeVars $ TScheme [0, 1] (Fix $ TBody $ TVar 1)
 -- fromList []
--- >>> freeTypeVars $ TScheme [0] (TBody $ TVar 1)
+-- >>> freeTypeVars $ TScheme [0] (Fix $ TBody $ TVar 1)
 -- fromList [1]
--- >>> freeTypeVars $ TScheme [0] (TBody $ TVar 0)
+-- >>> freeTypeVars $ TScheme [0] (Fix $ TBody $ TVar 0)
 -- fromList []
--- >>> freeTypeVars $ TScheme [] (TBody $ TVar 1)
+-- >>> freeTypeVars $ TScheme [] (Fix $ TBody $ TVar 1)
 -- fromList [1]
--- >>> freeTypeVars $ TScheme [] (TBody $ TNumber)
+-- >>> freeTypeVars $ TScheme [] (Fix $ TBody $ TNumber)
 -- fromList []
--- >>> freeTypeVars $ TScheme [1] (TBody $ TNumber)
+-- >>> freeTypeVars $ TScheme [1] (Fix $ TBody $ TNumber)
 -- fromList []
 instance VarNames TScheme where
   freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
@@ -258,7 +297,7 @@ data NameSource = NameSource { lastName :: TVarName }
 data InferState = InferState { nameSource   :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TScheme
-                             , varInstances :: Map.Map TVarName (Set.Set (Type TBody)) }
+                             , varInstances :: Map.Map TVarName (Set.Set (Type)) }
                   deriving (Show, Eq)
 
 instance VarNames InferState where
