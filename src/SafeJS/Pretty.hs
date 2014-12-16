@@ -14,6 +14,9 @@ tab t = replicate (t*4) ' '
 class Pretty a where
   prettyTab :: Int -> a -> String
 
+instance (Pretty a, Pretty b) => Pretty (a,b) where
+  prettyTab _ (a,b) = "(" ++ pretty a ++ ", " ++ pretty b ++ ")"
+  
 instance Pretty [String] where
   prettyTab _ [] = "[]"
   prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
@@ -77,7 +80,10 @@ instance Pretty t => Pretty (FType t) where
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
   prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-  prettyTab t (TRow list) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props)) ++ maybe "" ((", "++) . const "...") r ++ "}"
+  prettyTab t (TRow list) = "{"
+                            ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))
+                            ++ maybe "" ((", "++) . (\r' -> ("..." ++ pretty r'))) r
+                            ++ "}"
     where (props, r) = flattenRow list
 
 --instance Pretty t => Pretty (Fix t) where

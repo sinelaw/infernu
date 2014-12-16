@@ -95,6 +95,16 @@ nullSubst = Map.empty
 
 -- | composeSubst should obey the law:
 -- applySubst (composeSubst new old) t = applySubst new (applySubst old t)
+-- >>> composeSubst (Map.fromList []) (Map.fromList [])
+-- fromList []
+-- >>> composeSubst (Map.fromList [(0,Fix (TBody (TVar 1)))]) (Map.fromList [])
+-- fromList [(0,Fix (TBody (TVar 1)))]
+-- >>> composeSubst (Map.fromList []) (Map.fromList [(0,Fix (TBody (TVar 1)))])
+-- fromList [(0,Fix (TBody (TVar 1)))]
+-- >>> composeSubst (Map.fromList [(1,Fix (TBody (TVar 2)))]) (Map.fromList [(0,Fix (TBody (TVar 1)))])
+-- fromList [(0,Fix (TBody (TVar 2))),(1,Fix (TBody (TVar 2)))]
+-- >>> composeSubst (Map.fromList [(0,Fix (TBody (TVar 1)))]) (Map.fromList [(1,Fix (TBody (TVar 2)))])
+-- fromList [(0,Fix (TBody (TVar 2))),(1,Fix (TBody (TVar 2)))]
 composeSubst :: TSubst -> TSubst -> TSubst
 composeSubst new old = applySubst new old `Map.union` new
 
@@ -269,7 +279,9 @@ generalize tenv t = do
 ----------------------------------------------------------------------
 
 unify :: Pos.SourcePos -> Type -> Type -> Infer TSubst
-unify a t1 t2 = trace' ("unify: \t" ++ show t1 ++ " ,\t " ++ show t2 ++ "\n\t-->") <$> unify' a (unFix t1) (unFix t2)
+unify a t1 t2 = tr' <$> unify' a (unFix t1) (unFix t2)
+  where tr' x = trace (tr2 x) x
+        tr2 x = "unify: \t" ++ pretty t1 ++ " ,\t " ++ pretty t2 ++ "\n\t-->" ++ concatMap pretty (Map.toList x)
 
 unificationError :: (Pretty x, Pretty y) => Pos.SourcePos -> x -> y -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
@@ -305,7 +317,8 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
        r <- fresh
        s2 <- unifyRows a r s1 (t1, names1, m1) (t2, names2, r2)
        s3 <- unifyRows a r s2 (t2, names2, m2) (t1, names1, r1)
-       return $ s3 `composeSubst` s2 `composeSubst` s1
+       let s4 = s3 `composeSubst` s2 `composeSubst` s1
+       return s4
 
 unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
                -> (x, Set EPropName, Map EPropName (Type))
@@ -436,11 +449,11 @@ inferType' env (EApp a e1 eArgs) =
          eArgs' = map snd rargsTE
          rargsTE = reverse argsTE
          s2' = s2 `composeSubst` s1
-     s3 <- trace' "\\ unified app" <$> unify a (applySubst s2' t1) (applySubst s2' $ Fix . TCons TFunc $ tArgs ++ [tvar])
-     applySubstInfer s3
+     s3 <- unify a (applySubst s2' t1) (applySubst s2' $ Fix . TCons TFunc $ tArgs ++ [tvar])
      let s3' = s3 `composeSubst` s2'
          t = applySubst s3' tvar
-     return (s3', t, EApp (a, t) e1' eArgs')
+     applySubstInfer s3'
+     return (trace' "\\ unified app, subst: " $ s3', t, EApp (a, t) e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
