@@ -82,7 +82,8 @@ fromStatement (ES3.ReturnStmt z x) = \k -> ELet z poo k $ maybe (empty z) fromEx
 
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
-toAbs z args stmts = EAbs z ("this" : map ES3.unId args) $ foldStmts stmts $ empty z
+toAbs z args stmts = EAbs z ("this" : map ES3.unId args) $ ELet z "result" body (ETuple z [EVar z "result", ECloseRow z "this"])
+  where body = foldStmts stmts $ empty z
 
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
@@ -106,8 +107,9 @@ fromExpression (ES3.ObjectLit z props) = ERow z False $ map (fromProp *** fromEx
 fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex z (fromExpression arrExpr) (fromExpression indexExpr)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
-fromExpression (ES3.CallExpr z expr argExprs) = EApp z (fromExpression expr) (map fromExpression $ thisArg : argExprs)
-                                                where thisArg = case expr of
+fromExpression (ES3.CallExpr z expr argExprs) = EFirst z app
+                                                where app = EApp z (fromExpression expr) (map fromExpression $ thisArg : argExprs)
+                                                      thisArg = case expr of
                                                         ES3.DotRef _ objExpr _ -> objExpr
                                                         _ -> ES3.NullLit z -- TODO should be 'undefined'
                                                 --error $ "Assetion failed: expecting at least 'this'"
@@ -125,10 +127,13 @@ fromExpression (ES3.ListExpr z exprs) =
           where exprs' = reverse . map fromExpression $ xs
 fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
--- new Constr(args..) = Constr(newobj, args..), return newobj
-fromExpression (ES3.NewExpr z expr argExprs) = ELet z tempThis (ERow z True [])  appExpr
-  where appExpr = ELet z poo app' $ ECloseRow z tempThis
-        app' = EApp z (fromExpression expr) (EVar z tempThis : map fromExpression argExprs)
+-- new Constr(args..) = var this = { ... }, Constr(this, args..), return this
+-- TODO: this doesn't work. The only thing that collapses a variable to be of a more specific type is when we assign to it.
+-- So to get the type of 'this' we have no choice but to assign to - which is why we must return it from every function!
+fromExpression (ES3.NewExpr z expr argExprs) = ELet z tempThis (EArray z []) appExpr
+  where appExpr = ELet z poo app' (EAssign z tempThis (EArray z []) crap)
+        crap = EIndex z (EVar z tempThis) (ELit z $ LitNumber 0)
+        app' = EApp z (fromExpression expr) (crap : map fromExpression argExprs)
         tempThis = "__this__" -- TODO replace with globally unique name
 fromExpression e = error $ "Not implemented: expression = " ++ show  (ES3PP.prettyPrint e)
 

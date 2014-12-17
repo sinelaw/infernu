@@ -1,2 +1,2 @@
-function Y(g) { return g(Y(g)); }
+//function Y(g) { return g(Y(g)); }
 Y;

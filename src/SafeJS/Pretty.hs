@@ -6,6 +6,7 @@ import           Data.List                  (intercalate)
 import           Data.Char                  (chr, ord)
 import qualified Data.Digits                as Digits
 import qualified Data.Map.Lazy              as Map
+import qualified Data.Set              as Set
 import qualified Text.Parsec.Pos            as Pos
 
 tab :: Int -> String
@@ -16,11 +17,17 @@ class Pretty a where
 
 instance (Pretty a, Pretty b) => Pretty (a,b) where
   prettyTab _ (a,b) = "(" ++ pretty a ++ ", " ++ pretty b ++ ")"
-  
-instance Pretty [String] where
-  prettyTab _ [] = "[]"
-  prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
 
+prettyList :: Pretty a => [a] -> String
+prettyList [] = "[]"
+prettyList xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
+
+instance Pretty [String] where
+  prettyTab _ = prettyList
+
+instance Pretty [Type] where
+  prettyTab _  = prettyList
+  
 instance (Pretty a, Pretty b) => Pretty [(a,b)] where
   prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
 
@@ -59,6 +66,7 @@ instance Pretty (Exp a) where
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
   prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
   prettyTab t (ECloseRow _ n) = "#CloseRow(" ++ prettyTab t n ++ ")"
+  prettyTab t (EFirst _ e) = "#First(" ++ prettyTab t e ++ ")"
   
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + n - 1)
@@ -101,10 +109,23 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
     prettyTab n (Left x) = "Error: " ++ prettyTab n x
     prettyTab n (Right x) = prettyTab n x
 
-instance Pretty TSubst where
-  prettyTab n s = "(" ++ str' ++ ")"
+instance (Pretty k, Pretty v) => Pretty (Map.Map k v) where
+  prettyTab n s = "Map (" ++ str' ++ ")"
     where str' = intercalate ", " . map (\(k,v) -> prettyTab n k ++ " => " ++ prettyTab n v) . Map.toList $ s
-  
+
+instance (Pretty k) => Pretty (Set.Set k) where
+  prettyTab n s = "Set {" ++ str' ++ "}"
+    where str' = intercalate ", " . map pretty . Set.toList $ s
+
 instance Pretty TypeError where
   prettyTab _ (TypeError p s) = Pos.sourceName p ++ ":" ++ show (Pos.sourceLine p) ++ ":" ++ show (Pos.sourceColumn p) ++ ": Error: " ++ s
+
+instance Pretty NameSource where
+  prettyTab _ = show
+
+instance Pretty VarId where
+  prettyTab _ = show
   
+instance Pretty InferState where
+  prettyTab t (InferState ns vs vi) = "InferState { nameSource: " ++ pretty ns ++ newline ++ ", varSchemes: " ++ pretty vs ++ newline ++ ", varInstances: " ++ pretty vi ++ newline ++ "}"
+    where newline = "\n" ++ tab (t+1)

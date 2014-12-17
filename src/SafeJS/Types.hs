@@ -27,7 +27,7 @@ module SafeJS.Types
        , flattenRow
        , unflattenRow
        , TSubst
-       , VarId
+       , VarId(..)
        , NameSource(..)
        , VarNames(..)
        , EPropName
@@ -69,6 +69,7 @@ data Exp a = EVar a EVarName
            | EIndex a (Exp a) (Exp a)
              -- TODO consider better options for causing rows to become closed outside the 'new' call
            | ECloseRow a EVarName
+           | EFirst a (Exp a) -- unpack tuple
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
@@ -294,7 +295,8 @@ instance Substable TScheme where
   applySubst s (TScheme qvars t) = TScheme qvars $ applySubst s t
 
 
-type VarId = TVarName
+newtype VarId = VarId Int
+                deriving (Show, Eq, Ord)
 
 -- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
 --

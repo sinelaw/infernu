@@ -1,4 +1,6 @@
+// FAIL valid/fix.js:2:1: Error: Unbound variable: "Y" y valid/fix.js
 ERROR y valid/map.js
+// FAIL valid/once.js:4:12: Error: Occurs check failed: aj in [aj] y valid/once.js
+// FAIL valid/this.js:3:21: Error: Could not unify: {getName: ({name: aa} -> (aa, {name: aa})), name: TString} with {name: w} y valid/this.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
-// FAIL  n invalid/new.js
 // FAIL  n invalid/num.js

@@ -153,6 +153,9 @@ fresh = do
   modify $ \is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } }
   lastName . nameSource <$> get
 
+freshVarId :: Infer VarId
+freshVarId = VarId <$> fresh
+  
 throwError :: Pos.SourcePos -> String -> Infer a
 throwError p s = lift . left $ TypeError p s
 
@@ -181,12 +184,12 @@ setVarScheme n varId scheme = do
 
 addVarScheme :: EVarName -> TypeEnv -> TScheme -> Infer TypeEnv
 addVarScheme n env scheme = do
-  varId <- trace' ("-- '" ++ show n ++ "' = varId") <$> fresh
+  varId <- tracePretty ("-- '" ++ pretty n ++ "' = varId") <$> freshVarId
   setVarScheme n varId scheme
   return $ Map.insert n varId env
 
 addVarInstance :: TVarName -> TVarName -> Infer ()
-addVarInstance x y = modify $ \is -> is { varInstances = trace' "updated equivs" $ addEquivalence x y (varInstances is) }
+addVarInstance x y = modify $ \is -> is { varInstances = tracePretty "updated equivs" $ addEquivalence x y (varInstances is) }
 
 getFreeTVars :: TypeEnv -> Infer (Set TVarName)
 getFreeTVars env = do
@@ -208,7 +211,7 @@ getFreeTVars env = do
 --
 applySubstInfer :: TSubst -> Infer ()
 applySubstInfer s = modify $ \is -> is {
-                      varSchemes = trace' ("Updated env map using subst: " ++ show s ++ " --> ") . applySubst s $ varSchemes is
+                      varSchemes = tracePretty ("Updated env map using subst: " ++ pretty s ++ " --> ") . applySubst s $ varSchemes is
                     , varInstances = applySubst s $ varInstances is
                     }
 
@@ -246,7 +249,7 @@ instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Type)
 instantiateVar a n env = do
   varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
-  trace' ("Instantiated var '" ++ show n ++ "' with scheme: " ++ show scheme ++ " to") <$> instantiate scheme
+  tracePretty ("Instantiated var '" ++ pretty n ++ "' with scheme: " ++ pretty scheme ++ " to") <$> instantiate scheme
 
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
@@ -333,7 +336,7 @@ unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
 unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
            rowTail = fmap (const r) r2
-           in1NotIn2row = trace' "in1NotIn2row" $ applySubst s1 . Fix . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
+           in1NotIn2row = tracePretty "in1NotIn2row" $ applySubst s1 . Fix . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
 
        case r2 of
          Nothing -> if Set.null in1NotIn2
@@ -409,13 +412,17 @@ isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
 isExpansive (EProp _ expr _)  = isExpansive expr
 isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and that's it?
 isExpansive (ECloseRow _ _) = True
-
+isExpansive (EFirst _ _) = True
 ----------------------------------------------------------------------
 
-closeRow :: TRowList t -> TRowList t
-closeRow (TRowProp n t rest) = TRowProp n t (closeRow rest)
-closeRow (TRowEnd (Just _)) = TRowEnd Nothing
-closeRow r = r
+closeRowList :: TRowList t -> TRowList t
+closeRowList (TRowProp n t rest) = TRowProp n t (closeRowList rest)
+closeRowList (TRowEnd (Just _)) = TRowEnd Nothing
+closeRowList r = r
+
+closeRow :: Type -> Type
+closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
+closeRow t = t
 
 ----------------------------------------------------------------------
 
@@ -432,7 +439,7 @@ inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type, Exp (Pos.Sour
 inferType env expr = do
   (s, t, e) <- inferType' env expr
   state <- get
-  let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n\t" ++ show state ++ "\n\t Environment: " ++ show env ++ "\n----------"
+  let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n" ++ pretty state ++ "\n\t Environment: " ++ pretty env ++ "\n----------"
   return . tr $ (s, t, e)
 
 inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type, Exp (Pos.SourcePos, Type))
@@ -478,7 +485,7 @@ inferType' env (ELet a n e1 e2) =
      s1rec <- unify a t1 (applySubst s1 recType)
      let s1' = s1rec `composeSubst` s1
      applySubstInfer s1'
-     let generalizeScheme = trace' ("let generalized '" ++ show n ++ "' --") <$> generalize env t1
+     let generalizeScheme = tracePretty ("let generalized '" ++ pretty n ++ "' --") <$> generalize env t1
      t' <- if isExpansive e1
            then return $ TScheme [] $ applySubst s1' t1
            else generalizeScheme
@@ -570,22 +577,29 @@ inferType' env (EIndex a eArr eIdx) =
      return (s2'' `composeSubst` s1'', elemType' , EIndex (a, elemType')  eArr' eIdx')
 inferType' env (ECloseRow a n) =
   do (s1, t, _) <- inferType env (EVar a n)
-     case t of
-      Fix (TRow r) -> do s2 <- unify a t (Fix $ TRow $ closeRow r)
-                         let s3 = s2 `composeSubst` s1
-                             resT = applySubst s3 t
-                         return (s3, resT, ECloseRow (a, resT) n)
-      _ -> throwError a $ "Assertion failed: Can't close a non-row type: " ++ pretty t ++ ", var = " ++ pretty n
-
-
+     s2 <- unify a t (closeRow t)
+     let s3 = s2 `composeSubst` s1
+         resT = applySubst s3 t
+     return (s3, resT, ECloseRow (a, resT) n)
+inferType' env (EFirst a expr) =
+  do (s1, t, expr') <- inferType env expr
+     fstT <- fresh
+     sndT <- fresh
+     let tupleT = Fix . TCons TTuple $ [Fix . TBody $ TVar fstT, Fix . TBody $ TVar sndT]
+     s2 <- unify a tupleT t
+     let s2' = s2 `composeSubst` s1
+     applySubstInfer s2'
+     let resType = applySubst s2'  $ Fix . TBody $ TVar fstT
+     return (s2', resType, EFirst (a, resType) expr')
+      
 unifyAllInstances :: Pos.SourcePos -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
   m <- varInstances <$> get
   let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
 
   -- TODO suboptimal - some of the sets may be identical
-  let unifyAll' s' equivs = unifyAll a s' . trace' "equivalence:" $ Set.toList equivs
-  trace' "unified equivs:" <$> foldM unifyAll' s equivalenceSets
+  let unifyAll' s' equivs = unifyAll a s' . tracePretty "equivalence:" $ Set.toList equivs
+  tracePretty "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
 minifyVars :: (VarNames a) => a -> a
 minifyVars xs = mapVarNames f xs
