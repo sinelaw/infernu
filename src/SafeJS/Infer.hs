@@ -55,6 +55,12 @@ trace _ y = y
 trace' :: Show a => String -> a -> a
 trace' prefix x = trace (prefix ++ " " ++ show x) x
 
+tracePretty :: Pretty a => String -> a -> a
+tracePretty prefix x = trace (prefix ++ " " ++ pretty x) x
+
+traceLog :: Monad m => String -> a -> m a
+traceLog s r = return $! r `seq` trace s r
+
 ----------------------------------------------------------------------
 
 -- var x = 2;    --> let x = ref 2 in    | x :: a
@@ -296,7 +302,7 @@ unify' a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TCons _ _) t2@(TBody _) = unify' a t2 t1
 unify' a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
-    then unifyl a nullSubst $ zip ts1 ts2
+    then fmap (tracePretty ("unified TCons's (" ++ show n1 ++ "): ")) <$> unifyl a nullSubst $ zip ts1 ts2
     else unificationError a t1 t2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
 unify' a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
@@ -316,9 +322,9 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
        s1 <- unifyl a nullSubst commonTypes
        r <- fresh
        s2 <- unifyRows a r s1 (t1, names1, m1) (t2, names2, r2)
-       s3 <- unifyRows a r s2 (t2, names2, m2) (t1, names1, r1)
-       let s4 = s3 `composeSubst` s2 `composeSubst` s1
-       return s4
+       let s2' = s2 `composeSubst` s1
+       s3 <- unifyRows a r s2' (tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
+       return $ (tracePretty "unified rows subst result") $ s3 `composeSubst` s2'
 
 unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
                -> (x, Set EPropName, Map EPropName (Type))
@@ -341,8 +347,9 @@ unifyl a s ts = foldM (unifyl' a) s ts
 
 unifyl' :: Pos.SourcePos -> TSubst -> (Type, Type) -> Infer TSubst
 unifyl' a s (x, y) = do
-  s' <- unify' a (unFix $ applySubst s x) (unFix $ applySubst s y)
-  return $ s' `composeSubst` s
+  traceLog ("step in unifyl got subst: " ++ pretty s) ()
+  s' <- unify' a (tracePretty "--1" $ unFix $ applySubst s x) (tracePretty "--2" $ unFix $ applySubst s y)
+  return $ tracePretty "step output in unifyl: " $ s' `composeSubst` s
 
 newtype OrBool = OrBool { unOrBool :: Bool }
                  deriving (Eq, Show, Ord)
@@ -404,12 +411,13 @@ isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and 
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer (TSubst, [(Type, Exp (Pos.SourcePos, Type))])
-accumInfer env = foldM accumInfer' (nullSubst, [])
-    where accumInfer' (subst, types) expr = do
-            (subst', t, e) <- inferType env expr
-            applySubstInfer subst'
-            return (subst' `composeSubst` subst, (t,e):types)
+accumInfer :: TSubst -> TypeEnv -> [Exp Pos.SourcePos] -> Infer (TSubst, [(Type, Exp (Pos.SourcePos, Type))])
+accumInfer initialSubst env =
+  do foldM accumInfer' (initialSubst, [])
+     where accumInfer' (subst, types) expr =
+             do (subst', t, e) <- inferType env expr
+                applySubstInfer subst'
+                return (subst' `composeSubst` subst, (applySubst subst t,e):types)
 
 inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type, Exp (Pos.SourcePos, Type))
 inferType env expr = do
@@ -443,17 +451,17 @@ inferType' env (EApp a e1 eArgs) =
      let tvar = Fix $ TBody (TVar tvarName)
      (s1, t1, e1') <- inferType env e1
      applySubstInfer s1
-     (s2, argsTE) <- accumInfer env eArgs
+     (s2, argsTE) <- tracePretty "EApp: unify type args" <$> accumInfer s1 env eArgs
      applySubstInfer s2
      let tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          rargsTE = reverse argsTE
          s2' = s2 `composeSubst` s1
-     s3 <- unify a (applySubst s2' t1) (applySubst s2' $ Fix . TCons TFunc $ tArgs ++ [tvar])
+     s3 <- tracePretty "EApp: unify inferred with template" <$> unify a (applySubst s2' t1) (applySubst s2' $ Fix . TCons TFunc $ tArgs ++ [tvar])
      let s3' = s3 `composeSubst` s2'
          t = applySubst s3' tvar
      applySubstInfer s3'
-     return (trace' "\\ unified app, subst: " $ s3', t, EApp (a, t) e1' eArgs')
+     return (tracePretty "\\ unified app, subst: " $ s3', t, EApp (a, t) e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
@@ -499,18 +507,18 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
 inferType' env (EArray a exprs) =
   do tvName <- fresh
      let tv = Fix . TBody $ TVar tvName
-     (subst, te) <- accumInfer env exprs
+     (subst, te) <- accumInfer nullSubst env exprs
      let types = map fst te
      subst' <- unifyl a subst $ zip (tv:types) types
      applySubstInfer subst'
      let t = Fix $ TCons TArray [applySubst subst' $ Fix . TBody $ TVar tvName]
      return (subst', t, EArray (a,t) $ map snd te)
 inferType' env (ETuple a exprs) =
-  do (subst, te) <- accumInfer env exprs
+  do (subst, te) <- accumInfer nullSubst env exprs
      let t = Fix . TCons TTuple . reverse $ map fst te
      return (subst, t, ETuple (a,t) $ map snd te)
 inferType' env (ERow a isOpen propExprs) =
-  do (s, te) <- accumInfer env $ map snd propExprs
+  do (s, te) <- accumInfer nullSubst env $ map snd propExprs
      applySubstInfer s
      endVar <- fresh
      let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)

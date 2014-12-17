@@ -213,13 +213,23 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 
 ----------------------------------------------------------------------
 
+-- | applySubst for Types
+-- >>> applySubst (Map.fromList [(0, Fix $ TBody TNumber)]) (Fix $ TBody $ TVar 0)
+-- Fix (TBody TNumber)
+-- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TBody $ TVar 0)
+-- Fix (TRow (TRowEnd Nothing))
+-- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowEnd $ Just 0)
+-- Fix (TRow (TRowEnd Nothing))
+-- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (Fix $ TBody TString) (TRowEnd $ Just 0))
+-- Fix (TRow (TRowProp "bla" Fix (TBody TString) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
   applySubst s (Fix t) =
     case t of
-     TBody (TVar n) -> fromMaybe (Fix t) $ Map.lookup n s
+     TBody (TVar n) -> substT' n
+     TRow (TRowEnd (Just n)) -> substT' n -- TODO assert that resulting type is a TRowProp
      _ -> Fix $ fmap (applySubst s) t
-     
+    where substT' n = fromMaybe (Fix t) $ Map.lookup n s 
     --traverse (fmap f) t
     --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
      --     f t = t

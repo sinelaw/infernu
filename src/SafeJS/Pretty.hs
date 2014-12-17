@@ -21,6 +21,8 @@ instance Pretty [String] where
   prettyTab _ [] = "[]"
   prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
 
+instance (Pretty a, Pretty b) => Pretty [(a,b)] where
+  prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
 
 pretty :: Pretty a => a -> String
 pretty = prettyTab 0
@@ -98,6 +100,10 @@ instance (Pretty a, Pretty b) => Pretty (Either a b) where
     prettyTab n (Left x) = "Error: " ++ prettyTab n x
     prettyTab n (Right x) = prettyTab n x
 
+instance Pretty TSubst where
+  prettyTab n s = "(" ++ str' ++ ")"
+    where str' = intercalate ", " . map (\(k,v) -> prettyTab n k ++ " => " ++ prettyTab n v) . Map.toList $ s
+  
 instance Pretty TypeError where
   prettyTab _ (TypeError p s) = Pos.sourceName p ++ ":" ++ show (Pos.sourceLine p) ++ ":" ++ show (Pos.sourceColumn p) ++ ": Error: " ++ s
   
