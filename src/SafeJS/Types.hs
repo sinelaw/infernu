@@ -226,10 +226,10 @@ instance Substable Type where
   applySubst :: TSubst -> Type -> Type
   applySubst s (Fix t) =
     case t of
-     TBody (TVar n) -> substT' n
-     TRow (TRowEnd (Just n)) -> substT' n -- TODO assert that resulting type is a TRowProp
+     TBody (TVar n) -> substT' t n
+     TRow r -> Fix $ TRow $ applySubst s r
      _ -> Fix $ fmap (applySubst s) t
-    where substT' n = fromMaybe (Fix t) $ Map.lookup n s 
+    where substT' defaultT n = fromMaybe (Fix defaultT) $ Map.lookup n s 
     --traverse (fmap f) t
     --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
      --     f t = t

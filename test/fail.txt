@@ -2,4 +2,3 @@ ERROR y valid/map.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
 // FAIL  n invalid/new.js
 // FAIL  n invalid/num.js
-// FAIL  n invalid/open-row-erisco.js
