@@ -127,7 +127,7 @@ fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
 -- new Constr(args..) = Constr(newobj, args..), return newobj
 fromExpression (ES3.NewExpr z expr argExprs) = ELet z tempThis (ERow z True [])  appExpr
-  where appExpr = ELet z poo app' $ EVar z tempThis
+  where appExpr = ELet z poo app' $ ECloseRow z tempThis
         app' = EApp z (fromExpression expr) (EVar z tempThis : map fromExpression argExprs)
         tempThis = "__this__" -- TODO replace with globally unique name
 fromExpression e = error $ "Not implemented: expression = " ++ show  (ES3PP.prettyPrint e)

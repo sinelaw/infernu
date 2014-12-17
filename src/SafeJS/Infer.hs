@@ -408,6 +408,15 @@ isExpansive (ERow _ _ exprs)    = any isExpansive $ map snd exprs
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
 isExpansive (EProp _ expr _)  = isExpansive expr
 isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and that's it?
+isExpansive (ECloseRow _ _) = True
+
+----------------------------------------------------------------------
+
+closeRow :: TRowList t -> TRowList t
+closeRow (TRowProp n t rest) = TRowProp n t (closeRow rest)
+closeRow (TRowEnd (Just _)) = TRowEnd Nothing
+closeRow r = r
+
 ----------------------------------------------------------------------
 
 -- For efficiency reasons, types list is returned in reverse order.
@@ -559,7 +568,16 @@ inferType' env (EIndex a eArr eIdx) =
      applySubstInfer s2''
      let elemType' = applySubst s2'' elemType
      return (s2'' `composeSubst` s1'', elemType' , EIndex (a, elemType')  eArr' eIdx')
-     
+inferType' env (ECloseRow a n) =
+  do (s1, t, _) <- inferType env (EVar a n)
+     case t of
+      Fix (TRow r) -> do s2 <- unify a t (Fix $ TRow $ closeRow r)
+                         let s3 = s2 `composeSubst` s1
+                             resT = applySubst s3 t
+                         return (s3, resT, ECloseRow (a, resT) n)
+      _ -> throwError a $ "Assertion failed: Can't close a non-row type: " ++ pretty t ++ ", var = " ++ pretty n
+
+
 unifyAllInstances :: Pos.SourcePos -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
   m <- varInstances <$> get

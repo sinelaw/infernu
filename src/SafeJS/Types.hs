@@ -67,6 +67,8 @@ data Exp a = EVar a EVarName
              -- TODO EIndex should not be part of the AST. should be a builtin function using
              -- pattern matching instead
            | EIndex a (Exp a) (Exp a)
+             -- TODO consider better options for causing rows to become closed outside the 'new' call
+           | ECloseRow a EVarName
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
