@@ -59,6 +59,7 @@ instance Pretty (Exp a) where
   prettyTab t (ELit _ l) = prettyTab t l
   prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
   prettyTab t (EPropAssign _ obj n e1 e2) = prettyTab t obj ++ "." ++ prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
+  prettyTab t (EIndexAssign _ obj i e1 e2) = prettyTab t obj ++ "[" ++ prettyTab t i ++ "] := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
   prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
   prettyTab t (ERow _ isOpen props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ (if isOpen then ", ..." else "") ++ "}"

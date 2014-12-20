@@ -59,6 +59,7 @@ data Exp a = EVar a EVarName
            | ELit a LitVal
            | EAssign a EVarName (Exp a) (Exp a)
            | EPropAssign a (Exp a) EPropName (Exp a) (Exp a)
+           | EIndexAssign a (Exp a) (Exp a) (Exp a) (Exp a)
            | EArray a [Exp a]
            | ETuple a [Exp a]
            | ERow a Bool [(EPropName, Exp a)]

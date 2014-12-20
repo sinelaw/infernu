@@ -402,6 +402,7 @@ isExpansive (EVar _ _)        = True
 isExpansive (EApp _ _ _)      = True
 isExpansive (EAssign _ _ _ _) = True
 isExpansive (EPropAssign _ _ _ _ _) = True
+isExpansive (EIndexAssign _ _ _ _ _) = True
 isExpansive (ELet _ _ _ _)    = True
 isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
@@ -526,6 +527,25 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      (s4, expr2T, expr2') <- inferType env expr2
      let s5 = s4 `composeSubst` s3 `composeSubst` s2 `composeSubst` s1
      return (s5, expr2T, EPropAssign (a,expr2T) objExpr' n expr1' expr2')
+inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
+  do (s1, tArr, eArr') <- inferType env eArr
+     elemType <- Fix . TBody . TVar <$> fresh
+     s1' <- unify a (Fix $ TCons TArray [elemType]) tArr
+     let s1'' = s1' `composeSubst` s1
+     applySubstInfer s1''
+     (s2, tId, eIdx') <- inferType env eIdx
+     s2' <- unify a (Fix $ TBody TNumber) tId
+     let s2'' = s2' `composeSubst` s2
+     applySubstInfer s2''
+     let elemType' = applySubst s2'' elemType
+     (s3, tExpr1, expr1') <- inferType env expr1
+     s3' <- unify a elemType' tExpr1
+     let s3'' = s3' `composeSubst` s3
+     applySubstInfer s3''
+     (s4, tExpr2, expr2') <- inferType env expr2
+     let s4' = s4 `composeSubst` s3'' `composeSubst` s2'' `composeSubst` s1''
+     applySubstInfer s4'
+     return (s4', applySubst s4' tExpr2 , EIndexAssign (a, applySubst s4' elemType')  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
   do tvName <- fresh
      let tv = Fix . TBody $ TVar tvName
