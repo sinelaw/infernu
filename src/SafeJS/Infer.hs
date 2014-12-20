@@ -207,7 +207,7 @@ getFreeTVars env = do
 --     applySubstInfer $ Map.singleton 0 (Fix $ TBody TString)
 --     varSchemes <$> get
 -- :}
--- Right (fromList [(1,TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody TString),Fix (TBody (TVar 1))])})])
+-- Right (fromList [(VarId 1,TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody TString),Fix (TBody (TVar 1))])})])
 --
 applySubstInfer :: TSubst -> Infer ()
 applySubstInfer s = modify $ \is -> is {
@@ -415,14 +415,21 @@ isExpansive (ECloseRow _ _) = True
 isExpansive (EFirst _ _) = True
 ----------------------------------------------------------------------
 
-closeRowList :: TRowList t -> TRowList t
-closeRowList (TRowProp n t rest) = TRowProp n t (closeRowList rest)
+closeRowList :: TRowList Type -> TRowList Type
+closeRowList (TRowProp n t rest) = TRowProp n (closeRow t) (closeRowList rest)
 closeRowList (TRowEnd (Just _)) = TRowEnd Nothing
 closeRowList r = r
 
+-- | Replaces all open row types with closed equivalents.
+-- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
+-- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
+-- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd Nothing), Fix $ TBody TString])
+-- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
+-- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd (Just 2)), Fix $ TBody TString])
+-- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
 closeRow :: Type -> Type
 closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
-closeRow t = t
+closeRow (Fix t) = Fix $ fmap closeRow t
 
 ----------------------------------------------------------------------
 
