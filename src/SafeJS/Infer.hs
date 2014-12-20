@@ -132,11 +132,19 @@ getVarId = Map.lookup
 -- >>> let m1 = addEquivalence 1 2 Map.empty
 -- >>> m1
 -- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]
---
+-- >>> addEquivalence 1 3 m1
+-- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(3,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])]
 addEquivalence :: TVarName -> TVarName -> Map TVarName (Set (Type)) -> Map TVarName (Set (Type))
-addEquivalence x y m = Map.insert x updatedSet . Map.insert y updatedSet $ m
-    where updatedSet = Set.insert (Fix $ TBody $ TVar x) . Set.insert (Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
+addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
+    where updatedSet :: Set Type
+          updatedSet = Set.insert (Fix $ TBody $ TVar x) . Set.insert (Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
           getSet item = fromMaybe Set.empty $ Map.lookup item m
+          setTVars :: [TVarName]
+          setTVars = mapVarNames' $ Set.toList updatedSet
+          mapVarNames' :: [Type] -> [TVarName]
+          mapVarNames' [] = []
+          mapVarNames' (Fix (TBody (TVar n)) : ts) = n : mapVarNames' ts
+          mapVarNames' (_:ts) = mapVarNames' ts
 
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
