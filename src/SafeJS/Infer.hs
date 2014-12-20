@@ -416,20 +416,19 @@ isExpansive (EFirst _ _) = True
 ----------------------------------------------------------------------
 
 closeRowList :: TRowList Type -> TRowList Type
-closeRowList (TRowProp n t rest) = TRowProp n (closeRow t) (closeRowList rest)
-closeRowList (TRowEnd (Just _)) = TRowEnd Nothing
-closeRowList r = r
+closeRowList (TRowProp n t rest) = TRowProp n t (closeRowList rest)
+closeRowList (TRowEnd _) = TRowEnd Nothing
 
--- | Replaces all open row types with closed equivalents.
+-- | Replaces a top-level open row type with the closed equivalent.
+-- >>> closeRow (Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd (Just 2)))
+-- Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just 1)))) (TRowEnd Nothing)))
 -- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
 -- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
--- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd Nothing), Fix $ TBody TString])
--- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
 -- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd (Just 2)), Fix $ TBody TString])
--- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
+-- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just 1)))) (TRowEnd (Just 2)))),Fix (TBody TString)])
 closeRow :: Type -> Type
 closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
-closeRow (Fix t) = Fix $ fmap closeRow t
+closeRow t = t
 
 ----------------------------------------------------------------------
 
