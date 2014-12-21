@@ -1,6 +1,5 @@
 // FAIL valid/fix.js:2:1: Error: Unbound variable: "Y" y valid/fix.js
 ERROR y valid/map.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
-// FAIL  n invalid/array-param.js
 // FAIL  n invalid/new.js
 // FAIL  n invalid/num.js
