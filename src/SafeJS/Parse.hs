@@ -83,7 +83,7 @@ fromStatement (ES3.ReturnStmt z x) = \k -> ELet z poo k $ maybe (empty z) fromEx
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
 toAbs z args stmts = EAbs z ("this" : map ES3.unId args) body
-  where body = foldStmts stmts $ ECloseRow z "this"
+  where body = foldStmts stmts $ (ECloseRow z "this") --EIndexAssign z (EVar z "__this__") (ELit z $ LitNumber 0) (ECloseRow z "this") $ empty z
 
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
@@ -132,9 +132,8 @@ fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.u
 -- new Constr(args..) = var this = { ... }, Constr(this, args..), return this
 -- TODO: this doesn't work. The only thing that collapses a variable to be of a more specific type is when we assign to it.
 -- So to get the type of 'this' we have no choice but to assign to - which is why we must return it from every function!
-fromExpression (ES3.NewExpr z expr argExprs) = ELet z tempThis (EArray z []) appExpr
-  where appExpr = ELet z poo app crap
-        crap = EIndex z (EVar z tempThis) (ELit z $ LitNumber 0)
+fromExpression (ES3.NewExpr z expr argExprs) = ELet z tempThis (EArray z [ERow z True []]) app
+  where crap = EIndex z (EVar z tempThis) (ELit z $ LitNumber 0)
         app = EApp z (fromExpression expr) (crap : map fromExpression argExprs)
         tempThis = "__this__" -- TODO replace with globally unique name
 fromExpression e = error $ "Not implemented: expression: " ++ show e ++ ": " ++ show (ES3PP.prettyPrint e)
@@ -147,7 +146,8 @@ fromProp (ES3.PropNum _ x) = show x
 -- -- ------------------------------------------------------------------------
 
 translate :: [ES3.Statement Pos.SourcePos] -> Exp Pos.SourcePos
-translate js = (foldStmts $ js) (empty $ Pos.initialPos "<global>")
+translate js = foldStmts js $ empty pos
+  where pos = Pos.initialPos "<global>"
 
 
 -- ex :: Body (Expr ()) -> Expr ()
