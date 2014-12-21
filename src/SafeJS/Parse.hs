@@ -141,7 +141,7 @@ fromProp (ES3.PropNum _ x) = show x
 -- -- ------------------------------------------------------------------------
 
 translate :: [ES3.Statement Pos.SourcePos] -> Exp Pos.SourcePos
-translate js = foldStmts js $ empty pos
+translate js = ELet pos poo (empty pos) $ foldStmts js $ EVar pos poo
   where pos = Pos.initialPos "<global>"
 
 
