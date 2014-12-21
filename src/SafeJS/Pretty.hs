@@ -66,9 +66,7 @@ instance Pretty (Exp a) where
   prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
   prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
-  prettyTab t (ECloseRow _ n) = "#CloseRow(" ++ prettyTab t n ++ ")"
   prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
-  prettyTab t (EFirst _ e) = "#First(" ++ prettyTab t e ++ ")"
   
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + n - 1)
@@ -117,7 +115,7 @@ instance (Pretty k, Pretty v) => Pretty (Map.Map k v) where
 
 instance (Pretty k) => Pretty (Set.Set k) where
   prettyTab n s = "Set {" ++ str' ++ "}"
-    where str' = intercalate ", " . map pretty . Set.toList $ s
+    where str' = intercalate ", " . map (prettyTab n) . Set.toList $ s
 
 instance Pretty TypeError where
   prettyTab _ (TypeError p s) = Pos.sourceName p ++ ":" ++ show (Pos.sourceLine p) ++ ":" ++ show (Pos.sourceColumn p) ++ ": Error: " ++ s

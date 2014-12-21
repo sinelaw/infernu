@@ -52,9 +52,6 @@ trace :: a -> b -> b
 trace _ y = y
 #endif
 
-trace' :: Show a => String -> a -> a
-trace' prefix x = trace (prefix ++ " " ++ show x) x
-
 tracePretty :: Pretty a => String -> a -> a
 tracePretty prefix x = trace (prefix ++ " " ++ pretty x) x
 
@@ -389,7 +386,7 @@ isInsideRowType n (Fix t) =
    _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
-varBind a n t@(Fix (TBody (TVar n2))) =
+varBind _ n t@(Fix (TBody (TVar n2))) =
   do addVarInstance n n2
      return $ singletonSubst n t
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
@@ -425,8 +422,6 @@ isExpansive (ERow _ _ exprs)    = any isExpansive $ map snd exprs
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
 isExpansive (EProp _ expr _)  = isExpansive expr
 isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and that's it?
-isExpansive (ECloseRow _ _) = True
-isExpansive (EFirst _ _) = True
 isExpansive (ENew _ _ _) = True
 ----------------------------------------------------------------------
 
@@ -643,22 +638,6 @@ inferType' env (EIndex a eArr eIdx) =
      applySubstInfer s2''
      let elemType' = applySubst s2'' elemType
      return (s2'' `composeSubst` s1'', elemType' , EIndex (a, elemType')  eArr' eIdx')
-inferType' env (ECloseRow a n) =
-  do (s1, t, _) <- inferType env (EVar a n)
-     s2 <- unify a t (closeRow t)
-     let s3 = s2 `composeSubst` s1
-         resT = applySubst s3 t
-     return (s3, resT, ECloseRow (a, resT) n)
-inferType' env (EFirst a expr) =
-  do (s1, t, expr') <- inferType env expr
-     fstT <- fresh
-     sndT <- fresh
-     let tupleT = Fix . TCons TTuple $ [Fix . TBody $ TVar fstT, Fix . TBody $ TVar sndT]
-     s2 <- unify a tupleT t
-     let s2' = s2 `composeSubst` s1
-     applySubstInfer s2'
-     let resType = applySubst s2'  $ Fix . TBody $ TVar fstT
-     return (s2', resType, EFirst (a, resType) expr')
       
 unifyAllInstances :: Pos.SourcePos -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
