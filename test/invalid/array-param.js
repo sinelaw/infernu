@@ -3,6 +3,7 @@ function f(x) {
     return x;
 }
 var arr = [];
-arr[0] = f(arr[0]);
+f(arr[0]);
 arr[0].muff = 3;
+arr[0] = { muff: 123 }; // should require also .stuff = <number> to work. 
 return arr;
