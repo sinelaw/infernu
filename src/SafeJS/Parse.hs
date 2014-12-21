@@ -73,17 +73,18 @@ fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray z tests) . 
           getCaseBody (ES3.CaseDefault _ body') = body'
           getCaseBody (ES3.CaseClause _ _ body') = body'
           
-          
 fromStatement (ES3.VarDeclStmt _ decls) = chainDecls decls
--- $ (ES3.Id z "this" : args)
 fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
--- TODO: return statements must be added to the core language to be handled correctly.
-fromStatement (ES3.ReturnStmt z x) = \k -> ELet z poo k $ maybe (empty z) fromExpression x
+fromStatement (ES3.ReturnStmt z x) = EIndexAssign z (EVar z "return") (ELit z $ LitNumber 0)
+                                     $ case x of
+                                        Nothing -> ELit z LitUndefined
+                                        Just x' -> fromExpression x'
 
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
-toAbs z args stmts = EAbs z ("this" : map ES3.unId args) body
-  where body = foldStmts stmts $ empty z
+toAbs z args stmts = EAbs z ("this" : map ES3.unId args) body'
+  -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
+  where body' = ELet z "return" (EArray z []) $ foldStmts stmts $ (EIndex z (EVar z "return") (ELit z $ LitNumber 0))
 
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
