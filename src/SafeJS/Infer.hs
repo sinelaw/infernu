@@ -134,6 +134,8 @@ getVarId = Map.lookup
 -- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]
 -- >>> addEquivalence 1 3 m1
 -- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(3,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])]
+-- >>> addEquivalence 3 1 m1
+-- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(3,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])]
 addEquivalence :: TVarName -> TVarName -> Map TVarName (Set (Type)) -> Map TVarName (Set (Type))
 addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
     where updatedSet :: Set Type
@@ -387,6 +389,9 @@ isInsideRowType n (Fix t) =
    _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
+varBind a n t@(Fix (TBody (TVar n2))) =
+  do addVarInstance n n2
+     return $ singletonSubst n t
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t = return nullSubst
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
@@ -537,21 +542,25 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      return (s5, expr2T, EPropAssign (a,expr2T) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (s1, tArr, eArr') <- inferType env eArr
-     elemType <- Fix . TBody . TVar <$> fresh
+     elemTVarName <- fresh
+     let elemType = Fix . TBody . TVar $ elemTVarName
      s1' <- unify a (Fix $ TCons TArray [elemType]) tArr
      let s1'' = s1' `composeSubst` s1
      applySubstInfer s1''
      (s2, tId, eIdx') <- inferType env eIdx
      s2' <- unify a (Fix $ TBody TNumber) tId
-     let s2'' = s2' `composeSubst` s2
+     let s2'' = s2' `composeSubst` s2 `composeSubst` s1''
      applySubstInfer s2''
      let elemType' = applySubst s2'' elemType
      (s3, tExpr1, expr1') <- inferType env expr1
-     s3' <- unify a elemType' tExpr1
-     let s3'' = s3' `composeSubst` s3
+     s3' <- unify a tExpr1 elemType'
+     let s3'' = s3' `composeSubst` s3 `composeSubst` s2''
      applySubstInfer s3''
+     s3''' <- unifyAllInstances a s3'' [elemTVarName]
+     let s3b = s3''' `composeSubst` s3''
+     applySubstInfer s3b
      (s4, tExpr2, expr2') <- inferType env expr2
-     let s4' = s4 `composeSubst` s3'' `composeSubst` s2'' `composeSubst` s1''
+     let s4' = s4 `composeSubst` s3b
      applySubstInfer s4'
      return (s4', applySubst s4' tExpr2 , EIndexAssign (a, applySubst s4' elemType')  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
