@@ -519,18 +519,20 @@ inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType
      (s1, t1, e1') <- inferType recEnv e1
+     applySubstInfer s1
      s1rec <- unify a t1 (applySubst s1 recType)
+     applySubstInfer s1rec
      let s1' = s1rec `composeSubst` s1
-     applySubstInfer s1'
-     let generalizeScheme = tracePretty ("let generalized '" ++ pretty n ++ "' --") <$> generalize env t1
+         generalizeScheme = tracePretty ("let generalized '" ++ pretty n ++ "' --") <$> generalize env (applySubst s1' t1)
      t' <- if isExpansive e1
            then return $ TScheme [] $ applySubst s1' t1
            else generalizeScheme
      env' <- addVarScheme n env t'
      (s2, t2, e2') <- inferType env' e2
      applySubstInfer s2
-     let t = applySubst s2 t2
-     return (s2 `composeSubst` s1', t, ELet (a, t) n e1' e2')
+     let s2' = s2 `composeSubst` s1'
+         t = applySubst s2' t2
+     return (s2', t, ELet (a, t) n e1' e2')
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign a n expr1 expr2) =
