@@ -427,6 +427,7 @@ isExpansive (EProp _ expr _)  = isExpansive expr
 isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and that's it?
 isExpansive (ECloseRow _ _) = True
 isExpansive (EFirst _ _) = True
+isExpansive (ENew _ _ _) = True
 ----------------------------------------------------------------------
 
 closeRowList :: TRowList Type -> TRowList Type
@@ -489,15 +490,36 @@ inferType' env (EApp a e1 eArgs) =
      applySubstInfer s1
      (s2, argsTE) <- tracePretty "EApp: unify type args" <$> accumInfer s1 env eArgs
      applySubstInfer s2
-     let tArgs = map fst rargsTE
+     let rargsTE = reverse argsTE
+         tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
-         rargsTE = reverse argsTE
          s2' = s2 `composeSubst` s1
      s3 <- tracePretty "EApp: unify inferred with template" <$> unify a (applySubst s2' t1) (applySubst s2' $ Fix . TCons TFunc $ tArgs ++ [tvar])
      let s3' = s3 `composeSubst` s2'
          t = applySubst s3' tvar
      applySubstInfer s3'
      return (tracePretty "\\ unified app, subst: " $ s3', t, EApp (a, t) e1' eArgs')
+inferType' env (ENew a e1 eArgs) =
+  do (s1, t1, e1') <- inferType env e1
+     applySubstInfer s1
+     (s2, argsTE) <- accumInfer s1 env eArgs
+     applySubstInfer s2
+     thisTVarName <- fresh
+     resT <- Fix . TBody . TVar <$> fresh
+     let thisT = Fix . TBody $ TVar thisTVarName
+         rargsTE = reverse argsTE
+         tArgs = thisT : map fst rargsTE
+         eArgs' = map snd rargsTE
+         s2' = s2 `composeSubst` s1
+     s3 <- tracePretty "ENew: unify inferred with template" <$> unify a (applySubst s2' t1) (applySubst s2' $ Fix . TCons TFunc $ tArgs ++ [resT])
+     let s3' = s3 `composeSubst` s2'
+         t = applySubst s3' thisT
+     applySubstInfer s3'
+     s4 <- unify a t (closeRow t)
+     applySubstInfer s4
+     let s4' = s4 `composeSubst` s3'
+         t' = applySubst s4' t
+     return (s4', t', ENew (a, t') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme n env $ TScheme [] recType

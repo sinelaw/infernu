@@ -53,7 +53,7 @@ nakedSingleOrTuple xs = "(" ++ intercalate ", " xs ++ ")"
 
 instance Pretty (Exp a) where
   prettyTab t (EVar _ n) = prettyTab t n
-  prettyTab t (EApp _ e1 args) = prettyTab t e1 ++ " " ++ unwords (map (prettyTab t) args)
+  prettyTab t (EApp _ e1 args) = prettyTab t e1 ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
   prettyTab t (EAbs _ args e) = "(\\" ++ nakedSingleOrTuple (map (prettyTab t) args) ++ " -> " ++ prettyTab t e ++ ")"
   prettyTab t (ELet _ n e1 e2) = "let " ++ prettyTab t n ++ " = " ++ prettyTab (t+1) e1 ++ "\n" ++ tab t ++ " in " ++ prettyTab (t+1) e2
   prettyTab t (ELit _ l) = prettyTab t l
@@ -67,6 +67,7 @@ instance Pretty (Exp a) where
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
   prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
   prettyTab t (ECloseRow _ n) = "#CloseRow(" ++ prettyTab t n ++ ")"
+  prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
   prettyTab t (EFirst _ e) = "#First(" ++ prettyTab t e ++ ")"
   
 toChr :: Int -> Char
