@@ -534,12 +534,15 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      applySubstInfer s1
      (s2, rvalueT, expr1') <- inferType env expr1
      applySubstInfer s2
-     rowVar <- fresh
-     s3 <- unify a objT $ Fix . TRow $ TRowProp n rvalueT $ TRowEnd (Just rowVar)
+     let s2' = s2 `composeSubst` s1
+     rowTailVar <- fresh
+     s3 <- unify a (applySubst s2' objT) $ applySubst s2' . Fix . TRow $ TRowProp n rvalueT $ TRowEnd (Just rowTailVar)
      applySubstInfer s3
+     let s3' = s3 `composeSubst` s2'
      (s4, expr2T, expr2') <- inferType env expr2
-     let s5 = s4 `composeSubst` s3 `composeSubst` s2 `composeSubst` s1
-     return (s5, expr2T, EPropAssign (a,expr2T) objExpr' n expr1' expr2')
+     let s5 = s4 `composeSubst` s3'
+     s6 <- unifyAllInstances a s5 [rowTailVar]
+     return (s6, applySubst s6 expr2T, EPropAssign (a, applySubst s6 expr2T) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (s1, tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
