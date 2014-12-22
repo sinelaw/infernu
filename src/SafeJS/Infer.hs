@@ -44,6 +44,7 @@ import           Test.QuickCheck.Arbitrary  (Arbitrary (..))
 
 import           SafeJS.Pretty
 import           SafeJS.Types
+import qualified SafeJS.Builtins            as Builtins
 
 #if TRACE
 import           Debug.Trace                (trace)
@@ -189,8 +190,8 @@ setVarScheme n varId scheme = do
   modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ show n ++ ": " ++ show scheme) . Map.insert varId scheme $ varSchemes is }
   return ()
 
-addVarScheme :: EVarName -> TypeEnv -> TScheme -> Infer TypeEnv
-addVarScheme n env scheme = do
+addVarScheme :: TypeEnv -> EVarName -> TScheme -> Infer TypeEnv
+addVarScheme env n scheme = do
   varId <- tracePretty ("-- '" ++ pretty n ++ "' = varId") <$> freshVarId
   setVarScheme n varId scheme
   return $ Map.insert n varId env
@@ -210,7 +211,7 @@ getFreeTVars env = do
 -- runInfer $ do
 --     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 --     let tenv = Map.empty
---     tenv' <- addVarScheme "x" tenv t
+--     tenv' <- addVarScheme tenv "x" t
 --     applySubstInfer $ Map.singleton 0 (Fix $ TBody TString)
 --     varSchemes <$> get
 -- :}
@@ -235,7 +236,7 @@ applySubstInfer s = modify $ \is -> is {
 -- runInfer $ do
 --     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 --     let tenv = Map.empty
---     tenv' <- addVarScheme "x" tenv t
+--     tenv' <- addVarScheme tenv "x" t
 --     instantiateVar (Pos.initialPos "") "x" tenv'
 -- :}
 -- Right Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 1))])
@@ -270,7 +271,7 @@ instantiateVar a n env = do
 -- >>> :{
 -- runInfer $ do
 --     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
---     tenv <- addVarScheme "x" Map.empty t
+--     tenv <- addVarScheme Map.empty "x" t
 --     generalize tenv (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
 -- :}
 -- Right (TScheme {schemeVars = [2], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 2))])})
@@ -473,7 +474,7 @@ inferType' env (EVar a n) = do
   return (nullSubst, t, EVar (a, t) n)
 inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
-     env' <- foldM (\e (n, t) -> addVarScheme n e $ TScheme [] t) env $ zip argNames argTypes
+     env' <- foldM (\e (n, t) -> addVarScheme e n $ TScheme [] t) env $ zip argNames argTypes
      (s1, t1, e2') <- inferType env' e2
      applySubstInfer s1
      let t = Fix $ TCons TFunc $ map (applySubst s1) argTypes ++ [t1]
@@ -517,7 +518,7 @@ inferType' env (ENew a e1 eArgs) =
      return (s4', t', ENew (a, t') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
-     recEnv <- addVarScheme n env $ TScheme [] recType
+     recEnv <- addVarScheme env n $ TScheme [] recType
      (s1, t1, e1') <- inferType recEnv e1
      applySubstInfer s1
      s1rec <- unify a t1 (applySubst s1 recType)
@@ -527,7 +528,7 @@ inferType' env (ELet a n e1 e2) =
      t' <- if isExpansive e1
            then return $ TScheme [] $ applySubst s1' t1
            else generalizeScheme
-     env' <- addVarScheme n env t'
+     env' <- addVarScheme env n t'
      (s2, t2, e2') <- inferType env' e2
      applySubstInfer s2
      let s2' = s2 `composeSubst` s1'
@@ -656,8 +657,21 @@ minifyVars xs = mapVarNames f xs
           f n = fromMaybe n $ Map.lookup n vars
           
 
-typeInference :: TypeEnv -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type))
-typeInference env e = do
+createEnv :: Map EVarName TScheme -> Infer (Map EVarName VarId)
+createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
+    where allTVars :: TScheme -> Set TVarName
+          allTVars (TScheme qvars t) = freeTypeVars t `Set.union` (Set.fromList qvars)
+          safeLookup :: Eq a => [(a,a)] -> a -> a
+          safeLookup assoc n = fromMaybe n $ lookup n assoc
+          addVarScheme' :: Map EVarName VarId -> (EVarName, TScheme) -> Infer (Map EVarName VarId)
+          addVarScheme' m (name, tscheme) = do
+            allocNames <- forM (Set.toList $ allTVars tscheme) $ \tvName -> (fresh >>= return . (tvName,))
+            addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
+
+
+typeInference :: Map EVarName TScheme -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type))
+typeInference builtins e = do
+  env <- createEnv builtins
   (_s, _t, e') <- inferType env e
   let e'' = (fmap . fmap) (applySubst _s) e'
   return e''
@@ -778,7 +792,7 @@ test e = case runTypeInference e of
 
 
 runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type))
-runTypeInference e = runInfer $ typeInference Map.empty e
+runTypeInference e = runInfer $ typeInference Builtins.builtins e
 
 
 #ifdef QUICKCHECK
