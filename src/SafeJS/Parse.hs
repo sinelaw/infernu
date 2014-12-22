@@ -134,14 +134,12 @@ fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.u
 fromExpression (ES3.NewExpr z expr argExprs) = ENew z (fromExpression expr) (map fromExpression argExprs)
 fromExpression (ES3.PrefixExpr z op expr) = EApp z (EVar z opName) [fromExpression expr]
   where opName = case op of
-                  ES3.PrefixLNot -> Builtins.opLogicalNot
-                  ES3.PrefixBNot -> Builtins.opBinaryNot
-                  ES3.PrefixPlus -> Builtins.opPrefixPlus
-                  ES3.PrefixMinus -> Builtins.opPrefixMinus
-                  ES3.PrefixTypeof -> Builtins.opPrefixTypeof
-                  
---                  PrefixPlus -> "
---fromExpression e = error $ "Not implemented: expression: " ++ show e ++ ": " ++ show (ES3PP.prettyPrint e)
+                  -- delete, void unsupported
+                  ES3.PrefixVoid -> error "Unexpected 'void'"
+                  ES3.PrefixDelete -> error "Unexpected 'delete'"
+                  _ -> show . ES3PP.prettyPrint $ op
+fromExpression (ES3.InfixExpr z op e1 e2) = EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression e1, fromExpression e2]
+
 
 fromProp :: ES3.Prop a -> String
 fromProp (ES3.PropId _ (ES3.Id _ x)) = x
