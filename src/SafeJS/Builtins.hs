@@ -1,6 +1,5 @@
 module SafeJS.Builtins
-       (builtins,
-        opLogicalNot, opBinaryNot, opPrefixPlus, opPrefixMinus, opPrefixTypeof)
+       (builtins)
        where
 
 import           SafeJS.Types
@@ -22,21 +21,6 @@ tNumber = Fix $ TBody TNumber
 tString :: Type
 tString = Fix $ TBody TString
 
-opLogicalNot :: EVarName
-opLogicalNot = "!"
-
-opBinaryNot :: EVarName
-opBinaryNot = "~"
-
-opPrefixPlus :: EVarName
-opPrefixPlus = "+"
-
-opPrefixMinus :: EVarName
-opPrefixMinus = "-"
-
-opPrefixTypeof :: EVarName
-opPrefixTypeof = "typeof"
-
 numRelation :: TScheme
 numRelation = binaryFunc tNumber tNumber tBoolean
 
@@ -48,11 +32,9 @@ boolRelation = binaryFunc tBoolean tBoolean tBoolean
 
 builtins :: Map EVarName TScheme
 builtins = Map.fromList [
-  (opLogicalNot,   unaryFunc tBoolean tBoolean),
-  (opBinaryNot,    unaryFunc tNumber  tNumber),
-  (opPrefixPlus,   unaryFunc tNumber  tNumber),
-  (opPrefixMinus,  unaryFunc tNumber  tNumber),
-  (opPrefixTypeof, TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, tString]),
+  ("!",            unaryFunc tBoolean tBoolean),
+  ("~",            unaryFunc tNumber  tNumber),
+  ("typeof",       TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, tString]),
   ("+",            numOp),
   ("-",            numOp),
   ("*",            numOp),

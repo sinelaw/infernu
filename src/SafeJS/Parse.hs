@@ -132,14 +132,32 @@ fromExpression (ES3.ListExpr z exprs) =
 fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
 fromExpression (ES3.NewExpr z expr argExprs) = ENew z (fromExpression expr) (map fromExpression argExprs)
-fromExpression (ES3.PrefixExpr z op expr) = EApp z (EVar z opName) [fromExpression expr]
-  where opName = case op of
-                  -- delete, void unsupported
-                  ES3.PrefixVoid -> error "Unexpected 'void'"
-                  ES3.PrefixDelete -> error "Unexpected 'delete'"
-                  _ -> show . ES3PP.prettyPrint $ op
+fromExpression (ES3.PrefixExpr z op expr) = 
+  case op of
+    -- prefix +/- are converted to 0-x and 0+x
+    ES3.PrefixPlus -> EApp z (EVar z $ show . ES3PP.prettyPrint $ ES3.OpAdd) [ELit z $ LitNumber 0, fromExpression expr]
+    ES3.PrefixMinus -> EApp z (EVar z $ show . ES3PP.prettyPrint $ ES3.OpSub) [ELit z $ LitNumber 0, fromExpression expr]
+    -- delete, void unsupported
+    ES3.PrefixVoid -> error "Unexpected 'void'"
+    ES3.PrefixDelete -> error "Unexpected 'delete'"
+    -- all the rest are expected to exist as unary builtin functions
+    _ -> EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression expr]
 fromExpression (ES3.InfixExpr z op e1 e2) = EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression e1, fromExpression e2]
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = EAssign z name (addConstant z op (EVar z name)) (EVar z name)
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = EPropAssign z objExpr' name (addConstant z op (EProp z objExpr' name)) (EProp z objExpr' name)
+  where objExpr' = fromExpression objExpr
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = EIndexAssign z objExpr' idxExpr' (addConstant z op (EIndex z objExpr' idxExpr')) (EIndex z objExpr' idxExpr')
+  where objExpr' = fromExpression objExpr
+        idxExpr' = fromExpression idxExpr
 
+-- TODO: the translation results in equivalent types, but currently ignore pre vs. postfix so the data flow is wrong.
+addConstant :: a -> ES3.UnaryAssignOp -> Exp a -> Exp a
+addConstant z op expr = EApp z (EVar z $ show . ES3PP.prettyPrint $ ES3.OpAdd) [expr, ELit z $ LitNumber x]
+  where x = case op of
+             ES3.PrefixInc -> 1
+             ES3.PrefixDec -> -1
+             ES3.PostfixInc -> 1
+             ES3.PostfixDec -> -1
 
 fromProp :: ES3.Prop a -> String
 fromProp (ES3.PropId _ (ES3.Id _ x)) = x
