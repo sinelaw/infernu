@@ -3,12 +3,11 @@ module SafeJS.Parse
        where
 
 import           Control.Arrow                    ((***))
+import           Data.Maybe                       (mapMaybe)
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
-import qualified Text.Parsec.Pos                  as Pos
-import Data.Maybe (mapMaybe)
 import           SafeJS.Types
-import qualified SafeJS.Builtins                  as Builtins
+import qualified Text.Parsec.Pos                  as Pos
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
@@ -73,7 +72,7 @@ fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray z tests) . 
           getCaseTest (ES3.CaseClause _ test' _) = Just test'
           getCaseBody (ES3.CaseDefault _ body') = body'
           getCaseBody (ES3.CaseClause _ _ body') = body'
-          
+
 fromStatement (ES3.VarDeclStmt _ decls) = chainDecls decls
 fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
 fromStatement (ES3.ReturnStmt z x) = EIndexAssign z (EVar z "return") (ELit z $ LitNumber 0)
@@ -114,14 +113,29 @@ fromExpression (ES3.CallExpr z expr argExprs) = EApp z (fromExpression expr) (ma
                                                         ES3.DotRef _ objExpr _ -> objExpr
                                                         _ -> ES3.NullLit z -- TODO should be 'undefined'
                                                 --error $ "Assetion failed: expecting at least 'this'"
-fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LVar _ name) expr) = EAssign z name (fromExpression expr) (EVar z name)
-fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LDot _ objExpr name) expr) = EPropAssign z objExpr' name (fromExpression expr) (EProp z objExpr' name)
-  where objExpr' = fromExpression objExpr
-fromExpression (ES3.AssignExpr z ES3.OpAssign (ES3.LBracket _ objExpr idxExpr) expr) = EIndexAssign z objExpr' idxExpr' (fromExpression expr) (EIndex z objExpr' idxExpr')
-  where objExpr' = fromExpression objExpr
-        idxExpr' = fromExpression idxExpr
+fromExpression (ES3.AssignExpr z op target expr) = assignExpr
+  where (assignExpr, oldValue) = case target of
+          ES3.LVar _ name -> (assignToVar z name value, EVar z name)
+          ES3.LDot _ objExpr name -> (assignToProperty z objExpr name value, EProp z (fromExpression objExpr) name)
+          ES3.LBracket _ objExpr idxExpr -> (assignToIndex z objExpr idxExpr value, EIndex z (fromExpression objExpr) (fromExpression idxExpr))
+        expr' = fromExpression expr
+        value = case op of
+          ES3.OpAssign -> expr'
+          ES3.OpAssignAdd -> applyOpFunc z ES3.OpAdd [oldValue, expr']
+          ES3.OpAssignSub -> applyOpFunc z ES3.OpSub [oldValue, expr']
+          ES3.OpAssignMul -> applyOpFunc z ES3.OpMul [oldValue, expr']
+          ES3.OpAssignDiv -> applyOpFunc z ES3.OpDiv [oldValue, expr']
+          ES3.OpAssignMod -> applyOpFunc z ES3.OpMod [oldValue, expr']
+          ES3.OpAssignLShift   -> applyOpFunc z ES3.OpLShift   [oldValue, expr']
+          ES3.OpAssignSpRShift -> applyOpFunc z ES3.OpSpRShift [oldValue, expr']
+          ES3.OpAssignZfRShift -> applyOpFunc z ES3.OpZfRShift [oldValue, expr']
+          ES3.OpAssignBAnd     -> applyOpFunc z ES3.OpBAnd     [oldValue, expr']
+          ES3.OpAssignBXor     -> applyOpFunc z ES3.OpBXor     [oldValue, expr']
+          ES3.OpAssignBOr      -> applyOpFunc z ES3.OpBOr      [oldValue, expr']
+
 fromExpression (ES3.FuncExpr z Nothing     argNames stmts) = toAbs z argNames stmts
 fromExpression (ES3.FuncExpr z (Just name) argNames stmts) = toNamedAbs z argNames stmts name (EVar z $ ES3.unId name)
+
 fromExpression (ES3.ListExpr z exprs) =
     case exprs of
       [] -> error "Unexpected empty list expression"
@@ -132,32 +146,51 @@ fromExpression (ES3.ListExpr z exprs) =
 fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
 fromExpression (ES3.NewExpr z expr argExprs) = ENew z (fromExpression expr) (map fromExpression argExprs)
-fromExpression (ES3.PrefixExpr z op expr) = 
+fromExpression (ES3.PrefixExpr z op expr) =
   case op of
     -- prefix +/- are converted to 0-x and 0+x
-    ES3.PrefixPlus -> EApp z (EVar z $ show . ES3PP.prettyPrint $ ES3.OpAdd) [ELit z $ LitNumber 0, fromExpression expr]
-    ES3.PrefixMinus -> EApp z (EVar z $ show . ES3PP.prettyPrint $ ES3.OpSub) [ELit z $ LitNumber 0, fromExpression expr]
+    ES3.PrefixPlus -> EApp z (opFunc z ES3.OpAdd) [ELit z $ LitNumber 0, fromExpression expr]
+    ES3.PrefixMinus -> EApp z (opFunc z ES3.OpSub) [ELit z $ LitNumber 0, fromExpression expr]
     -- delete, void unsupported
     ES3.PrefixVoid -> error "Unexpected 'void'"
     ES3.PrefixDelete -> error "Unexpected 'delete'"
     -- all the rest are expected to exist as unary builtin functions
     _ -> EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression expr]
 fromExpression (ES3.InfixExpr z op e1 e2) = EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression e1, fromExpression e2]
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = EAssign z name (addConstant z op (EVar z name)) (EVar z name)
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = EPropAssign z objExpr' name (addConstant z op (EProp z objExpr' name)) (EProp z objExpr' name)
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name $ addConstant z op (EVar z name)
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr name $ addConstant z op (EProp z objExpr' name)
   where objExpr' = fromExpression objExpr
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = EIndexAssign z objExpr' idxExpr' (addConstant z op (EIndex z objExpr' idxExpr')) (EIndex z objExpr' idxExpr')
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex z objExpr idxExpr $ addConstant z op (EIndex z objExpr' idxExpr')
   where objExpr' = fromExpression objExpr
         idxExpr' = fromExpression idxExpr
 
+opFunc :: a -> ES3.InfixOp -> Exp a
+opFunc z op = EVar z $ show . ES3PP.prettyPrint $ op
+
+applyOpFunc :: a -> ES3.InfixOp -> [Exp a] -> Exp a
+applyOpFunc z op exprs = EApp z (opFunc z op) exprs
+
 -- TODO: the translation results in equivalent types, but currently ignore pre vs. postfix so the data flow is wrong.
 addConstant :: a -> ES3.UnaryAssignOp -> Exp a -> Exp a
-addConstant z op expr = EApp z (EVar z $ show . ES3PP.prettyPrint $ ES3.OpAdd) [expr, ELit z $ LitNumber x]
+addConstant z op expr = EApp z (opFunc z ES3.OpAdd) [expr, ELit z $ LitNumber x]
   where x = case op of
              ES3.PrefixInc -> 1
              ES3.PrefixDec -> -1
              ES3.PostfixInc -> 1
              ES3.PostfixDec -> -1
+
+assignToVar :: Show a => a -> EVarName -> Exp a -> Exp a
+assignToVar z name expr = EAssign z name expr (EVar z name)
+
+assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp a -> Exp a
+assignToProperty  z objExpr name expr = EPropAssign z objExpr' name expr (EProp z objExpr' name)
+  where objExpr' = fromExpression objExpr
+
+assignToIndex :: Show a => a -> ES3.Expression a  -> ES3.Expression a -> Exp a -> Exp a
+assignToIndex z objExpr idxExpr expr = EIndexAssign z objExpr' idxExpr' expr (EIndex z objExpr' idxExpr')
+  where objExpr' = fromExpression objExpr
+        idxExpr' = fromExpression idxExpr
+
 
 fromProp :: ES3.Prop a -> String
 fromProp (ES3.PropId _ (ES3.Id _ x)) = x
