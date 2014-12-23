@@ -136,9 +136,9 @@ fromExpression (ES3.AssignExpr z op target expr) = assignExpr
 fromExpression (ES3.FuncExpr z Nothing     argNames stmts) = toAbs z argNames stmts
 fromExpression (ES3.FuncExpr z (Just name) argNames stmts) = toNamedAbs z argNames stmts name (EVar z $ ES3.unId name)
 
-fromExpression (ES3.ListExpr z exprs) =
+fromExpression e@(ES3.ListExpr z exprs) =
     case exprs of
-      [] -> error "Unexpected empty list expression"
+      [] -> errorNotSupported "empty list (,) expression" z e
       [x] -> fromExpression x
       -- Should the let here use an allocated name here?
       xs -> ELet z poo (ETuple z (tail exprs')) (head exprs')
@@ -146,14 +146,14 @@ fromExpression (ES3.ListExpr z exprs) =
 fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
 fromExpression (ES3.NewExpr z expr argExprs) = ENew z (fromExpression expr) (map fromExpression argExprs)
-fromExpression (ES3.PrefixExpr z op expr) =
+fromExpression e@(ES3.PrefixExpr z op expr) =
   case op of
     -- prefix +/- are converted to 0-x and 0+x
     ES3.PrefixPlus -> EApp z (opFunc z ES3.OpAdd) [ELit z $ LitNumber 0, fromExpression expr]
     ES3.PrefixMinus -> EApp z (opFunc z ES3.OpSub) [ELit z $ LitNumber 0, fromExpression expr]
     -- delete, void unsupported
-    ES3.PrefixVoid -> error "Unexpected 'void'"
-    ES3.PrefixDelete -> error "Unexpected 'delete'"
+    ES3.PrefixVoid -> errorNotSupported "void" z e
+    ES3.PrefixDelete -> errorNotSupported "delete" z e
     -- all the rest are expected to exist as unary builtin functions
     _ -> EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression expr]
 fromExpression (ES3.InfixExpr z op e1 e2) = EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression e1, fromExpression e2]
