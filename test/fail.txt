@@ -1,2 +1,3 @@
 // FAIL valid/map.js:5:13: Error: Could not unify: [bs] with {push: bu, ...bt} y valid/map.js
+// FAIL valid/promise.js:63:19: Error: Could not unify: TNumber with TString y valid/promise.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js

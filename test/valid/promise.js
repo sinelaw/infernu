@@ -55,3 +55,11 @@ function Promise () {
 }; 
 
 var p = new Promise();
+var num = 32;
+var p1 = p.then(function(x) { num = x; }, function (ex) { });
+
+var pb = new Promise();
+var str = 'b';
+var pb1 = pb.then(function(x) { str = x; }, function (ex) { });
+
+
