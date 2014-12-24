@@ -7,10 +7,10 @@ import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 
 unaryFunc :: Type -> Type -> TScheme
-unaryFunc t1 t2 = TScheme [] $ Fix $ TCons TFunc [t1, t2]
+unaryFunc t1 t2 = TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2]
 
 binaryFunc :: Type -> Type -> Type -> TScheme
-binaryFunc t1 t2 t3 = TScheme [] $ Fix $ TCons TFunc [t1, t2, t3]
+binaryFunc t1 t2 t3 = TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2, t3]
 
 tBoolean :: Type
 tBoolean = Fix $ TBody TBoolean
@@ -34,7 +34,7 @@ builtins :: Map EVarName TScheme
 builtins = Map.fromList [
   ("!",            unaryFunc tBoolean tBoolean),
   ("~",            unaryFunc tNumber  tNumber),
-  ("typeof",       TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, tString]),
+  ("typeof",       TScheme [0,1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, tString]),
   ("+",            numOp),
   ("-",            numOp),
   ("*",            numOp),
@@ -50,11 +50,11 @@ builtins = Map.fromList [
   ("<=",           numRelation),
   (">",            numRelation),
   (">=",           numRelation),
-  ("===",          TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, tBoolean]),
-  ("!==",          TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, tBoolean]),
+  ("===",          TScheme [0, 1, 2] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 2, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, tBoolean]),
+  ("!==",          TScheme [0, 1, 2] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 2, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, tBoolean]),
   ("&&",           boolRelation),
   ("||",           boolRelation),
   -- avoid coercions on == and !=
-  ("==",           TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean]),
-  ("!=",           TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean])
+  ("==",           TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean]),
+  ("!=",           TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean])
   ]

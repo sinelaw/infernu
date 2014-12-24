@@ -95,6 +95,8 @@ chainDecls [] k = k
 chainDecls (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chainDecls xs k)
 chainDecls (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chainDecls xs k)
 
+makeThis :: Show a => a -> Exp a
+makeThis z = ELit z $ LitNull -- TODO should be undefined
 
 fromExpression :: Show a => ES3.Expression a -> Exp a
 fromExpression (ES3.StringLit z s) = ELit z $ LitString s
@@ -149,14 +151,14 @@ fromExpression (ES3.NewExpr z expr argExprs) = ENew z (fromExpression expr) (map
 fromExpression e@(ES3.PrefixExpr z op expr) =
   case op of
     -- prefix +/- are converted to 0-x and 0+x
-    ES3.PrefixPlus -> EApp z (opFunc z ES3.OpAdd) [ELit z $ LitNumber 0, fromExpression expr]
-    ES3.PrefixMinus -> EApp z (opFunc z ES3.OpSub) [ELit z $ LitNumber 0, fromExpression expr]
+    ES3.PrefixPlus -> EApp z (opFunc z ES3.OpAdd) [makeThis z, ELit z $ LitNumber 0, fromExpression expr]
+    ES3.PrefixMinus -> EApp z (opFunc z ES3.OpSub) [makeThis z, ELit z $ LitNumber 0, fromExpression expr]
     -- delete, void unsupported
     ES3.PrefixVoid -> errorNotSupported "void" z e
     ES3.PrefixDelete -> errorNotSupported "delete" z e
     -- all the rest are expected to exist as unary builtin functions
-    _ -> EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression expr]
-fromExpression (ES3.InfixExpr z op e1 e2) = EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [fromExpression e1, fromExpression e2]
+    _ -> EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [makeThis z, fromExpression expr]
+fromExpression (ES3.InfixExpr z op e1 e2) = EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [makeThis z, fromExpression e1, fromExpression e2]
 fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name $ addConstant z op (EVar z name)
 fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr name $ addConstant z op (EProp z objExpr' name)
   where objExpr' = fromExpression objExpr
@@ -167,12 +169,12 @@ fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = ass
 opFunc :: a -> ES3.InfixOp -> Exp a
 opFunc z op = EVar z $ show . ES3PP.prettyPrint $ op
 
-applyOpFunc :: a -> ES3.InfixOp -> [Exp a] -> Exp a
-applyOpFunc z op exprs = EApp z (opFunc z op) exprs
+applyOpFunc :: Show a => a -> ES3.InfixOp -> [Exp a] -> Exp a
+applyOpFunc z op exprs = EApp z (opFunc z op) (makeThis z : exprs)
 
 -- TODO: the translation results in equivalent types, but currently ignore pre vs. postfix so the data flow is wrong.
-addConstant :: a -> ES3.UnaryAssignOp -> Exp a -> Exp a
-addConstant z op expr = EApp z (opFunc z ES3.OpAdd) [expr, ELit z $ LitNumber x]
+addConstant :: Show a => a -> ES3.UnaryAssignOp -> Exp a -> Exp a
+addConstant z op expr = EApp z (opFunc z ES3.OpAdd) [makeThis z, expr, ELit z $ LitNumber x]
   where x = case op of
              ES3.PrefixInc -> 1
              ES3.PrefixDec -> -1

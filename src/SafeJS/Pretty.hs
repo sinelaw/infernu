@@ -27,7 +27,7 @@ instance Pretty [String] where
 
 instance Pretty [Type] where
   prettyTab _  = prettyList
-  
+
 instance (Pretty a, Pretty b) => Pretty [(a,b)] where
   prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
 
@@ -67,7 +67,7 @@ instance Pretty (Exp a) where
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
   prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
   prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
-  
+
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + n - 1)
 
@@ -86,7 +86,15 @@ instance Pretty TConsName where
 
 instance Pretty t => Pretty (FType t) where
   prettyTab n (TBody t) = prettyTab n t
-  prettyTab n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple (map (prettyTab n) $ init ts) ++ " -> " ++ prettyTab n (last ts) ++ ")"
+  prettyTab n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple args ++ " -> " ++ prettyTab n (last ts) ++ ")"
+    where nonThisArgs = map (prettyTab n) . drop 1 $ init ts
+          thisArg = case ts of
+                     [] -> Nothing
+                     (x:_) -> Just x
+          args = case thisArg of
+                  Just this -> ("this: " ++ prettyTab n this) : nonThisArgs
+                  _ -> nonThisArgs
+--                  _ -> nonThisArgs -- theoretically 'this' could be some non-row type that isn't null/undefined, but that isn't supposed to happen! TODO: add assertion
 --  prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
   prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
@@ -100,7 +108,7 @@ instance Pretty t => Pretty (FType t) where
 --instance Pretty t => Pretty (Fix t) where
 instance Pretty Type where
   prettyTab n (Fix t) = prettyTab n t
-  
+
 instance Pretty TScheme where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
@@ -125,7 +133,7 @@ instance Pretty NameSource where
 
 instance Pretty VarId where
   prettyTab _ = show
-  
+
 instance Pretty InferState where
   prettyTab t (InferState ns vs vi) = "InferState { nameSource: " ++ pretty ns ++ newline ++ ", varSchemes: " ++ pretty vs ++ newline ++ ", varInstances: " ++ pretty vi ++ newline ++ "}"
     where newline = "\n" ++ tab (t+1)
