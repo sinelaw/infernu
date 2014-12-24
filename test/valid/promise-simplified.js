@@ -1,17 +1,12 @@
-function _push(arr, val) { arr[0] = val; } // dummy
+function _push(arr, val) { arr = val; return null; }
 
-function Promise() {
-    var _thens = [];
-    this.push = function(x) {
-        _push(_thens, x);
-    };
-    _thens = [];
+function Promise(x) {
+    var _thens = x;
+    _push(_thens, x);
+    _thens = x;
 }; 
 
-var p = new Promise();
-var p1 = p.push(1);
-
-var pb = new Promise();
-var pb1 = pb.push('2');
+var p = Promise(123);
+var pb = Promise('a');
 
 

@@ -101,7 +101,7 @@ instance Eq (f (Fix f)) => Eq (Fix f) where
   a == b = unFix a == unFix b
 instance Ord (f (Fix f)) => Ord (Fix f) where
   (Fix x) `compare` (Fix y) = x `compare` y
-  
+
 type Type = Fix FType
 
 type TSubst = Map.Map TVarName (Type)
@@ -114,10 +114,10 @@ data TypeError = TypeError { source :: Pos.SourcePos, message :: String }
 class VarNames a where
   freeTypeVars :: a -> Set.Set TVarName
   mapVarNames :: (TVarName -> TVarName) -> a -> a
-  
+
   freeTypeVars' :: (VarNames a, Foldable f) => f a -> Set.Set TVarName
   freeTypeVars' = foldr (Set.union . freeTypeVars) Set.empty
-  
+
   mapVarNames' :: (VarNames a, Functor f) => (TVarName -> TVarName) -> f a -> f a
   mapVarNames' f = fmap (mapVarNames f)
 
@@ -125,7 +125,7 @@ class VarNames a where
 instance VarNames (TBody) where
   mapVarNames f (TVar x) = TVar $ f x
   mapVarNames _ t = t
-  
+
   freeTypeVars (TVar n) = Set.singleton n
   freeTypeVars _ = Set.empty
 
@@ -187,7 +187,7 @@ instance VarNames Type where
 --   -- freeTypeVars (TCons _ ts) = freeTypeVars ts
 --   -- freeTypeVars (TRow r) = freeTypeVars r
 
---   mapVarNames = mapVarNames' 
+--   mapVarNames = mapVarNames'
 --   -- mapVarNames f (TBody t) = TBody $ mapVarNames f t
 --   -- mapVarNames f (TCons n ts) = TCons n $ mapVarNames f ts
 --   -- mapVarNames f (TRow r) = TRow $ mapVarNames f r
@@ -232,7 +232,7 @@ instance Substable Type where
      TBody (TVar n) -> substT' t n
      TRow r -> Fix $ TRow $ applySubst s r
      _ -> Fix $ fmap (applySubst s) t
-    where substT' defaultT n = fromMaybe (Fix defaultT) $ Map.lookup n s 
+    where substT' defaultT n = fromMaybe (Fix defaultT) $ Map.lookup n s
     --traverse (fmap f) t
     --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
      --     f t = t
@@ -314,12 +314,15 @@ data InferState = InferState { nameSource   :: NameSource
                              , varInstances :: Map.Map TVarName (Set.Set (Type)) }
                   deriving (Show, Eq)
 
+-- | VarNames instance for InferState
+-- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])] }
+-- InferState {nameSource = NameSource {lastName = 0}, varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 0)),Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 0)),Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]}
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is
                         , varInstances = Map.fromList $ map (\(k,v) -> (f k, Set.map (mapVarNames f) v)) $ Map.assocs $ varInstances is
                         }
-    
-instance Substable InferState where
-  applySubst s is = is { varSchemes = applySubst s (varSchemes is) }
 
+instance Substable InferState where
+  applySubst s is = is { varSchemes = applySubst s (varSchemes is)
+                       , varInstances = Map.fromList $ map (\(k,v) -> (k, (applySubst s v) `Set.union` v)) $ Map.assocs $ varInstances is }

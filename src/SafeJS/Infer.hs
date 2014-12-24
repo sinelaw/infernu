@@ -163,7 +163,7 @@ fresh = do
 
 freshVarId :: Infer VarId
 freshVarId = VarId <$> fresh
-  
+
 throwError :: Pos.SourcePos -> String -> Infer a
 throwError p s = lift . left $ TypeError p s
 
@@ -187,7 +187,7 @@ getVarScheme a n env = case getVarId n env of
 
 setVarScheme :: EVarName -> VarId -> TScheme -> Infer ()
 setVarScheme n varId scheme = do
-  modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ show n ++ ": " ++ show scheme) . Map.insert varId scheme $ varSchemes is }
+  modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ pretty n ++ ": " ++ pretty scheme) . Map.insert varId scheme $ varSchemes is }
   return ()
 
 addVarScheme :: TypeEnv -> EVarName -> TScheme -> Infer TypeEnv
@@ -202,7 +202,8 @@ addVarInstance x y = modify $ \is -> is { varInstances = tracePretty "updated eq
 getFreeTVars :: TypeEnv -> Infer (Set TVarName)
 getFreeTVars env = do
   let collectFreeTVs s varId = Set.union s <$> curFreeTVs
-          where curFreeTVs = maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId
+          where curFreeTVs = tr . maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId
+                tr = tracePretty $ " collected from " ++ pretty varId ++ " free type variables: "
   foldM collectFreeTVs Set.empty (Map.elems env)
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
@@ -218,10 +219,7 @@ getFreeTVars env = do
 -- Right (fromList [(VarId 1,TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody TString),Fix (TBody (TVar 1))])})])
 --
 applySubstInfer :: TSubst -> Infer ()
-applySubstInfer s = modify $ \is -> is {
-                      varSchemes = tracePretty ("Updated env map using subst: " ++ pretty s ++ " --> ") . applySubst s $ varSchemes is
-                    , varInstances = applySubst s $ varInstances is
-                    }
+applySubstInfer s = modify $ applySubst s
 
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
 --
@@ -387,9 +385,6 @@ isInsideRowType n (Fix t) =
    _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
-varBind _ n t@(Fix (TBody (TVar n2))) =
-  do addVarInstance n n2
-     return $ singletonSubst n t
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t = return nullSubst
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
@@ -417,12 +412,12 @@ isExpansive (EIndexAssign _ _ _ _ _) = True
 isExpansive (ELet _ _ _ _)    = True
 isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
-isExpansive (EArray _ exprs)  = any isExpansive exprs
-isExpansive (ETuple _ exprs)  = any isExpansive exprs
-isExpansive (ERow _ _ exprs)    = any isExpansive $ map snd exprs
+isExpansive (EArray _ _)  = True
+isExpansive (ETuple _ _)  = True
+isExpansive (ERow _ _ _)    = True
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
-isExpansive (EProp _ expr _)  = isExpansive expr
-isExpansive (EIndex _ e1 e2)  = any isExpansive [e1, e2] -- maybe just True and that's it?
+isExpansive (EProp _ _ _)  = True
+isExpansive (EIndex _ _ _)  = True
 isExpansive (ENew _ _ _) = True
 ----------------------------------------------------------------------
 
@@ -454,9 +449,10 @@ accumInfer initialSubst env =
 
 inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type, Exp (Pos.SourcePos, Type))
 inferType env expr = do
+  traceLog (">> " ++ pretty expr) ()
   (s, t, e) <- inferType' env expr
   state <- get
-  let tr = trace $ ">> " ++ pretty expr ++ " :: " ++ pretty t ++ "\n" ++ pretty state ++ "\n\t Environment: " ++ pretty env ++ "\n----------"
+  let tr = trace $ "<< " ++ pretty expr ++ " :: " ++ pretty t ++ "\n" ++ pretty state ++ "\n\t Environment: " ++ pretty env ++ "\n----------"
   return . tr $ (s, t, e)
 
 inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (TSubst, Type, Exp (Pos.SourcePos, Type))
@@ -629,7 +625,7 @@ inferType' env (EProp a eObj propName) =
          t = applySubst s3 (Fix . TBody $ TVar propVar)
      applySubstInfer s3
      return (s3, t, EProp (a,t) eObj' propName)
-inferType' env (EIndex a eArr eIdx) = 
+inferType' env (EIndex a eArr eIdx) =
   do (s1, tArr, eArr') <- inferType env eArr
      elemType <- Fix . TBody . TVar <$> fresh
      s1' <- unify a (Fix $ TCons TArray [elemType]) tArr
@@ -641,7 +637,7 @@ inferType' env (EIndex a eArr eIdx) =
      applySubstInfer s2''
      let elemType' = applySubst s2'' elemType
      return (s2'' `composeSubst` s1'', elemType' , EIndex (a, elemType')  eArr' eIdx')
-      
+
 unifyAllInstances :: Pos.SourcePos -> TSubst -> [TVarName] -> Infer TSubst
 unifyAllInstances a s tvs = do
   m <- varInstances <$> get
@@ -655,7 +651,7 @@ minifyVars :: (VarNames a) => a -> a
 minifyVars xs = mapVarNames f xs
     where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) ([1..] :: [TVarName])
           f n = fromMaybe n $ Map.lookup n vars
-          
+
 
 createEnv :: Map EVarName TScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
