@@ -122,6 +122,10 @@ class VarNames a where
   mapVarNames' f = fmap (mapVarNames f)
 
 
+instance VarNames (TVarName) where
+  freeTypeVars = Set.singleton
+  mapVarNames f x = f x
+
 instance VarNames (TBody) where
   mapVarNames f (TVar x) = TVar $ f x
   mapVarNames _ t = t
@@ -180,6 +184,10 @@ instance VarNames Type where
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
   mapVarNames f (Fix (TRow trlist)) = Fix $ TRow $ mapVarNames f trlist
   mapVarNames f (Fix t) = Fix $ mapVarNames' f t
+
+instance VarNames (FType (Fix FType)) where
+  freeTypeVars = freeTypeVars . Fix
+  mapVarNames f = unFix . mapVarNames f . Fix
 
 -- instance VarNames a => VarNames (FType a) where
 --   freeTypeVars = freeTypeVars'
@@ -316,7 +324,7 @@ data InferState = InferState { nameSource   :: NameSource
 
 -- | VarNames instance for InferState
 -- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])] }
--- InferState {nameSource = NameSource {lastName = 0}, varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 0)),Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 0)),Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]}
+-- InferState {nameSource = NameSource {lastName = 0}, varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]}
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is

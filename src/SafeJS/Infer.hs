@@ -298,8 +298,9 @@ unify a t1 t2 = tr' <$> unify' a (unFix t1) (unFix t2)
   where tr' x = trace (tr2 x) x
         tr2 x = "unify: \t" ++ pretty t1 ++ " ,\t " ++ pretty t2 ++ "\n\t-->" ++ concatMap pretty (Map.toList x)
 
-unificationError :: (Pretty x, Pretty y) => Pos.SourcePos -> x -> y -> Infer b
-unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty x ++ " with " ++ pretty y
+unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
+unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
+  where [a, b] = minifyVars [x, y]
 
 unify' :: Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer TSubst
 unify' a (TBody (TVar n)) t = varBind a n (Fix t)
@@ -335,9 +336,9 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
        s3 <- unifyRows a r s2' (tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
        return $ (tracePretty "unified rows subst result") $ s3 `composeSubst` s2'
 
-unifyRows :: (Pretty y, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
+unifyRows :: (VarNames x, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
                -> (x, Set EPropName, Map EPropName (Type))
-               -> (y, Set EPropName, Maybe TVarName)
+               -> (x, Set EPropName, Maybe TVarName)
                -> Infer TSubst
 unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
@@ -387,9 +388,10 @@ isInsideRowType n (Fix t) =
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t = return nullSubst
-              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
+              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n' ++ " in " ++ pretty t'
               | otherwise = return $ singletonSubst n t
-
+  where (n', t') = (mapVarNames f n, mapVarNames f t)
+        f = minifyVarsFunc t
 
 -- | Drops the last element of a list. Does not entail an O(n) price.
 -- >>> dropLast [1,2,3]
@@ -647,11 +649,12 @@ unifyAllInstances a s tvs = do
   let unifyAll' s' equivs = unifyAll a s' . tracePretty "equivalence:" $ Set.toList equivs
   tracePretty "unified equivs:" <$> foldM unifyAll' s equivalenceSets
 
-minifyVars :: (VarNames a) => a -> a
-minifyVars xs = mapVarNames f xs
-    where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) ([1..] :: [TVarName])
-          f n = fromMaybe n $ Map.lookup n vars
+minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName
+minifyVarsFunc xs n = fromMaybe n $ Map.lookup n vars
+  where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) ([1..] :: [TVarName])
 
+minifyVars :: (VarNames a) => a -> a
+minifyVars xs = mapVarNames (minifyVarsFunc xs) xs
 
 createEnv :: Map EVarName TScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
@@ -710,7 +713,7 @@ typeInference builtins e = do
 -- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (app (var "x") (lit (LitBoolean True))) (assign "x" (fun ["z1"] (lit (LitBoolean False))) (tuple [var "x", var "y"])))
 -- "((TBoolean -> TBoolean), TBoolean)"
 --
--- Tests a setter for x being called with something more specific than x's original definition:
+-- | Tests a setter for x being called with something more specific than x's original definition:
 -- >>> :{
 -- >>> test $ let'
 -- >>> "x" (fun ["a"] (var "a"))
@@ -731,7 +734,7 @@ typeInference builtins e = do
 -- "(a -> a)"
 --
 -- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (lit (LitBoolean True)) (var "id"))
--- "<dummy>:1:1: Error: Could not unify: TBoolean with (c -> c)"
+-- "<dummy>:1:1: Error: Could not unify: TBoolean with (a -> a)"
 --
 -- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitBoolean False)) (var "x"))
 -- "TBoolean"
@@ -758,7 +761,7 @@ typeInference builtins e = do
 -- "TNumber"
 --
 -- >>> test $ let' "id" (fun ["x"] (app (var "x") (var "x"))) (var "id")
--- "<dummy>:1:1: Error: Occurs check failed: c in (c -> e)"
+-- "<dummy>:1:1: Error: Occurs check failed: a in (a -> b)"
 --
 -- >>> test $ fun ["m"] (let' "y" (var "m") (let' "x" (app (var "y") (lit (LitBoolean True))) (var "x")))
 -- "((TBoolean -> a) -> a)"
