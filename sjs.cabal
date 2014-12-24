@@ -27,7 +27,7 @@ library
   -- TODO: use only mtl (not transformers)
   build-depends:       base, mtl, containers, transformers, either, language-ecmascript, digits, parsec
   default-language:    Haskell2010
-  ghc-options: -Wall
+  ghc-options: -Wall -O2
   if flag(trace)
     cpp-options: -DTRACE
 
@@ -35,7 +35,7 @@ executable sjs
   main-is: Main.hs
   build-depends:       base, parsec, sjs
   default-language:    Haskell2010
-  ghc-options: -Wall
+  ghc-options: -Wall -O2
   if flag(trace)
     cpp-options: -DTRACE
 
@@ -44,7 +44,7 @@ executable sjs-demo
   hs-source-dirs: test
   build-depends:       base, sjs
   default-language:    Haskell2010
-  ghc-options: -Wall -main-is Demo
+  ghc-options: -Wall  -O2 -main-is Demo
   if flag(trace)
     cpp-options: -DTRACE
 
@@ -59,7 +59,7 @@ executable test
   hs-source-dirs: test
   build-depends:       base, sjs
   default-language:    Haskell2010
-  ghc-options: -Wall -main-is Test
+  ghc-options: -Wall  -O2 -main-is Test
   if flag(trace)
     cpp-options: -DTRACE
 
