@@ -235,12 +235,14 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- Fix (TRow (TRowProp "bla" Fix (TBody TString) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
-  applySubst s (Fix t) =
+  applySubst s ft@(Fix t) =
     case t of
      TBody (TVar n) -> substT' t n
      TRow r -> Fix $ TRow $ applySubst s r
-     _ -> Fix $ fmap (applySubst s) t
-    where substT' defaultT n = fromMaybe (Fix defaultT) $ Map.lookup n s
+     _ -> if ft `elem` (Map.elems s)
+          then ft
+          else Fix $ fmap (applySubst s) t
+     where substT' defaultT n = fromMaybe (Fix defaultT) $ Map.lookup n s
     --traverse (fmap f) t
     --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
      --     f t = t

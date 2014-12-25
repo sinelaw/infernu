@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP             #-}
 {-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE BangPatterns    #-}
 
 module SafeJS.Infer
     ( runTypeInference
@@ -57,7 +58,7 @@ tracePretty :: Pretty a => String -> a -> a
 tracePretty prefix x = trace (prefix ++ " " ++ pretty x) x
 
 traceLog :: Monad m => String -> a -> m a
-traceLog s r = return $! r `seq` trace s r
+traceLog !s !r = return $! trace s r `seq` r
 
 ----------------------------------------------------------------------
 
@@ -219,7 +220,9 @@ getFreeTVars env = do
 -- Right (fromList [(VarId 1,TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody TString),Fix (TBody (TVar 1))])})])
 --
 applySubstInfer :: TSubst -> Infer ()
-applySubstInfer s = modify $ applySubst s
+applySubstInfer s =
+  do traceLog ("applying subst: " ++ pretty s) ()
+     modify $ applySubst s
 
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
 --
@@ -294,7 +297,9 @@ generalize tenv t = do
 ----------------------------------------------------------------------
 
 unify :: Pos.SourcePos -> Type -> Type -> Infer TSubst
-unify a t1 t2 = tr' <$> unify' a (unFix t1) (unFix t2)
+unify a t1 t2 =
+  do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
+     tr' <$> unify' a (unFix t1) (unFix t2)
   where tr' x = trace (tr2 x) x
         tr2 x = "unify: \t" ++ pretty t1 ++ " ,\t " ++ pretty t2 ++ "\n\t-->" ++ concatMap pretty (Map.toList x)
 
@@ -320,6 +325,9 @@ unify' a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
 unify' a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
 -- TODO: un-hackify!
 unify' a t1@(TRow row1) t2@(TRow row2) =
+  if t1 == t2
+  then return nullSubst
+  else
     do let (m2, r2) = flattenRow row2
            names2 = Set.fromList $ Map.keys m2
            (m1, r1) = flattenRow row1
@@ -387,11 +395,9 @@ isInsideRowType n (Fix t) =
 
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
-              | isInsideRowType n t = return nullSubst
-              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n' ++ " in " ++ pretty t'
+              | isInsideRowType n t = return $ singletonSubst n t
+              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
-  where (n', t') = (mapVarNames f n, mapVarNames f t)
-        f = minifyVarsFunc t
 
 -- | Drops the last element of a list. Does not entail an O(n) price.
 -- >>> dropLast [1,2,3]
@@ -443,7 +449,8 @@ closeRow t = t
 -- For efficiency reasons, types list is returned in reverse order.
 accumInfer :: TSubst -> TypeEnv -> [Exp Pos.SourcePos] -> Infer (TSubst, [(Type, Exp (Pos.SourcePos, Type))])
 accumInfer initialSubst env =
-  do foldM accumInfer' (initialSubst, [])
+  do traceLog ("accumInfer: initialSubst: " ++ pretty initialSubst ++ ", env: " ++ pretty env) ()
+     foldM accumInfer' (initialSubst, [])
      where accumInfer' (subst, types) expr =
              do (subst', t, e) <- inferType env expr
                 applySubstInfer subst'
