@@ -91,6 +91,7 @@ data TRowList t = TRowProp EPropName t (TRowList t)
 data FType t = TBody TBody
              | TCons TConsName [t]
              | TRow (TRowList t)
+             | TFix TVarName t
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 newtype Fix f = Fix { unFix :: f (Fix f) }
@@ -179,6 +180,7 @@ instance VarNames t => VarNames (TRowList t) where
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
   freeTypeVars (Fix (TRow trlist)) = freeTypeVars trlist
+  freeTypeVars (Fix (TFix v t)) = freeTypeVars t `Set.difference` (Set.singleton v)
   freeTypeVars (Fix t) = freeTypeVars' t
 
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
@@ -270,7 +272,8 @@ instance Substable (TRowList Type) where
   applySubst s t@(TRowEnd (Just tvarName)) = case Map.lookup tvarName s of
                                                Nothing -> t
                                                Just (Fix (TRow tRowList)) -> tRowList
-                                               Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
+                                               Just (Fix (TFix n' _)) -> TRowEnd (Just n')
+                                               Just t' -> error $ "Cannot subst row variable '" ++ show tvarName ++ "' into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
 
 ----------------------------------------------------------------------

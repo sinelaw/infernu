@@ -100,10 +100,11 @@ instance Pretty t => Pretty (FType t) where
   prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
   prettyTab t (TRow list) = "{"
-                            ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))
-                            ++ maybe "" ((", "++) . (\r' -> ("..." ++ pretty r'))) r
-                            ++ "}"
+                          ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))
+                          ++ maybe "" ((", "++) . (\r' -> ("..." ++ pretty r'))) r
+                          ++ "}"
     where (props, r) = flattenRow list
+  prettyTab n (TFix name t) = "(mu " ++ pretty name ++ ". " ++ prettyTab n t ++ ")"
 
 --instance Pretty t => Pretty (Fix t) where
 instance Pretty Type where

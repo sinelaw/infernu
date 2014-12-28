@@ -311,16 +311,21 @@ unify' :: Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer TSubs
 unify' a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' a (TBody x) (TBody y) = if x == y
-                             then return nullSubst
-                             else unificationError a x y
+                               then return nullSubst
+                               else unificationError a x y
 unify' a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TCons _ _) t2@(TBody _) = unify' a t2 t1
 unify' a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then fmap (tracePretty ("unified TCons's (" ++ show n1 ++ "): ")) <$> unifyl a nullSubst $ zip ts1 ts2
     else unificationError a t1 t2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
-unify' a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
+unify' a t1@(TFix n1 t1') t2@(TFix n2 t2') =
+ do traceLog ("$$$ unifying TFix's" ++ (pretty t1) ++ "\t~\t" ++ pretty t2) ()
+    unify' a (unFix t1') $ mapVarNames (\x -> if x == n2 then n1 else x) $ unFix t2'
+unify' a t1@(TFix n t) t2 = unify' a (unFix t) t2
+unify' a t1 t2@(TFix _ _) = unify' a t2 t1
 unify' a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
+unify' a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
 unify' a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
 -- TODO: un-hackify!
@@ -337,6 +342,7 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
            namesToTypes m = mapMaybe $ flip Map.lookup m
 --           commonTypes :: [(Type, Type)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
+       traceLog "unify rows: calling unifyl" ()
        s1 <- unifyl a nullSubst commonTypes
        r <- fresh
        s2 <- unifyRows a r s1 (t1, names1, m1) (t2, names2, r2)
@@ -361,11 +367,16 @@ unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: Pos.SourcePos -> TSubst -> [(Type, Type)] -> Infer TSubst
-unifyl a s ts = foldM (unifyl' a) s ts
+unifyl a s ts = do
+  x <- fresh
+  traceLog ("~~~ Starting unifyl: " ++ show x) ()
+  res <- foldM (\z y -> tracePretty ("--> done step in " ++ show x) <$> unifyl' a z y) s ts
+  traceLog ("~~~ Ending unifyl: " ++ show x) ()
+  return res
 
 unifyl' :: Pos.SourcePos -> TSubst -> (Type, Type) -> Infer TSubst
 unifyl' a s (x, y) = do
-  traceLog ("step in unifyl got subst: " ++ pretty s) ()
+  traceLog ("step in unifyl got subst: " ++ pretty s ++ "\n& types: " ++ pretty (x,y)) ()
   s' <- unify' a (tracePretty "--1" $ unFix $ applySubst s x) (tracePretty "--2" $ unFix $ applySubst s y)
   return $ tracePretty "step output in unifyl: " $ s' `composeSubst` s
 
@@ -395,7 +406,9 @@ isInsideRowType n (Fix t) =
 
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
-              | isInsideRowType n t = return $ singletonSubst n t
+              | isInsideRowType n t =
+                  do muVar <- fresh
+                     return $ tracePretty "varBind: " $ singletonSubst n . Fix . TFix muVar $ mapVarNames (\x -> if x == n then muVar else x) t
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
 
@@ -408,7 +421,9 @@ dropLast [_] = []
 dropLast (x:xs) = x : dropLast xs
 
 unifyAll :: Pos.SourcePos -> TSubst -> [Type] -> Infer TSubst
-unifyAll a s ts = unifyl a s $ zip (dropLast ts) (drop 1 ts)
+unifyAll a s ts =
+  do traceLog ("unifying all instances: " ++ pretty ts) ()
+     unifyl a s $ zip (dropLast ts) (drop 1 ts)
 
 
 isExpansive :: Exp a -> Bool
