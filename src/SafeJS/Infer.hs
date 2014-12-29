@@ -215,10 +215,23 @@ addNamedType tid t = do
 unrollName :: TypeId -> Infer (Maybe Type)
 unrollName tid = Map.lookup tid . namedTypes <$> get
 
-rollNamedTypes :: Type -> Infer Type
-rollNamedTypes t = do
+unrollNamedTypes :: Type -> Infer Type
+unrollNamedTypes t = do
   typeAssocs <- Map.toList . namedTypes <$> get
   return $ foldr (\(tName, Fix tType) t' -> replaceFix (TCons (TName tName) []) tType t') t typeAssocs
+
+rollNamedTypes :: Type -> Infer Type
+rollNamedTypes t = do
+  traceLog ("rollNamedTypes: " ++ pretty t) ()
+  typeAssocs <- Map.toList . namedTypes <$> get
+  return $ rollNamedTypes' typeAssocs t
+
+rollNamedTypes' typeAssocs t = roll' t
+  where roll typ = foldr (\(tName, Fix tType) t' -> replaceFix tType (TCons (TName tName) []) t') typ typeAssocs
+        roll' typ = let typ' = roll typ
+                    in if typ' /= typ
+                       then roll' (trace ("1:" ++ show typ ++ "\n2:" ++ show typ') typ')
+                       else typ'
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
@@ -343,7 +356,11 @@ unify' a t1@(TCons (TName n1) []) t2 =
   do t1' <- unrollName n1 `failWithM` throwError a ("Unknown named type: " ++ pretty t1)
      if t1' == Fix t2
      then return nullSubst
-     else unificationError a t1 t2
+     else do let dummy = (TCons (TName (-1)) [])
+                 t1Rep = replaceFix t1 dummy t1'
+                 t2Rep = replaceFix t1 dummy (Fix t2)
+             unify a t1Rep t2Rep -- unificationError a (unFix t1') t2
+unify' a t1 t2@(TCons (TName _) []) = unify' a t2 t1
 
 unify' a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TCons _ _) t2@(TBody _) = unify' a t2 t1
