@@ -15,8 +15,10 @@ module SafeJS.Types
        , TVarName
        , TBody(..)
        , TConsName(..)
+       , TypeId
        , Type
        , Fix(..)
+       , replaceFix
        , FType(..)
        , TypeError(..)
        , InferState(..)
@@ -80,7 +82,9 @@ data TBody = TVar TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
              deriving (Show, Eq, Ord)
 
-data TConsName = TFunc | TArray | TTuple
+type TypeId = TVarName
+
+data TConsName = TFunc | TArray | TTuple | TName TypeId
                  deriving (Show, Eq, Ord)
 
 -- | Row type.
@@ -101,6 +105,11 @@ instance Eq (f (Fix f)) => Eq (Fix f) where
   a == b = unFix a == unFix b
 instance Ord (f (Fix f)) => Ord (Fix f) where
   (Fix x) `compare` (Fix y) = x `compare` y
+
+replaceFix tsource tdest (Fix t') =
+  if t' == tsource
+  then Fix $ tdest
+  else Fix $ fmap (replaceFix tsource tdest) t'
 
 type Type = Fix FType
 
@@ -270,6 +279,8 @@ instance Substable (TRowList Type) where
   applySubst s t@(TRowEnd (Just tvarName)) = case Map.lookup tvarName s of
                                                Nothing -> t
                                                Just (Fix (TRow tRowList)) -> tRowList
+                                               -- UGLY HACK!
+                                               Just (Fix (TCons (TName n) _)) -> TRowEnd (Just n)
                                                Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
 
@@ -321,7 +332,8 @@ data NameSource = NameSource { lastName :: TVarName }
 data InferState = InferState { nameSource   :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TScheme
-                             , varInstances :: Map.Map TVarName (Set.Set (Type)) }
+                             , varInstances :: Map.Map TVarName (Set.Set (Type))
+                             , namedTypes   :: Map.Map TypeId Type }
                   deriving (Show, Eq)
 
 -- | VarNames instance for InferState

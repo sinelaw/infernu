@@ -155,7 +155,7 @@ runInferWith :: InferState -> Infer a -> Either TypeError a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either TypeError a
-runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty }
+runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }
 
 fresh :: Infer TVarName
 fresh = do
@@ -206,6 +206,19 @@ getFreeTVars env = do
           where curFreeTVs = tr . maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId
                 tr = tracePretty $ " collected from " ++ pretty varId ++ " free type variables: "
   foldM collectFreeTVs Set.empty (Map.elems env)
+
+addNamedType :: TypeId -> Type -> Infer ()
+addNamedType tid t = do
+  modify $ \is -> is { namedTypes = Map.insert tid t $ namedTypes is }
+  return ()
+
+unrollName :: TypeId -> Infer (Maybe Type)
+unrollName tid = Map.lookup tid . namedTypes <$> get
+
+rollNamedTypes :: Type -> Infer Type
+rollNamedTypes t = do
+  typeAssocs <- Map.toList . namedTypes <$> get
+  return $ foldr (\(tName, Fix tType) t' -> replaceFix (TCons (TName tName) []) tType t') t typeAssocs
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
@@ -299,7 +312,9 @@ generalize tenv t = do
 unify :: Pos.SourcePos -> Type -> Type -> Infer TSubst
 unify a t1 t2 =
   do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
-     tr' <$> unify' a (unFix t1) (unFix t2)
+     t1' <- rollNamedTypes t1
+     t2' <- rollNamedTypes t2
+     tr' <$> unify' a (unFix t1') (unFix t2')
   where tr' x = trace (tr2 x) x
         tr2 x = "unify: \t" ++ pretty t1 ++ " ,\t " ++ pretty t2 ++ "\n\t-->" ++ concatMap pretty (Map.toList x)
 
@@ -311,8 +326,25 @@ unify' :: Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer TSubs
 unify' a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' a (TBody x) (TBody y) = if x == y
-                             then return nullSubst
-                             else unificationError a x y
+                               then return nullSubst
+                               else unificationError a x y
+unify' a t1@(TCons (TName n1) []) t2@(TCons (TName n2) []) =
+  do if n1 == n2
+     then return nullSubst
+     else
+       do let unroll' n' t' = unrollName n' `failWithM` throwError a ("Unknown named type: " ++ pretty t')
+          t1' <- unroll' n1 t1
+          t2' <- unroll' n2 t2
+          let alphaT2 = replaceFix t2 t1 t2'
+          if t1' == alphaT2  -- alpha equivalence
+          then return nullSubst -- TODO update n2 to point to t1
+          else unify a t1' alphaT2 -- unificationError a (t1, t1') (t1, t2')
+unify' a t1@(TCons (TName n1) []) t2 =
+  do t1' <- unrollName n1 `failWithM` throwError a ("Unknown named type: " ++ pretty t1)
+     if t1' == Fix t2
+     then return nullSubst
+     else unificationError a t1 t2
+
 unify' a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' a t1@(TCons _ _) t2@(TBody _) = unify' a t2 t1
 unify' a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
@@ -395,7 +427,13 @@ isInsideRowType n (Fix t) =
 
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
-              | isInsideRowType n t = return $ singletonSubst n t
+              | isInsideRowType n t =
+                  do typeId <- fresh
+                     -- TODO generalize and move to Types
+                     let namedType = TCons (TName typeId) []
+                         target = replaceFix (TBody (TVar n)) namedType t
+                     addNamedType typeId target
+                     return $ singletonSubst n $ Fix namedType
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
 

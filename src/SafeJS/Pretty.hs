@@ -99,6 +99,7 @@ instance Pretty t => Pretty (FType t) where
   prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
   prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
+  prettyTab n (TCons (TName name) ts) = "<Named Type: " ++ pretty name ++ (unwords $ map (prettyTab n) ts) ++ ">"
   prettyTab t (TRow list) = "{"
                             ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))
                             ++ maybe "" ((", "++) . (\r' -> ("..." ++ pretty r'))) r
@@ -135,5 +136,10 @@ instance Pretty VarId where
   prettyTab _ = show
 
 instance Pretty InferState where
-  prettyTab t (InferState ns vs vi) = "InferState { nameSource: " ++ pretty ns ++ newline ++ ", varSchemes: " ++ pretty vs ++ newline ++ ", varInstances: " ++ pretty vi ++ newline ++ "}"
+  prettyTab t (InferState ns vs vi tn) = "InferState { nameSource: "
+                                         ++ pretty ns ++ newline
+                                         ++ ", varSchemes: " ++ pretty vs ++ newline
+                                         ++ ", varInstances: " ++ pretty vi ++ newline
+                                         ++ ", namedTypes: " ++ pretty tn ++ newline
+                                         ++ "}"
     where newline = "\n" ++ tab (t+1)
