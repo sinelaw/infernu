@@ -46,6 +46,7 @@ import           Test.QuickCheck.Arbitrary  (Arbitrary (..))
 import           SafeJS.Pretty
 import           SafeJS.Types
 import qualified SafeJS.Builtins            as Builtins
+import           SafeJS.Decycle
 
 #if TRACE
 import           Debug.Trace                (trace)
@@ -322,12 +323,16 @@ generalize tenv t = do
 
 ----------------------------------------------------------------------
 
-unify :: Pos.SourcePos -> Type -> Type -> Infer TSubst
-unify a t1 t2 =
+unify = decycle3 unify''
+
+type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
+unify'' :: Maybe UnifyF -> UnifyF
+unify'' Nothing _ _ _ = return nullSubst
+unify'' (Just recurse) a t1 t2 =
   do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
-     t1' <- rollNamedTypes t1
-     t2' <- rollNamedTypes t2
-     tr' <$> unify' a (unFix t1') (unFix t2')
+     -- t1' <- rollNamedTypes t1
+     -- t2' <- rollNamedTypes t2
+     tr' <$> unify' recurse a (unFix t1) (unFix t2)
   where tr' x = trace (tr2 x) x
         tr2 x = "unify: \t" ++ pretty t1 ++ " ,\t " ++ pretty t2 ++ "\n\t-->" ++ concatMap pretty (Map.toList x)
 
@@ -335,45 +340,37 @@ unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
   where [a, b] = minifyVars [x, y]
 
-unify' :: Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer TSubst
-unify' a (TBody (TVar n)) t = varBind a n (Fix t)
-unify' a t (TBody (TVar n)) = varBind a n (Fix t)
-unify' a (TBody x) (TBody y) = if x == y
+unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer TSubst
+unify' recurse a (TBody (TVar n)) t = varBind a n (Fix t)
+unify' recurse a t (TBody (TVar n)) = varBind a n (Fix t)
+unify' recurse a (TBody x) (TBody y) = if x == y
                                then return nullSubst
                                else unificationError a x y
-unify' a t1@(TCons (TName n1) []) t2@(TCons (TName n2) []) =
+unify' recurse a t1@(TCons (TName n1) []) t2@(TCons (TName n2) []) =
   do if n1 == n2
      then return nullSubst
      else
        do let unroll' n' t' = unrollName n' `failWithM` throwError a ("Unknown named type: " ++ pretty t')
           t1' <- unroll' n1 t1
           t2' <- unroll' n2 t2
-          let alphaT2 = replaceFix t2 t1 t2'
-          if t1' == alphaT2  -- alpha equivalence
-          then return nullSubst -- TODO update n2 to point to t1
-          else unify a t1' alphaT2 -- unificationError a (t1, t1') (t1, t2')
-unify' a t1@(TCons (TName n1) []) t2 =
+          recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
+unify' recurse a t1@(TCons (TName n1) []) t2 =
   do t1' <- unrollName n1 `failWithM` throwError a ("Unknown named type: " ++ pretty t1)
-     if t1' == Fix t2
-     then return nullSubst
-     else do let dummy = (TCons (TName (-1)) [])
-                 t1Rep = replaceFix t1 dummy t1'
-                 t2Rep = replaceFix t1 dummy (Fix t2)
-             unify a t1Rep t2Rep -- unificationError a (unFix t1') t2
-unify' a t1 t2@(TCons (TName _) []) = unify' a t2 t1
+     recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
+unify' recurse a t1 t2@(TCons (TName _) []) = recurse a (Fix t2) (Fix t1)
 
-unify' a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
-unify' a t1@(TCons _ _) t2@(TBody _) = unify' a t2 t1
-unify' a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
+unify' recurse a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
+unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
+unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
-    then fmap (tracePretty ("unified TCons's (" ++ show n1 ++ "): ")) <$> unifyl a nullSubst $ zip ts1 ts2
+    then fmap (tracePretty ("unified TCons's (" ++ show n1 ++ "): ")) <$> unifyl recurse a nullSubst $ zip ts1 ts2
     else unificationError a t1 t2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
-unify' a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
-unify' a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
-unify' a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
-unify' a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
+unify' recurse a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
+unify' recurse a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
+unify' recurse a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
+unify' recurse a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
 -- TODO: un-hackify!
-unify' a t1@(TRow row1) t2@(TRow row2) =
+unify' recurse a t1@(TRow row1) t2@(TRow row2) =
   if t1 == t2
   then return nullSubst
   else
@@ -386,18 +383,18 @@ unify' a t1@(TRow row1) t2@(TRow row2) =
            namesToTypes m = mapMaybe $ flip Map.lookup m
 --           commonTypes :: [(Type, Type)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
-       s1 <- unifyl a nullSubst commonTypes
+       s1 <- unifyl recurse a nullSubst commonTypes
        r <- fresh
-       s2 <- unifyRows a r s1 (t1, names1, m1) (t2, names2, r2)
+       s2 <- unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2)
        let s2' = s2 `composeSubst` s1
-       s3 <- unifyRows a r s2' (tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
+       s3 <- unifyRows recurse a r s2' (tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
        return $ (tracePretty "unified rows subst result") $ s3 `composeSubst` s2'
 
-unifyRows :: (VarNames x, Pretty x) => Pos.SourcePos -> TVarName -> TSubst
+unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> TVarName -> TSubst
                -> (x, Set EPropName, Map EPropName (Type))
                -> (x, Set EPropName, Maybe TVarName)
                -> Infer TSubst
-unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
+unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
            rowTail = fmap (const r) r2
            in1NotIn2row = tracePretty "in1NotIn2row" $ applySubst s1 . Fix . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
@@ -406,16 +403,16 @@ unifyRows a r s1 (t1, names1, m1) (t2, names2, r2) =
          Nothing -> if Set.null in1NotIn2
                     then varBind a r (Fix $ TRow $ TRowEnd Nothing)
                     else unificationError a t1 t2
-         Just r2' -> unify a (in1NotIn2row) (applySubst s1 $ Fix $ TBody $ TVar r2')
+         Just r2' -> recurse a (in1NotIn2row) (applySubst s1 $ Fix $ TBody $ TVar r2')
 
 -- | Unifies pairs of types, accumulating the substs
-unifyl :: Pos.SourcePos -> TSubst -> [(Type, Type)] -> Infer TSubst
-unifyl a s ts = foldM (unifyl' a) s ts
+unifyl :: UnifyF -> Pos.SourcePos -> TSubst -> [(Type, Type)] -> Infer TSubst
+unifyl r a s ts = foldM (unifyl' r a) s ts
 
-unifyl' :: Pos.SourcePos -> TSubst -> (Type, Type) -> Infer TSubst
-unifyl' a s (x, y) = do
+unifyl' :: UnifyF -> Pos.SourcePos -> TSubst -> (Type, Type) -> Infer TSubst
+unifyl' recurse a s (x, y) = do
   traceLog ("step in unifyl got subst: " ++ pretty s) ()
-  s' <- unify' a (tracePretty "--1" $ unFix $ applySubst s x) (tracePretty "--2" $ unFix $ applySubst s y)
+  s' <- recurse a (tracePretty "--1" $ applySubst s x) (tracePretty "--2" $ applySubst s y)
   return $ tracePretty "step output in unifyl: " $ s' `composeSubst` s
 
 newtype OrBool = OrBool { unOrBool :: Bool }
@@ -463,7 +460,7 @@ dropLast [_] = []
 dropLast (x:xs) = x : dropLast xs
 
 unifyAll :: Pos.SourcePos -> TSubst -> [Type] -> Infer TSubst
-unifyAll a s ts = unifyl a s $ zip (dropLast ts) (drop 1 ts)
+unifyAll a s ts = unifyl unify a s $ zip (dropLast ts) (drop 1 ts)
 
 
 isExpansive :: Exp a -> Bool
@@ -651,7 +648,7 @@ inferType' env (EArray a exprs) =
      let tv = Fix . TBody $ TVar tvName
      (subst, te) <- accumInfer nullSubst env exprs
      let types = map fst te
-     subst' <- unifyl a subst $ zip (tv:types) types
+     subst' <- unifyl unify a subst $ zip (tv:types) types
      applySubstInfer subst'
      let t = Fix $ TCons TArray [applySubst subst' $ Fix . TBody $ TVar tvName]
      return (subst', t, EArray (a,t) $ map snd te)
