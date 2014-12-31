@@ -105,7 +105,6 @@ instance Pretty t => Pretty (FType t) where
                             ++ maybe "" ((", "++) . (\r' -> ("..." ++ pretty r'))) r
                             ++ "}"
     where (props, r) = flattenRow list
-  prettyTab n (TMu id t) = "mu " ++ pretty id ++ ". " ++ prettyTab n t
 
 --instance Pretty t => Pretty (Fix t) where
 instance Pretty Type where

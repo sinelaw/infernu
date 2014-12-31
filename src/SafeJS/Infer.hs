@@ -213,6 +213,27 @@ addNamedType tid t = do
   modify $ \is -> is { namedTypes = Map.insert tid t $ namedTypes is }
   return ()
 
+unrollName :: TypeId -> Infer (Maybe Type)
+unrollName tid = Map.lookup tid . namedTypes <$> get
+
+unrollNamedTypes :: Type -> Infer Type
+unrollNamedTypes t = do
+  typeAssocs <- Map.toList . namedTypes <$> get
+  return $ foldr (\(tName, Fix tType) t' -> replaceFix (TCons (TName tName) []) tType t') t typeAssocs
+
+rollNamedTypes :: Type -> Infer Type
+rollNamedTypes t = do
+  traceLog ("rollNamedTypes: " ++ pretty t) ()
+  typeAssocs <- Map.toList . namedTypes <$> get
+  return $ rollNamedTypes' typeAssocs t
+
+rollNamedTypes' typeAssocs t = roll' t
+  where roll typ = foldr (\(tName, Fix tType) t' -> replaceFix tType (TCons (TName tName) []) t') typ typeAssocs
+        roll' typ = let typ' = roll typ
+                    in if typ' /= typ
+                       then roll' (trace ("1:" ++ show typ ++ "\n2:" ++ show typ') typ')
+                       else typ'
+
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
 -- >>> :{
@@ -325,13 +346,18 @@ unify' recurse a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' recurse a (TBody x) (TBody y) = if x == y
                                then return nullSubst
                                else unificationError a x y
-unify' recurse a t1@(TMu n1 t1') t2@(TMu n2 t2') =
+unify' recurse a t1@(TCons (TName n1) []) t2@(TCons (TName n2) []) =
   do if n1 == n2
      then return nullSubst
-     else recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
-unify' recurse a t1@(TMu n1 t1') t2 =
-  do recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
-unify' recurse a t1 t2@(TMu _ _) = recurse a (Fix t2) (Fix t1)
+     else
+       do let unroll' n' t' = unrollName n' `failWithM` throwError a ("Unknown named type: " ++ pretty t')
+          t1' <- unroll' n1 t1
+          t2' <- unroll' n2 t2
+          recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
+unify' recurse a t1@(TCons (TName n1) []) t2 =
+  do t1' <- unrollName n1 `failWithM` throwError a ("Unknown named type: " ++ pretty t1)
+     recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
+unify' recurse a t1 t2@(TCons (TName _) []) = recurse a (Fix t2) (Fix t1)
 
 unify' recurse a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
@@ -366,7 +392,7 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> TVarName -> TSubst
                -> (x, Set EPropName, Map EPropName (Type))
-               -> (x, Set EPropName, Maybe (Either TypeId TVarName))
+               -> (x, Set EPropName, Maybe TVarName)
                -> Infer TSubst
 unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
@@ -375,7 +401,7 @@ unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2) =
 
        case r2 of
          Nothing -> if Set.null in1NotIn2
-                    then varBind a r (Fix $ TRow TRowEnd)
+                    then varBind a r (Fix $ TRow $ TRowEnd Nothing)
                     else unificationError a t1 t2
          Just r2' -> recurse a (in1NotIn2row) (applySubst s1 $ Fix $ TBody $ TVar r2')
 
@@ -418,11 +444,10 @@ varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t =
                   do typeId <- fresh
                      -- TODO generalize and move to Types
-                     let name = TCons (TName typeId) []
-                         target = replaceFix (TBody (TVar n)) name t
-                         namedType = Fix $ TMu typeId target
-                     addNamedType typeId namedType
-                     return $ singletonSubst n namedType
+                     let namedType = TCons (TName typeId) []
+                         target = replaceFix (TBody (TVar n)) namedType t
+                     addNamedType typeId target
+                     return $ singletonSubst n $ Fix namedType
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
 
@@ -458,8 +483,7 @@ isExpansive (ENew _ _ _) = True
 
 closeRowList :: TRowList Type -> TRowList Type
 closeRowList (TRowProp n t rest) = TRowProp n t (closeRowList rest)
-closeRowList (TRowEndOpen _) = TRowEnd
-closeRowList t = t
+closeRowList (TRowEnd _) = TRowEnd Nothing
 
 -- | Replaces a top-level open row type with the closed equivalent.
 -- >>> closeRow (Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd (Just 2)))
@@ -589,7 +613,7 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      applySubstInfer s2
      let s2' = s2 `composeSubst` s1
      rowTailVar <- fresh
-     s3 <- unify a (applySubst s2' objT) $ applySubst s2' . Fix . TRow $ TRowProp n rvalueT $ TRowEndOpen rowTailVar
+     s3 <- unify a (applySubst s2' objT) $ applySubst s2' . Fix . TRow $ TRowProp n rvalueT $ TRowEnd (Just rowTailVar)
      applySubstInfer s3
      let s3' = s3 `composeSubst` s2'
      (s4, expr2T, expr2') <- inferType env expr2
@@ -637,7 +661,7 @@ inferType' env (ERow a isOpen propExprs) =
      applySubstInfer s
      endVar <- fresh
      let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)
-         rowEnd' = if isOpen then TRowEndOpen endVar else TRowEnd
+         rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          rowType = Fix . TRow $ foldr (\(n,t') r -> TRowProp n t' r) rowEnd' propNamesTypes
          t = applySubst s rowType
      return (s, t, ERow (a,t) isOpen $ zip (map fst propExprs) (map snd te))
@@ -657,7 +681,7 @@ inferType' env (EProp a eObj propName) =
   do (s1, tObj, eObj') <- inferType env eObj
      rowVar <- fresh
      propVar <- fresh
-     s2 <- unify a tObj $ Fix . TRow $ TRowProp propName (Fix . TBody $ TVar propVar) $ TRowEndOpen rowVar
+     s2 <- unify a tObj $ Fix . TRow $ TRowProp propName (Fix . TBody $ TVar propVar) $ TRowEnd (Just rowVar)
      let s3 = s2 `composeSubst` s1
          t = applySubst s3 (Fix . TBody $ TVar propVar)
      applySubstInfer s3
