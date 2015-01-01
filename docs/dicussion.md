@@ -63,7 +63,7 @@ etc..
 ### Possibly solutions to polymorphism of mutable variables
 
 1. Infer types, and allow full polymorphism of mutable variables, allowing even nonsense like `x = 'a'; x = 3;`, which makes this solution useless.
-2. Infer types, and disable polymorphism (treating JS vars like ML `ref`s). Variables are still allowed to be of types where **`a` is free** (such as `a -> a`), but not allowed to be of **closed types** (such as `forall a. a -> a`). 
+2. Infer types, and disable polymorphism (treating JS vars like ML `ref`s). Variables are still allowed to be of types where **`a` is free** (such as `a -> a`), but not allowed to be of **closed types** (such as `forall a. a -> a`).
 3. Don't infer types - require programmer to annotate code with type ascriptions. Interpret all type variables as universally quantified, e.g. `a` is interpreted as `forall a. a` (and no value can ever be assigned) or more usefully, `a -> [a]` will be interpreted as `forall a. a -> [a]` (and many list-constructing functions will inhabit this type). This approach is similar to ocaml's **mutable record fields**.
 4. Infer types, but allow polymorphism only in certain cases. **TODO: Which cases?**
 
@@ -126,7 +126,7 @@ var f = function(y) { var res = x; x = y; return res; } // type ???
 
 A variable's type can't be determined at declaration time (`var x;`). Only when the variable is assigned `x = expr` we can infer its type. The declaration serves simply to bind the variable's name to the current scope and to possibly shadow variables declared in outer scopes (a variable's scope in JS is always the nearest function, if any, or otherwise the global scope).
 
-To solve this problem we must "wait" until the first assignment to the newly declared variable occurs. 
+To solve this problem we must "wait" until the first assignment to the newly declared variable occurs.
 
 ### Desired polymorphism
 
@@ -144,7 +144,7 @@ example (of option 3):
 
     makeFunc :: () -> (forall t. t -> t)
     obj.a = makeFunc() // will get: obj.a :: forall t. t -> t
-    
+
 
 Examples:
 
@@ -161,3 +161,17 @@ Examples:
     g = f(2); // g has type [number]
     h = f('a'); // h has type [string] -- crucial point! function calls cause instantiation of type scheme
 
+
+# Normalizing recursive types on outermost scope
+
+    t = { method: t, x: String } -> Int
+        { method: { method: t, x: String } -> Int, x: String } -> Int
+
+    => o = { method: t, x: String }
+
+        t = o -> Int
+
+    => o = { method: o -> Int, x: String }
+
+        { method: o -> Int, x: String } -> Int
+        o -> Int

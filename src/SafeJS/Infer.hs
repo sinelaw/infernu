@@ -211,17 +211,20 @@ getFreeTVars env = do
 addNamedType :: TypeId -> Type -> Infer ()
 addNamedType tid t = do
   scheme <- generalize Map.empty t
+  traceLog ("===> Introducing named type: " ++ pretty tid ++ " => " ++ pretty scheme) ()
   modify $ \is -> is { namedTypes = Map.insert tid scheme $ namedTypes is }
   return ()
 
+-- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
+-- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh type variables.
 unrollName :: Pos.SourcePos -> TypeId -> [Type] -> Infer Type
 unrollName a tid ts =
-  do scheme@(TScheme qvars t) <- (Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
+  do (TScheme qvars t) <- (Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
      let assocs = zip (map (Fix . TBody . TVar) qvars) ts
          tryLookup :: Eq a => [(a, a)] -> a -> a
-         tryLookup abs a = case lookup a abs of
-                            Nothing -> a
-                            Just b -> b
+         tryLookup pairs x = case lookup x pairs of
+                              Nothing -> x
+                              Just y -> y
          replace' :: Type -> Type
          replace' = tryLookup assocs
      return $ Fix $ fmap replace' (unFix t)
@@ -311,10 +314,11 @@ generalize tenv t = do
   return $ TScheme (Set.toList unboundVars) t
 
 ----------------------------------------------------------------------
+type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 
+unify :: UnifyF
 unify = decycle3 unify''
 
-type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ _ _ = return nullSubst
 unify'' (Just recurse) a t1 t2 =
@@ -333,15 +337,15 @@ unify' recurse a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' recurse a (TBody x) (TBody y) = if x == y
                                then return nullSubst
                                else unificationError a x y
-unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
+unify' recurse a (TCons (TName n1) targs1) (TCons (TName n2) targs2) =
   do if n1 == n2
      then return nullSubst
      else
-       do let unroll' n' targs' t' = unrollName a n' targs'
-          t1' <- unroll' n1 targs1 t1
-          t2' <- unroll' n2 targs1 t2
+       do let unroll' n' targs' = unrollName a n' targs'
+          t1' <- unroll' n1 targs1
+          t2' <- unroll' n2 targs2
           recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
-unify' recurse a t1@(TCons (TName n1) targs1) t2 =
+unify' recurse a (TCons (TName n1) targs1) t2 =
   do t1' <- unrollName a n1 targs1
      recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
 unify' recurse a t1 t2@(TCons (TName _) []) = recurse a (Fix t2) (Fix t1)
@@ -430,8 +434,9 @@ varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t =
                   do typeId <- TypeId <$> fresh
+                     traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t) ()
                      -- TODO generalize and move to Types
-                     let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t
+                     let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
                          target = replaceFix (TBody (TVar n)) namedType t
                      addNamedType typeId target
                      return $ singletonSubst n $ Fix namedType
