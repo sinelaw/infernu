@@ -15,7 +15,7 @@ module SafeJS.Types
        , TVarName
        , TBody(..)
        , TConsName(..)
-       , TypeId
+       , TypeId(..)
        , Type
        , Fix(..)
        , replaceFix
@@ -84,7 +84,8 @@ data TBody = TVar TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
              deriving (Show, Eq, Ord)
 
-type TypeId = TVarName
+newtype TypeId = TypeId TVarName
+                deriving (Show, Eq, Ord)
 
 data TConsName = TFunc | TArray | TTuple | TName TypeId
                  deriving (Show, Eq, Ord)
@@ -292,8 +293,8 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow tRowList)) -> tRowList
-      -- UGLY HACK!
-      Just (Fix (TCons (TName n) _)) -> TRowEnd (Just $ RowTVar n)
+      -- UGLY HACK! REMOVE THIS, IT'S WRONG
+      Just (Fix (TCons (TName (TypeId n)) _)) -> TRowEnd (Just $ RowTVar n)
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
 

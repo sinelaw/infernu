@@ -429,7 +429,7 @@ isInsideRowType n (Fix t) =
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t =
-                  do typeId <- fresh
+                  do typeId <- TypeId <$> fresh
                      -- TODO generalize and move to Types
                      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t
                          target = replaceFix (TBody (TVar n)) namedType t

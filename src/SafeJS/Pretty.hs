@@ -2,6 +2,7 @@
 module SafeJS.Pretty where
 
 import SafeJS.Types
+import qualified Data.Char as Char
 import           Data.List                  (intercalate)
 import           Data.Char                  (chr, ord)
 import qualified Data.Digits                as Digits
@@ -76,6 +77,11 @@ toChr n = chr (ord 'a' + n - 1)
 -- "aa"
 instance Pretty TVarName where
   prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 n)
+
+instance Pretty TypeId where
+  prettyTab _ (TypeId n) = capitalize $ pretty n
+    where capitalize [] = []
+          capitalize (x:xs) = Char.toUpper x : xs
 
 instance Pretty TBody where
   prettyTab t (TVar n) = prettyTab t n

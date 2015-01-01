@@ -1,5 +1,9 @@
 // FAIL valid/map.js:5:13: Error: Could not unify: [a] with {push: c, ..b} y valid/map.js
+ERROR y valid/object-chaining.js
 // FAIL valid/objlit-func.js:7:1: Error: Could not unify: {, ..a} with TString y valid/objlit-func.js
-// FAIL valid/point.js:6:34: Error: Occurs check failed: cw in <Named Type: dtcs cw dg dq {new_y: e`, ..el}> y valid/point.js
+// FAIL valid/point.js:6:34: Error: Occurs check failed: cw in <Named Type: mu dt. cs cw dg dq {new_y: e`, ..el}> y valid/point.js
+ERROR y valid/this.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
 // FAIL valid/var-poly.js:6:4: Error: Could not unify: [c] with {o: a, ..b} y valid/var-poly.js
+ERROR n invalid/object-chaining.js
+ERROR n invalid/this.js
