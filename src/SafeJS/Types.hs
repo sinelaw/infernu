@@ -106,10 +106,14 @@ instance Eq (f (Fix f)) => Eq (Fix f) where
 instance Ord (f (Fix f)) => Ord (Fix f) where
   (Fix x) `compare` (Fix y) = x `compare` y
 
-replaceFix tsource tdest (Fix t') =
-  if t' == tsource
-  then Fix $ tdest
-  else Fix $ fmap (replaceFix tsource tdest) t'
+fmapReplace :: (Functor f, Eq (f a)) => (f a -> f b -> a -> b) -> f a -> f b -> f a -> f b
+fmapReplace recurse tsource tdest t =
+  if t == tsource
+  then tdest
+  else fmap (recurse tsource tdest) t
+
+replaceFix :: (Functor f, Eq (f (Fix f))) => f (Fix f) -> f (Fix f) -> Fix f -> Fix f
+replaceFix tsource tdest (Fix t') = Fix $ fmapReplace replaceFix tsource tdest t'
 
 type Type = Fix FType
 
