@@ -384,15 +384,15 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
 --           commonTypes :: [(Type, Type)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
        s1 <- unifyl recurse a nullSubst commonTypes
-       r <- fresh
+       r <- RowTVar <$> fresh
        s2 <- unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2)
        let s2' = s2 `composeSubst` s1
        s3 <- unifyRows recurse a r s2' (tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
        return $ (tracePretty "unified rows subst result") $ s3 `composeSubst` s2'
 
-unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> TVarName -> TSubst
+unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> RowTVar -> TSubst
                -> (x, Set EPropName, Map EPropName (Type))
-               -> (x, Set EPropName, Maybe TVarName)
+               -> (x, Set EPropName, Maybe RowTVar)
                -> Infer TSubst
 unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
@@ -401,9 +401,9 @@ unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2) =
 
        case r2 of
          Nothing -> if Set.null in1NotIn2
-                    then varBind a r (Fix $ TRow $ TRowEnd Nothing)
+                    then varBind a (getRowTVar r) (Fix $ TRow $ TRowEnd Nothing)
                     else unificationError a t1 t2
-         Just r2' -> recurse a (in1NotIn2row) (applySubst s1 $ Fix $ TBody $ TVar r2')
+         Just r2' -> recurse a (in1NotIn2row) (applySubst s1 $ Fix . TBody . TVar $ getRowTVar r2')
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Pos.SourcePos -> TSubst -> [(Type, Type)] -> Infer TSubst
@@ -612,13 +612,13 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      (s2, rvalueT, expr1') <- inferType env expr1
      applySubstInfer s2
      let s2' = s2 `composeSubst` s1
-     rowTailVar <- fresh
+     rowTailVar <- RowTVar <$> fresh
      s3 <- unify a (applySubst s2' objT) $ applySubst s2' . Fix . TRow $ TRowProp n rvalueT $ TRowEnd (Just rowTailVar)
      applySubstInfer s3
      let s3' = s3 `composeSubst` s2'
      (s4, expr2T, expr2') <- inferType env expr2
      let s5 = s4 `composeSubst` s3'
-     s6 <- unifyAllInstances a s5 [rowTailVar]
+     s6 <- unifyAllInstances a s5 [getRowTVar rowTailVar]
      return (s6, applySubst s6 expr2T, EPropAssign (a, applySubst s6 expr2T) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (s1, tArr, eArr') <- inferType env eArr
@@ -659,7 +659,7 @@ inferType' env (ETuple a exprs) =
 inferType' env (ERow a isOpen propExprs) =
   do (s, te) <- accumInfer nullSubst env $ map snd propExprs
      applySubstInfer s
-     endVar <- fresh
+     endVar <- RowTVar <$> fresh
      let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          rowType = Fix . TRow $ foldr (\(n,t') r -> TRowProp n t' r) rowEnd' propNamesTypes
@@ -679,7 +679,7 @@ inferType' env (EIfThenElse a ePred eThen eElse) =
      return (s', tThen, EIfThenElse (a, tThen) ePred' eThen' eElse')
 inferType' env (EProp a eObj propName) =
   do (s1, tObj, eObj') <- inferType env eObj
-     rowVar <- fresh
+     rowVar <- RowTVar <$> fresh
      propVar <- fresh
      s2 <- unify a tObj $ Fix . TRow $ TRowProp propName (Fix . TBody $ TVar propVar) $ TRowEnd (Just rowVar)
      let s3 = s2 `composeSubst` s1

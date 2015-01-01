@@ -62,7 +62,7 @@ instance Pretty (Exp a) where
   prettyTab t (EIndexAssign _ obj i e1 e2) = prettyTab t obj ++ "[" ++ prettyTab t i ++ "] := " ++ prettyTab t e1 ++ ";\n" ++ tab t ++ prettyTab t e2
   prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
-  prettyTab t (ERow _ isOpen props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ (if isOpen then ", ..." else "") ++ "}"
+  prettyTab t (ERow _ isOpen props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ (if isOpen then ", " else "") ++ "}"
   prettyTab t (EIfThenElse _ ep e1 e2) = "(" ++ prettyTab t ep ++  " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
   prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
@@ -84,6 +84,9 @@ instance Pretty TBody where
 instance Pretty TConsName where
   prettyTab _ = show
 
+instance Pretty RowTVar where
+  prettyTab _ t = ".." ++ pretty (getRowTVar t)
+
 instance Pretty t => Pretty (FType t) where
   prettyTab n (TBody t) = prettyTab n t
   prettyTab n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple args ++ " -> " ++ prettyTab n (last ts) ++ ")"
@@ -102,7 +105,7 @@ instance Pretty t => Pretty (FType t) where
   prettyTab n (TCons (TName name) ts) = "<Named Type: " ++ pretty name ++ (unwords $ map (prettyTab n) ts) ++ ">"
   prettyTab t (TRow list) = "{"
                             ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))
-                            ++ maybe "" ((", "++) . (\r' -> ("..." ++ pretty r'))) r
+                            ++ maybe "" ((", "++) . pretty) r
                             ++ "}"
     where (props, r) = flattenRow list
 
