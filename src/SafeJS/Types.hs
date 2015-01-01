@@ -346,7 +346,7 @@ data InferState = InferState { nameSource   :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
-                             , namedTypes   :: Map.Map TypeId Type }
+                             , namedTypes   :: Map.Map TypeId TScheme }
                   deriving (Show, Eq)
 
 -- | VarNames instance for InferState

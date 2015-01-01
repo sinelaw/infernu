@@ -210,29 +210,21 @@ getFreeTVars env = do
 
 addNamedType :: TypeId -> Type -> Infer ()
 addNamedType tid t = do
-  modify $ \is -> is { namedTypes = Map.insert tid t $ namedTypes is }
+  scheme <- generalize Map.empty t
+  modify $ \is -> is { namedTypes = Map.insert tid scheme $ namedTypes is }
   return ()
 
-unrollName :: TypeId -> Infer (Maybe Type)
-unrollName tid = Map.lookup tid . namedTypes <$> get
-
-unrollNamedTypes :: Type -> Infer Type
-unrollNamedTypes t = do
-  typeAssocs <- Map.toList . namedTypes <$> get
-  return $ foldr (\(tName, Fix tType) t' -> replaceFix (TCons (TName tName) []) tType t') t typeAssocs
-
-rollNamedTypes :: Type -> Infer Type
-rollNamedTypes t = do
-  traceLog ("rollNamedTypes: " ++ pretty t) ()
-  typeAssocs <- Map.toList . namedTypes <$> get
-  return $ rollNamedTypes' typeAssocs t
-
-rollNamedTypes' typeAssocs t = roll' t
-  where roll typ = foldr (\(tName, Fix tType) t' -> replaceFix tType (TCons (TName tName) []) t') typ typeAssocs
-        roll' typ = let typ' = roll typ
-                    in if typ' /= typ
-                       then roll' (trace ("1:" ++ show typ ++ "\n2:" ++ show typ') typ')
-                       else typ'
+unrollName :: Pos.SourcePos -> TypeId -> [Type] -> Infer Type
+unrollName a tid ts =
+  do scheme@(TScheme qvars t) <- (Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
+     let assocs = zip (map (Fix . TBody . TVar) qvars) ts
+         tryLookup :: Eq a => [(a, a)] -> a -> a
+         tryLookup abs a = case lookup a abs of
+                            Nothing -> a
+                            Just b -> b
+         replace' :: Type -> Type
+         replace' = tryLookup assocs
+     return $ Fix $ fmap replace' (unFix t)
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
@@ -274,11 +266,8 @@ instantiate (TScheme tvarNames t) = do
   allocNames <- forM tvarNames $ \tvName -> do
     freshName <- fresh
     return (tvName, freshName)
-
   forM_ allocNames $ uncurry addVarInstance
-
   let replaceVar n = fromMaybe n $ lookup n allocNames
-
   return $ mapVarNames replaceVar t
 
 instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Type)
@@ -330,8 +319,6 @@ unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ _ _ = return nullSubst
 unify'' (Just recurse) a t1 t2 =
   do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
-     -- t1' <- rollNamedTypes t1
-     -- t2' <- rollNamedTypes t2
      tr' <$> unify' recurse a (unFix t1) (unFix t2)
   where tr' x = trace (tr2 x) x
         tr2 x = "unify: \t" ++ pretty t1 ++ " ,\t " ++ pretty t2 ++ "\n\t-->" ++ concatMap pretty (Map.toList x)
@@ -346,16 +333,16 @@ unify' recurse a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' recurse a (TBody x) (TBody y) = if x == y
                                then return nullSubst
                                else unificationError a x y
-unify' recurse a t1@(TCons (TName n1) []) t2@(TCons (TName n2) []) =
+unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
   do if n1 == n2
      then return nullSubst
      else
-       do let unroll' n' t' = unrollName n' `failWithM` throwError a ("Unknown named type: " ++ pretty t')
-          t1' <- unroll' n1 t1
-          t2' <- unroll' n2 t2
+       do let unroll' n' targs' t' = unrollName a n' targs'
+          t1' <- unroll' n1 targs1 t1
+          t2' <- unroll' n2 targs1 t2
           recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
-unify' recurse a t1@(TCons (TName n1) []) t2 =
-  do t1' <- unrollName n1 `failWithM` throwError a ("Unknown named type: " ++ pretty t1)
+unify' recurse a t1@(TCons (TName n1) targs1) t2 =
+  do t1' <- unrollName a n1 targs1
      recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
 unify' recurse a t1 t2@(TCons (TName _) []) = recurse a (Fix t2) (Fix t1)
 
@@ -444,7 +431,7 @@ varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t =
                   do typeId <- fresh
                      -- TODO generalize and move to Types
-                     let namedType = TCons (TName typeId) []
+                     let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t
                          target = replaceFix (TBody (TVar n)) namedType t
                      addNamedType typeId target
                      return $ singletonSubst n $ Fix namedType
