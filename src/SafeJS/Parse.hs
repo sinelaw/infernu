@@ -84,7 +84,39 @@ fromStatement (ES3.ReturnStmt z x) = EIndexAssign z (EVar z "return") (ELit z $ 
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
 toAbs z args stmts = EAbs z ("this" : map ES3.unId args) body'
   -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
-  where body' = ELet z "return" (EArray z []) $ foldStmts stmts $ (EIndex z (EVar z "return") (ELit z $ LitNumber 0))
+  where body' = case any hasReturn stmts of
+                 True -> ELet z "return" (EArray z []) $ foldStmts stmts $ (EIndex z (EVar z "return") (ELit z $ LitNumber 0))
+                 False -> ELet z "return" (empty z) $ foldStmts stmts $ (ELit z LitUndefined)
+
+
+hasReturn :: ES3.Statement a -> Bool
+hasReturn (ES3.BlockStmt _ stmts) = any hasReturn stmts
+hasReturn (ES3.EmptyStmt _) = False
+hasReturn (ES3.ExprStmt _ _) = False
+hasReturn (ES3.IfStmt _ _ thenS elseS) = any hasReturn [thenS, elseS]
+hasReturn (ES3.IfSingleStmt _ _ thenS) = hasReturn thenS
+hasReturn (ES3.WhileStmt _ _ loopS) = hasReturn loopS
+hasReturn (ES3.DoWhileStmt _ loopS _) = hasReturn loopS
+hasReturn (ES3.BreakStmt _ _) = False
+hasReturn (ES3.ContinueStmt _ _) = False
+hasReturn (ES3.TryStmt _ stmt mCatch mFinally) = any hasReturn (stmt : finallyS ++ catchS)
+  where catchS = case mCatch of
+                  Just (ES3.CatchClause _ _ s) -> [s]
+                  Nothing -> []
+        finallyS = case mFinally of
+                    Just f -> [f]
+                    Nothing -> []
+hasReturn (ES3.ThrowStmt _ _) = False
+hasReturn (ES3.WithStmt _ _ s) = hasReturn s
+hasReturn (ES3.ForInStmt _ _ _ s) = hasReturn s
+hasReturn (ES3.LabelledStmt _ _ s) = hasReturn s
+hasReturn (ES3.ForStmt _ _ _ _ body) = hasReturn body
+hasReturn (ES3.SwitchStmt _ _ cases) = and $ map fromCase cases
+  where fromCase (ES3.CaseClause _ _ s) = any hasReturn s
+        fromCase (ES3.CaseDefault _ stmts) = any hasReturn stmts
+hasReturn (ES3.VarDeclStmt _ _) = False
+hasReturn (ES3.FunctionStmt _ _ _ _) = False
+hasReturn (ES3.ReturnStmt _ _) = True
 
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
@@ -148,6 +180,7 @@ fromExpression e@(ES3.ListExpr z exprs) =
 fromExpression (ES3.ThisRef z) = EVar z "this"
 fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
 fromExpression (ES3.NewExpr z expr argExprs) = ENew z (fromExpression expr) (map fromExpression argExprs)
+--  ELet z "__this__" (ERow z True []) (ELet z "_bla_" (EApp z (fromExpression expr) ((EVar z "__this__") : map fromExpression argExprs)) (EVar z "__this__"))
 fromExpression e@(ES3.PrefixExpr z op expr) =
   case op of
     -- prefix +/- are converted to 0-x and 0+x
