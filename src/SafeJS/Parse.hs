@@ -147,13 +147,14 @@ fromExpression (ES3.CallExpr z expr argExprs) =
   -- The idea is to prevent duplicate expressions in the output tree (<complicated expr>.method (<complicated expr>, ...)) by binding the object expression to '__obj__'.
   -- So that we get: let __obj__ = <complicated expr> in __obj__.method(__obj__, ...)
   case expr of
-   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (EProp z' var propName) var
+   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp z' var propName) var
      where var = fromExpression varExpr
-   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet z "__obj__" obj $ appExpr (EProp z' objVar propName) objVar
+   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet z "__obj__" obj $ appExpr (Just propName) (EProp z' objVar propName) objVar
      where obj = fromExpression objExpr
            objVar = EVar z "__obj__"
-   _ -> appExpr (fromExpression expr) (ELit z LitUndefined)
-  where appExpr funcExpr thisExpr = (EApp z funcExpr (thisExpr : map fromExpression argExprs))
+   _ -> appExpr Nothing (fromExpression expr) (ELit z LitUndefined)
+  where appExpr (Just "call") _ obj = (EApp z obj (map fromExpression argExprs)) -- TODO: may be wrong if object expression is not a function!
+        appExpr _ funcExpr thisExpr = (EApp z funcExpr (thisExpr : map fromExpression argExprs))
   --error $ "Assetion failed: expecting at least 'this'"
 fromExpression (ES3.AssignExpr z op target expr) = assignExpr
   where (assignExpr, oldValue) = case target of
