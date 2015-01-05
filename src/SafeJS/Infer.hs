@@ -212,6 +212,7 @@ addNamedType :: TypeId -> Type -> Infer ()
 addNamedType tid t = do
   scheme <- generalize Map.empty t
   traceLog ("===> Introducing named type: " ++ pretty tid ++ " => " ++ pretty scheme) ()
+  -- TODO: Here or elsewhere, we should check if an equivalent recursive type exists and use only one of the two everywhere.
   modify $ \is -> is { namedTypes = Map.insert tid scheme $ namedTypes is }
   return ()
 
@@ -335,8 +336,8 @@ unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> I
 unify' recurse a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' recurse a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' recurse a (TBody x) (TBody y) = if x == y
-                               then return nullSubst
-                               else unificationError a x y
+                                       then return nullSubst
+                                       else unificationError a x y
 unify' recurse a (TCons (TName n1) targs1) (TCons (TName n2) targs2) =
   do if n1 == n2
      then return nullSubst
