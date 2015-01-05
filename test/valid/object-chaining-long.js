@@ -1,1 +1,1 @@
-({ method: function() { return this; } }).method();
+({ method: function() { return this; } }).method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method().method();
