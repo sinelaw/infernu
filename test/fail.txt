@@ -1,4 +1,5 @@
 // FAIL valid/map.js:5:13: Error: Could not unify: [a] with {push: c, ..b} y valid/map.js
+// FAIL valid/method-as-func.js:5:3: Error: Could not unify: {method: (this: <Named Type: mu By. > -> TNumber)} with TUndefined y valid/method-as-func.js
 // FAIL valid/promise.js:33:31: Error: Could not unify: TUndefined with {reject: b, resolve: ((this: TUndefined, a) -> c)} y valid/promise.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
 // FAIL valid/var-poly.js:6:4: Error: Could not unify: [c] with {o: a, ..b} y valid/var-poly.js
