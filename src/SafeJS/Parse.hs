@@ -142,11 +142,19 @@ fromExpression (ES3.ObjectLit z props) = ERow z False $ map (fromProp *** fromEx
 fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex z (fromExpression arrExpr) (fromExpression indexExpr)
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
-fromExpression (ES3.CallExpr z expr argExprs) = EApp z (fromExpression expr) (map fromExpression $ thisArg : argExprs)
-                                                where thisArg = case expr of
-                                                        ES3.DotRef _ objExpr _ -> objExpr
-                                                        _ -> ES3.NullLit z -- TODO should be 'undefined'
-                                                --error $ "Assetion failed: expecting at least 'this'"
+fromExpression (ES3.CallExpr z expr argExprs) =
+  -- | Instead of simply translating, here we also do some specific simplification by defining (adding an ELet) for the object expression if the function is a method call.
+  -- The idea is to prevent duplicate expressions in the output tree (<complicated expr>.method (<complicated expr>, ...)) by binding the object expression to '__obj__'.
+  -- So that we get: let __obj__ = <complicated expr> in __obj__.method(__obj__, ...)
+  case expr of
+   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (EProp z' var propName) var
+     where var = fromExpression varExpr
+   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet z "__obj__" obj $ appExpr (EProp z' objVar propName) objVar
+     where obj = fromExpression objExpr
+           objVar = EVar z "__obj__"
+   _ -> appExpr (fromExpression expr) (ELit z LitUndefined)
+  where appExpr funcExpr thisExpr = (EApp z funcExpr (thisExpr : map fromExpression argExprs))
+  --error $ "Assetion failed: expecting at least 'this'"
 fromExpression (ES3.AssignExpr z op target expr) = assignExpr
   where (assignExpr, oldValue) = case target of
           ES3.LVar _ name -> (assignToVar z name value, EVar z name)
