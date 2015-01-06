@@ -347,8 +347,8 @@ data InferState = InferState { nameSource   :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
-                             , namedTypes   :: Map.Map TypeId TScheme }
-                  deriving (Show, Eq)
+                             , namedTypes   :: Map.Map TypeId (Type, TScheme) }
+                   deriving (Show, Eq)
 
 -- | VarNames instance for InferState
 -- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])] }

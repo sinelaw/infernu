@@ -208,19 +208,37 @@ getFreeTVars env = do
                 tr = tracePretty $ " collected from " ++ pretty varId ++ " free type variables: "
   foldM collectFreeTVs Set.empty (Map.elems env)
 
-addNamedType :: TypeId -> Type -> Infer ()
-addNamedType tid t = do
-  scheme <- generalize Map.empty t
+addNamedType :: TypeId -> Type -> TScheme -> Infer ()
+addNamedType tid t scheme = do
   traceLog ("===> Introducing named type: " ++ pretty tid ++ " => " ++ pretty scheme) ()
-  -- TODO: Here or elsewhere, we should check if an equivalent recursive type exists and use only one of the two everywhere.
-  modify $ \is -> is { namedTypes = Map.insert tid scheme $ namedTypes is }
+  modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
   return ()
+
+areEquivalentNamedTypes :: (TypeId, (Type, TScheme)) -> (TypeId, (Type, TScheme)) -> Bool
+-- TODO: Implement. Should ignore typeids and compare only schemes up to alpha equivalence including named type constructors equivalence (TCons TName...).
+areEquivalentNamedTypes (_, (t1, s1)) (_, (t2, s2)) = s2 == (TScheme { schemeVars = schemeVars s1', schemeType = replaceFix (unFix t1) (unFix t2) (schemeType s1') })
+  where s1' = mapVarNames (safeLookup' $ zip (schemeVars s1) (schemeVars s2)) s1
+        safeLookup' abs a = case lookup a abs of
+          Nothing -> a
+          Just b -> b
+
+getNamedType :: TVarName -> Type -> Infer Type
+getNamedType n t =
+  do typeId <- TypeId <$> fresh
+     let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
+         target = replaceFix (TBody (TVar n)) namedType t
+     scheme <- generalize Map.empty target
+     currentNamedTypes <- filter (areEquivalentNamedTypes (typeId, (Fix namedType, scheme))) . Map.toList . namedTypes <$> get
+     case currentNamedTypes of
+      [] -> do addNamedType typeId (Fix namedType) scheme
+               return $ Fix namedType
+      ((_, (otherNT, _)):_) -> return otherNT
 
 -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
 -- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh type variables.
 unrollName :: Pos.SourcePos -> TypeId -> [Type] -> Infer Type
 unrollName a tid ts =
-  do (TScheme qvars t) <- (Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
+  do (TScheme qvars t) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
      let assocs = zip (map (Fix . TBody . TVar) qvars) ts
          tryLookup :: Eq a => [(a, a)] -> a -> a
          tryLookup pairs x = case lookup x pairs of
@@ -434,13 +452,9 @@ isInsideRowType n (Fix t) =
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t =
-                  do typeId <- TypeId <$> fresh
-                     traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t) ()
-                     -- TODO generalize and move to Types
-                     let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
-                         target = replaceFix (TBody (TVar n)) namedType t
-                     addNamedType typeId target
-                     return $ singletonSubst n $ Fix namedType
+                  do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t) ()
+                     namedType <- getNamedType n t
+                     return $ singletonSubst n namedType
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
 
