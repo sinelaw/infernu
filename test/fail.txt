@@ -1,5 +1,5 @@
 // FAIL valid/map.js:5:13: Error: Could not unify: [a] with {push: c, ..b} y valid/map.js
-// FAIL valid/method-as-func.js:5:3: Error: Could not unify: {method: (this: <Named Type: mu Cj. > -> TNumber)} with TUndefined y valid/method-as-func.js
+// FAIL valid/method-as-func.js:5:3: Error: Could not unify: {method: (this: <Named Type: mu By. > -> TNumber)} with TUndefined y valid/method-as-func.js
 // FAIL valid/object-chaining-long.js:1:59: Error: Could not unify: {method: <Named Type: mu Po. a b>, ..b} with <Named Type: mu Qf. {}> y valid/object-chaining-long.js
 // FAIL valid/promise.js:33:31: Error: Could not unify: {resolve: <Named Type: mu Hf. a b c>, ..c} with TUndefined y valid/promise.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
