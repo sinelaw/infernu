@@ -269,7 +269,7 @@ applySubstInfer s =
 --
 -- For example:
 --
--- >>> runInferWith (InferState { nameSource = NameSource 2, varInstances = Map.empty, varSchemes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+-- >>> runInferWith (InferState { nameSource = NameSource 2, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 -- Right Fix (TCons TFunc [Fix (TBody (TVar 3)),Fix (TBody (TVar 1))])
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
@@ -435,13 +435,13 @@ instance Monoid OrBool where
 --
 -- >>> isInsideRowType 0 (Fix (TBody $ TVar 0))
 -- False
--- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just 0)))
+-- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just $ RowTVar 0)))
 -- True
--- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just 1)))
+-- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just $ RowTVar 1)))
 -- False
--- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TRow $ TRowEnd (Just 1)]))
+-- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TRow $ TRowEnd (Just $ RowTVar 1)]))
 -- False
--- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TRow $ TRowEnd (Just 0)]))
+-- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TRow $ TRowEnd (Just $ RowTVar 0)]))
 -- True
 isInsideRowType :: TVarName -> Type -> Bool
 isInsideRowType n (Fix t) =
@@ -493,12 +493,12 @@ closeRowList (TRowProp n t rest) = TRowProp n t (closeRowList rest)
 closeRowList (TRowEnd _) = TRowEnd Nothing
 
 -- | Replaces a top-level open row type with the closed equivalent.
--- >>> closeRow (Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd (Just 2)))
--- Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just 1)))) (TRowEnd Nothing)))
+-- >>> closeRow (Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
+-- Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just (RowTVar 1))))) (TRowEnd Nothing)))
 -- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
 -- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
--- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just 1))) (TRowEnd (Just 2)), Fix $ TBody TString])
--- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just 1)))) (TRowEnd (Just 2)))),Fix (TBody TString)])
+-- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)), Fix $ TBody TString])
+-- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just (RowTVar 1))))) (TRowEnd (Just (RowTVar 2))))),Fix (TBody TString)])
 closeRow :: Type -> Type
 closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
 closeRow t = t
@@ -767,7 +767,7 @@ typeInference builtins e = do
 -- The following should succeed because x is immutable and thus polymorphic:
 --
 -- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (tuple [var "x", var "y"]))
--- "((b -> b), (TNumber, TBoolean))"
+-- "((this: b -> b), (TNumber, TBoolean))"
 --
 -- The following should fail because x is mutable and therefore a monotype:
 --
@@ -777,7 +777,7 @@ typeInference builtins e = do
 -- The following should also succeed because "x" is only ever used like this: (x True). The second assignment to x is: x := \z1 -> False, which is specific but matches the usage. Note that x's type is collapsed to: Boolean -> Boolean.
 --
 -- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (app (var "x") (lit (LitBoolean True))) (assign "x" (fun ["z1"] (lit (LitBoolean False))) (tuple [var "x", var "y"])))
--- "((TBoolean -> TBoolean), TBoolean)"
+-- "((this: TBoolean -> TBoolean), TBoolean)"
 --
 -- | Tests a setter for x being called with something more specific than x's original definition:
 -- >>> :{
@@ -797,10 +797,10 @@ typeInference builtins e = do
 -- "(TBoolean, TNumber)"
 --
 -- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (fun ["y"] (var "y")) (var "id"))
--- "(a -> a)"
+-- "(this: a -> a)"
 --
 -- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (lit (LitBoolean True)) (var "id"))
--- "<dummy>:1:1: Error: Could not unify: TBoolean with (a -> a)"
+-- "<dummy>:1:1: Error: Could not unify: TBoolean with (this: a -> a)"
 --
 -- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitBoolean False)) (var "x"))
 -- "TBoolean"
@@ -821,35 +821,35 @@ typeInference builtins e = do
 -- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
 -- >>> test $ let' "id" (fun ["x"] (let' "y" (var "x") (var "y"))) (app (var "id") (var "id"))
--- "(b -> b)"
+-- "(this: b -> b)"
 --
 -- >>> test $ let' "id" (fun ["x"] (let' "y" (var "x") (var "y"))) (app (app (var "id") (var "id")) (lit (LitNumber 2)))
 -- "TNumber"
 --
 -- >>> test $ let' "id" (fun ["x"] (app (var "x") (var "x"))) (var "id")
--- "<dummy>:1:1: Error: Occurs check failed: a in (a -> b)"
+-- "<dummy>:1:1: Error: Occurs check failed: a in (this: a -> b)"
 --
 -- >>> test $ fun ["m"] (let' "y" (var "m") (let' "x" (app (var "y") (lit (LitBoolean True))) (var "x")))
--- "((TBoolean -> a) -> a)"
+-- "((this: TBoolean -> a) -> a)"
 --
 -- >>> test $ app (lit (LitNumber 2)) (lit (LitNumber 2))
 -- "<dummy>:1:1: Error: Could not unify: TNumber with (TNumber -> a)"
 --
 -- EAssign tests
 -- >>> test $ let' "x" (fun ["y"] (lit (LitNumber 0))) (assign "x" (fun ["y"] (var "y")) (var "x"))
--- "(TNumber -> TNumber)"
+-- "(this: TNumber -> TNumber)"
 --
 -- >>> test $ let' "x" (fun ["y"] (var "y")) (assign "x" (fun ["y"] (lit (LitNumber 0))) (var "x"))
--- "(TNumber -> TNumber)"
+-- "(this: TNumber -> TNumber)"
 --
 -- >>> test $ let' "x" (fun ["y"] (var "y")) (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))])
 -- "(TNumber, TBoolean)"
 --
 -- >>> test $ let' "x" (fun ["y"] (var "y")) (app (var "x") (var "x"))
--- "(b -> b)"
+-- "(this: b -> b)"
 --
 -- >>> test $ let' "x" (fun ["a"] (var "a")) (let' "getX" (fun ["v"] (var "x")) (let' "setX" (fun ["v"] (let' "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean True)))) (let' "_" (app (var "setX") (fun ["a"] (lit (LitString "a")))) (var "getX"))))
--- "(b -> (TString -> TString))"
+-- "(this: b -> (TString -> TString))"
 test :: Exp Pos.SourcePos -> String
 test e = case runTypeInference e of
           Left err -> pretty err

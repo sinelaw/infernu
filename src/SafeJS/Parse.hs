@@ -143,8 +143,10 @@ fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex z (fromExpression a
 fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
 fromExpression (ES3.CallExpr z expr argExprs) =
-  -- | Instead of simply translating, here we also do some specific simplification by defining (adding an ELet) for the object expression if the function is a method call.
-  -- The idea is to prevent duplicate expressions in the output tree (<complicated expr>.method (<complicated expr>, ...)) by binding the object expression to '__obj__'.
+  -- Instead of simply translating, here we also do some specific simplification by defining
+  -- (adding an ELet) for the object expression if the function is a method call.
+  -- The idea is to prevent duplicate expressions in the output tree (<complicated expr>.method
+  -- (<complicated expr>, ...)) by binding the object expression to '__obj__'.
   -- So that we get: let __obj__ = <complicated expr> in __obj__.method(__obj__, ...)
   case expr of
    ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp z' var propName) var

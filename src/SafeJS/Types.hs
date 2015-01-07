@@ -23,6 +23,7 @@ module SafeJS.Types
        , TypeError(..)
        , InferState(..)
        , RowTVar(..)
+       , getRowTVar
        , liftRowTVar
        , TRowList(..)
        , TScheme(..)
@@ -90,8 +91,11 @@ newtype TypeId = TypeId TVarName
 data TConsName = TFunc | TArray | TTuple | TName TypeId
                  deriving (Show, Eq, Ord)
 
-newtype RowTVar = RowTVar { getRowTVar :: TVarName }
+newtype RowTVar = RowTVar TVarName
                 deriving (Show, Eq, Ord)
+
+getRowTVar :: RowTVar -> TVarName
+getRowTVar (RowTVar x) = x
 
 liftRowTVar :: (TVarName -> TVarName) -> RowTVar -> RowTVar
 liftRowTVar f (RowTVar x) = RowTVar (f x)
@@ -170,13 +174,13 @@ instance VarNames t => VarNames (Exp (a, t)) where
 
 -- | VarNames instance for TRowList
 --
--- >>> freeTypeVars (TRowProp "x" (Fix $ TBody TNumber) (TRowEnd $ Just 1))
+-- >>> freeTypeVars (TRowProp "x" (Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
 -- fromList [1]
 -- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowEnd Nothing))
 -- fromList [2]
--- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowEnd $ Just 1))
+-- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowEnd $ Just $ RowTVar 1))
 -- fromList [1,2]
--- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowProp "y" (Fix $ TBody $ TVar 3) (TRowEnd $ Just 1)))
+-- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowProp "y" (Fix $ TBody $ TVar 3) (TRowEnd $ Just $ RowTVar 1)))
 -- fromList [1,2,3]
 instance VarNames t => VarNames (TRowList t) where
   freeTypeVars (TRowEnd (Just (RowTVar n))) = Set.singleton n
@@ -196,7 +200,7 @@ instance VarNames t => VarNames (TRowList t) where
 -- fromList [0,1]
 -- >>> freeTypeVars (Fix $ TCons TFunc [Fix $ TBody $ TVar 1])
 -- fromList [1]
--- >>> freeTypeVars $ (Fix $ (TRow (TRowEnd (Just 3))) :: Type)
+-- >>> freeTypeVars $ (Fix $ (TRow (TRowEnd (Just $ RowTVar 3))) :: Type)
 -- fromList [3]
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
@@ -251,9 +255,9 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- Fix (TBody TNumber)
 -- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TBody $ TVar 0)
 -- Fix (TRow (TRowEnd Nothing))
--- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowEnd $ Just 0)
+-- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 0)
 -- Fix (TRow (TRowEnd Nothing))
--- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (Fix $ TBody TString) (TRowEnd $ Just 0))
+-- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (Fix $ TBody TString) (TRowEnd $ Just $ RowTVar 0))
 -- Fix (TRow (TRowProp "bla" Fix (TBody TString) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
@@ -351,8 +355,8 @@ data InferState = InferState { nameSource   :: NameSource
                    deriving (Show, Eq)
 
 -- | VarNames instance for InferState
--- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])] }
--- InferState {nameSource = NameSource {lastName = 0}, varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]}
+-- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])], namedTypes = Map.empty }
+-- InferState {nameSource = NameSource {lastName = 0}, varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])], namedTypes = fromList []}
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is
