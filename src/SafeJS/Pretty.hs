@@ -70,13 +70,15 @@ instance Pretty (Exp a) where
   prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
 
 toChr :: Int -> Char
-toChr n = chr (ord 'a' + n - 1)
+toChr n = chr (ord 'a' + (n - 1))
 
 -- |
--- >>> prettyTab 0 (27 :: TVarName)
+-- >>> prettyTab 0 (0 :: TVarName)
+-- "a"
+-- >>> prettyTab 0 (26 :: TVarName)
 -- "aa"
 instance Pretty TVarName where
-  prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 n)
+  prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 (n + 1))
 
 instance Pretty TypeId where
   prettyTab _ (TypeId n) = capitalize $ pretty n

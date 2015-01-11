@@ -357,6 +357,13 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 -- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowProp "x" (Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
 -- Right (fromList [(0,Fix (TRow (TRowProp "x" Fix (TBody TNumber) (TRowEnd (Just (RowTVar 1))))))])
 --
+-- >>> let row1 z = (Fix $ TRow $ TRowProp "x" (Fix $ TBody TNumber) (TRowEnd z))
+-- >>> let sCloseRow = fromRight $ u (row1 $ Just $ RowTVar 1) (row1 Nothing)
+-- >>> pretty $ applySubst sCloseRow (row1 $ Just $ RowTVar 1)
+-- "{x: TNumber}"
+--
+-- Simple recursive type:
+--
 -- >>> let tvar0 = Fix $ TBody $ TVar 0
 -- >>> let recRow = Fix $ TRow $ TRowProp "x" tvar0 (TRowEnd $ Just $ RowTVar 1)
 -- >>> let s = fromRight $ u tvar0 recRow
@@ -372,7 +379,33 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 --     t <- unrollName p n1 targs1
 --     return t
 -- :}
--- "{x: <Named Type: mu 'A'. a>, ..a}"
+-- "{x: <Named Type: mu 'B'. b>, ..b}"
+--
+-- >>> :{
+-- pretty $ runInfer $ do
+--     s1 <- unify p tvar0 recRow
+--     tvar2 <- Fix . TBody . TVar <$> fresh
+--     s2 <- unify p (applySubst s1 recRow) (applySubst s1 $ Fix $ TRow $ TRowProp "x" tvar2 (TRowEnd Nothing))
+--     return $ applySubst (s2 `composeSubst` s1) recRow
+-- :}
+-- "{x: <Named Type: mu 'B'. {}>}"
+--
+-- >>> let rec2 = Fix $ TCons TFunc [recRow, Fix $ TBody TNumber]
+-- >>> :{
+-- pretty $ runInfer $ do
+--     s1 <- unify p tvar0 rec2
+--     return $ applySubst s1 rec2
+-- :}
+-- "(this: {x: <Named Type: mu 'B'. b>, ..b} -> TNumber)"
+--
+-- >>> :{
+-- runInfer $ do
+--     s1 <- unify p tvar0 rec2
+--     s2 <- unify p tvar0 rec2
+--     return $ (applySubst s1 rec2 == applySubst s2 rec2)
+-- :}
+-- Right True
+--
 unify :: UnifyF
 unify = decycle3 unify''
 
