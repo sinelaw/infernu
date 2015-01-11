@@ -381,6 +381,22 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 -- :}
 -- "{x: <Named Type: mu 'B'. b>, ..b}"
 --
+-- Unifying a rolled recursive type with its unrolling:
+--
+-- >>> :{
+-- runInfer $ do
+--     s <- unify p tvar0 recRow
+--     let rolledT = applySubst s tvar0
+--     let (Fix (TCons (TName n1) targs1)) = rolledT
+--     unrolledT <- unrollName p n1 targs1
+--     s2 <- unify p rolledT unrolledT
+--     s3 <- unify p rolledT (applySubst s unrolledT)
+--     s4 <- unify p (applySubst s rolledT) (applySubst s unrolledT)
+--     s5 <- unify p (applySubst s rolledT) unrolledT
+--     return (rolledT == unrolledT, s2, s3, s4, s5)
+-- :}
+-- Right (False,fromList [],fromList [],fromList [],fromList [])
+--
 -- >>> :{
 -- pretty $ runInfer $ do
 --     s1 <- unify p tvar0 recRow

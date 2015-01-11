@@ -80,6 +80,9 @@ toChr n = chr (ord 'a' + (n - 1))
 instance Pretty TVarName where
   prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 (n + 1))
 
+instance Pretty Bool where
+  prettyTab _ x = show x
+
 instance Pretty TypeId where
   prettyTab _ (TypeId n) = capitalize $ pretty n
     where capitalize [] = []
