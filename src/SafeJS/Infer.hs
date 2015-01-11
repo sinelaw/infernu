@@ -218,7 +218,7 @@ areEquivalentNamedTypes :: (TypeId, (Type, TScheme)) -> (TypeId, (Type, TScheme)
 -- TODO: Implement. Should ignore typeids and compare only schemes up to alpha equivalence including named type constructors equivalence (TCons TName...).
 areEquivalentNamedTypes (_, (t1, s1)) (_, (t2, s2)) = s2 == (TScheme { schemeVars = schemeVars s1', schemeType = replaceFix (unFix t1) (unFix t2) (schemeType s1') })
   where s1' = mapVarNames (safeLookup' $ zip (schemeVars s1) (schemeVars s2)) s1
-        safeLookup' abs a = case lookup a abs of
+        safeLookup' abs' a = case lookup a abs' of
           Nothing -> a
           Just b -> b
 
@@ -335,6 +335,44 @@ generalize tenv t = do
 ----------------------------------------------------------------------
 type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 
+-- | Unifies given types, using the namedTypes from the infer state
+--
+-- >>> let p = Pos.initialPos "<dummy>"
+-- >>> let u x y = runInfer $ unify p x y
+-- >>> let fromRight (Right x) = x
+--
+-- >>> u (Fix $ TBody $ TVar 0) (Fix $ TBody $ TVar 1)
+-- Right (fromList [(0,Fix (TBody (TVar 1)))])
+-- >>> u (Fix $ TBody $ TVar 1) (Fix $ TBody $ TVar 0)
+-- Right (fromList [(1,Fix (TBody (TVar 0)))])
+--
+-- >>> u (Fix $ TBody $ TNumber) (Fix $ TBody $ TVar 0)
+-- Right (fromList [(0,Fix (TBody TNumber))])
+-- >>> u (Fix $ TBody $ TVar 0) (Fix $ TBody $ TNumber)
+-- Right (fromList [(0,Fix (TBody TNumber))])
+--
+-- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 1)
+-- Right (fromList [(0,Fix (TRow (TRowEnd (Just (RowTVar 1)))))])
+--
+-- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowProp "x" (Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
+-- Right (fromList [(0,Fix (TRow (TRowProp "x" Fix (TBody TNumber) (TRowEnd (Just (RowTVar 1))))))])
+--
+-- >>> let tvar0 = Fix $ TBody $ TVar 0
+-- >>> let recRow = Fix $ TRow $ TRowProp "x" tvar0 (TRowEnd $ Just $ RowTVar 1)
+-- >>> let s = fromRight $ u tvar0 recRow
+-- >>> s
+-- fromList [(0,Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 1))]))]
+-- >>> applySubst s tvar0
+-- Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 1))])
+--
+-- >>> :{
+-- pretty $ runInfer $ do
+--     s <- unify p tvar0 recRow
+--     let (Fix (TCons (TName n1) targs1)) = applySubst s tvar0
+--     t <- unrollName p n1 targs1
+--     return t
+-- :}
+-- "{x: <Named Type: mu 'A'. a>, ..a}"
 unify :: UnifyF
 unify = decycle3 unify''
 
