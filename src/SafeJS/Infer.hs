@@ -214,8 +214,8 @@ addNamedType tid t scheme = do
   modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
   return ()
 
+-- Should ignore typeids and compare only schemes up to alpha equivalence including named type constructors equivalence (TCons TName...).
 areEquivalentNamedTypes :: (TypeId, (Type, TScheme)) -> (TypeId, (Type, TScheme)) -> Bool
--- TODO: Implement. Should ignore typeids and compare only schemes up to alpha equivalence including named type constructors equivalence (TCons TName...).
 areEquivalentNamedTypes (_, (t1, s1)) (_, (t2, s2)) = s2 == (TScheme { schemeVars = schemeVars s1', schemeType = replaceFix (unFix t1) (unFix t2) (schemeType s1') })
   where s1' = mapVarNames (safeLookup' $ zip (schemeVars s1) (schemeVars s2)) s1
         safeLookup' abs' a = case lookup a abs' of
@@ -224,7 +224,23 @@ areEquivalentNamedTypes (_, (t1, s1)) (_, (t2, s2)) = s2 == (TScheme { schemeVar
 
 getNamedType :: TVarName -> Type -> Infer Type
 getNamedType n t =
-  do typeId <- TypeId <$> fresh
+  do let -- Checks if a given type variable appears in the given type *only* as a parameter to a recursive type name
+         isRecParamOnly TVarName -> Bool -> Type -> Bool
+         isRecParamOnly n1 isTNameParam t1 =
+           case unFix t1 of
+            TBody (TVar n1') -> if n1' == n1 then isTNameParam else True
+            TBody _ -> True
+            TCons (TName _) subTs -> all (isRecParamOnly n1 True) subTs
+            TCons _ subTs -> all (isRecParamOnly n1 False) subTs
+            TRow rlist -> isRecParamRecList n1 rlist
+              where isRecParamRecList n' rlist' =
+                      case rlist' of
+                       TRowEnd _ -> True
+                       TRowProp _ t' rlist'' -> (isRecParamOnly n False t') && (isRecParamRecList n' rlist'')
+
+     traceLog ("isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ (show $ isRecParamOnly n False t)) ()
+
+     typeId <- TypeId <$> fresh
      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          target = replaceFix (TBody (TVar n)) namedType t
      scheme <- generalize Map.empty target
@@ -381,7 +397,7 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 -- :}
 -- "{x: <Named Type: mu 'B'. b>, ..b}"
 --
--- Unifying a rolled recursive type with its unrolling:
+-- Unifying a rolled recursive type with its (unequal) unrolling should yield a null subst:
 --
 -- >>> :{
 -- runInfer $ do
