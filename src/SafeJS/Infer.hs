@@ -231,7 +231,7 @@ isRecParamOnly n1 typeId t1 =
   case unFix t1 of
    TBody (TVar n1') -> if n1' == n1 then sequence [typeId] else Just []
    TBody _ -> Just []
-   TCons (TName typeId') subTs -> msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [1..]
+   TCons (TName typeId') subTs -> msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
    TRow rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
@@ -274,14 +274,18 @@ resolveSimpleMutualRecursion :: TVarName -> Type -> TypeId -> Int -> Infer Type
 resolveSimpleMutualRecursion n t tid ix =
   do (Fix (TCons (TName _) ts), scheme) <- (Map.lookup tid . namedTypes <$> get) `failWithM` error "oh no." -- TODO
      newTypeId <- TypeId <$> fresh
-     let updatedScheme = TScheme qVars' sType'
-         qVars' = dropAt ix $ schemeVars scheme
+     let qVars' = dropAt ix $ schemeVars scheme
          sType' = replaceRecType tid newTypeId ix $ schemeType scheme
          newTs = dropAt ix $ ts
          newNamedType = Fix (TCons (TName newTypeId) newTs)
+         --updatedNamedType = Fix (TCons (TName tid) newTs)
+         updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars' sType'
+         
      addNamedType newTypeId newNamedType updatedScheme
+     -- TODO: we could alternatively update the existing named type, but that will break it's schema (will now take less params?)
+     --addNamedType tid updatedNamedType updatedScheme
      --return newNamedType -- TODO: Wrong! Should return 't' with some substitution applied
-     error "Mutually recursive types"
+     error "Mutually recursive types (not implemented completely)"
      
 getNamedType :: TVarName -> Type -> Infer Type
 getNamedType n t =
