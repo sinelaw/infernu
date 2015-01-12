@@ -17,14 +17,14 @@ module SafeJS.Infer
     where
 
 import           Data.Monoid                (Monoid(..))
-import           Control.Monad              (foldM, forM, forM_)
+import           Control.Monad              (foldM, forM, forM_, liftM2)
 --import           Control.Monad.State (State, evalState, get, modify)
 import           Control.Monad.Trans        (lift)
 -- Use Control.Monad.Trans.Except
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get,
                                              modify)
-import           Data.Foldable              (Foldable (..))
+import           Data.Foldable              (Foldable (..), msum)
 import           Data.Traversable              (Traversable (..))
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
@@ -33,7 +33,7 @@ import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe, mapMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
-import           Prelude                    hiding (foldr)
+import           Prelude                    hiding (foldr, sequence)
 import qualified Text.Parsec.Pos            as Pos
 
 #ifdef QUICKCHECK
@@ -214,7 +214,8 @@ addNamedType tid t scheme = do
   modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
   return ()
 
--- Should ignore typeids and compare only schemes up to alpha equivalence including named type constructors equivalence (TCons TName...).
+-- Should ignore typeids and compare only schemes up to alpha equivalence including named type
+-- constructors equivalence (TCons TName...).
 areEquivalentNamedTypes :: (TypeId, (Type, TScheme)) -> (TypeId, (Type, TScheme)) -> Bool
 areEquivalentNamedTypes (_, (t1, s1)) (_, (t2, s2)) = s2 == (TScheme { schemeVars = schemeVars s1', schemeType = replaceFix (unFix t1) (unFix t2) (schemeType s1') })
   where s1' = mapVarNames (safeLookup' $ zip (schemeVars s1) (schemeVars s2)) s1
@@ -222,25 +223,44 @@ areEquivalentNamedTypes (_, (t1, s1)) (_, (t2, s2)) = s2 == (TScheme { schemeVar
           Nothing -> a
           Just b -> b
 
-getNamedType :: TVarName -> Type -> Infer Type
-getNamedType n t =
-  do let -- Checks if a given type variable appears in the given type *only* as a parameter to a recursive type name
-         isRecParamOnly TVarName -> Bool -> Type -> Bool
-         isRecParamOnly n1 isTNameParam t1 =
-           case unFix t1 of
-            TBody (TVar n1') -> if n1' == n1 then isTNameParam else True
-            TBody _ -> True
-            TCons (TName _) subTs -> all (isRecParamOnly n1 True) subTs
-            TCons _ subTs -> all (isRecParamOnly n1 False) subTs
-            TRow rlist -> isRecParamRecList n1 rlist
-              where isRecParamRecList n' rlist' =
-                      case rlist' of
-                       TRowEnd _ -> True
-                       TRowProp _ t' rlist'' -> (isRecParamOnly n False t') && (isRecParamRecList n' rlist'')
+-- Checks if a given type variable appears in the given type *only* as a parameter to a recursive
+-- type name.  If yes, returns the name of recursive types (and position within) in which it
+-- appears; otherwise returns Nothing.
+isRecParamOnly :: TVarName -> Maybe (TypeId, Int) -> Type -> Maybe [(TypeId, Int)]
+isRecParamOnly n1 typeId t1 =
+  case unFix t1 of
+   TBody (TVar n1') -> if n1' == n1 then sequence [typeId] else Just []
+   TBody _ -> Just []
+   TCons (TName typeId') subTs -> msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [1..]
+   TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
+   TRow rlist -> isRecParamRecList n1 rlist
+     where isRecParamRecList n' rlist' =
+             case rlist' of
+              TRowEnd _ -> Just []
+              TRowProp _ t' rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing t') (isRecParamRecList n' rlist'')
 
-     traceLog ("isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ (show $ isRecParamOnly n False t)) ()
+dropAt i' [] = []
+dropAt 0 (x:xs) = xs
+dropAt n (x:xs) = dropAt (n-1) xs
 
-     typeId <- TypeId <$> fresh
+replaceRecType :: TypeId -> TypeId -> Int -> Type -> Type
+replaceRecType typeId newTypeId indexToDrop t1 =
+  case unFix t1 of
+   TBody _ -> t1
+   TCons (TName typeId') subTs -> if typeId == typeId'
+                                  then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
+                                  else t1
+   TCons n subTs -> Fix $ TCons n $ map (replaceRecType typeId newTypeId indexToDrop) subTs
+   TRow rlist -> Fix $ TRow $ go rlist
+     where go rlist' =
+             case rlist' of
+              TRowEnd _ -> rlist'
+              TRowProp p t' rlist'' -> TRowProp p (replaceRecType typeId newTypeId indexToDrop t') (go rlist'')
+
+
+allocNamedType :: TVarName -> Type -> Infer Type
+allocNamedType n t =
+  do typeId <- TypeId <$> fresh
      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          target = replaceFix (TBody (TVar n)) namedType t
      scheme <- generalize Map.empty target
@@ -250,8 +270,32 @@ getNamedType n t =
                return $ Fix namedType
       ((_, (otherNT, _)):_) -> return otherNT
 
+resolveSimpleMutualRecursion :: TVarName -> Type -> TypeId -> Int -> Infer Type
+resolveSimpleMutualRecursion n t tid ix =
+  do (Fix (TCons (TName _) ts), scheme) <- (Map.lookup tid . namedTypes <$> get) `failWithM` error "oh no." -- TODO
+     newTypeId <- TypeId <$> fresh
+     let updatedScheme = TScheme qVars' sType'
+         qVars' = dropAt ix $ schemeVars scheme
+         sType' = replaceRecType tid newTypeId ix $ schemeType scheme
+         newTs = dropAt ix $ ts
+         newNamedType = Fix (TCons (TName newTypeId) newTs)
+     addNamedType newTypeId newNamedType updatedScheme
+     --return newNamedType -- TODO: Wrong! Should return 't' with some substitution applied
+     error "Mutually recursive types"
+     
+getNamedType :: TVarName -> Type -> Infer Type
+getNamedType n t =
+  do let recTypeParamPos = isRecParamOnly n Nothing t
+     traceLog ("isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ (show $ fmap pretty $ recTypeParamPos)) ()
+     case recTypeParamPos of
+      Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
+      -- either the variable appears outside a recursive type's type parameter list, or it appears
+      -- in more than one such position:
+      _ -> allocNamedType n t 
+
 -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
--- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh type variables.
+-- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh
+-- type variables.
 unrollName :: Pos.SourcePos -> TypeId -> [Type] -> Infer Type
 unrollName a tid ts =
   do (TScheme qvars t) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
