@@ -25,6 +25,7 @@ module SafeJS.Types
        , RowTVar(..)
        , getRowTVar
        , liftRowTVar
+       , FlatRowEnd(..)
        , TRowList(..)
        , TScheme(..)
        , TypeEnv
@@ -103,6 +104,7 @@ liftRowTVar f (RowTVar x) = RowTVar (f x)
 -- | Row type.
 data TRowList t = TRowProp EPropName t (TRowList t)
                 | TRowEnd (Maybe RowTVar)
+                | TRowRec TypeId [t]
                   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 data FType t = TBody TBody
@@ -186,9 +188,11 @@ instance VarNames t => VarNames (TRowList t) where
   freeTypeVars (TRowEnd (Just (RowTVar n))) = Set.singleton n
   freeTypeVars (TRowEnd _) = Set.empty
   freeTypeVars (TRowProp _ t r) = Set.union (freeTypeVars t) (freeTypeVars r)
+  freeTypeVars (TRowRec _ ts) = foldr (Set.union . freeTypeVars) Set.empty ts
 
   mapVarNames f (TRowEnd n) = TRowEnd $ fmap (liftRowTVar f) n
   mapVarNames f (TRowProp n t r) = TRowProp n (mapVarNames f t) (mapVarNames f r)
+  mapVarNames f (TRowRec tid ts) = TRowRec tid (mapVarNames f ts)
 
 -- | VarNames instance for Type t
 --
@@ -282,14 +286,20 @@ instance Substable Type where
 sortRow :: TRowList t -> TRowList t
 sortRow row = row -- TODO implement
 
-flattenRow :: TRowList t -> (Map.Map EPropName t, Maybe RowTVar)
-flattenRow = flattenRow' (Map.empty, Nothing)
-    where flattenRow' :: (Map.Map EPropName t, Maybe RowTVar) -> TRowList t -> (Map.Map EPropName t, Maybe RowTVar)
-          flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
-          flattenRow' (m,_) (TRowEnd r') = (m, r')
+data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) | FlatRowEndRec TypeId [t]
 
-unflattenRow :: Map.Map EPropName t -> Maybe RowTVar -> (EPropName -> Bool) -> TRowList t
-unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) (TRowEnd r) m
+flattenRow :: TRowList t -> (Map.Map EPropName t, FlatRowEnd t)
+flattenRow = flattenRow' (Map.empty, FlatRowEndTVar Nothing)
+    where flattenRow' :: (Map.Map EPropName t, FlatRowEnd t) -> TRowList t -> (Map.Map EPropName t, FlatRowEnd t)
+          flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
+          flattenRow' (m,_) (TRowEnd r') = (m, FlatRowEndTVar r')
+          flattenRow' (m,_) (TRowRec tid ts) = (m, FlatRowEndRec tid ts)
+
+unflattenRow :: Map.Map EPropName t -> FlatRowEnd t -> (EPropName -> Bool) -> TRowList t
+unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) rend m
+  where rend = case r of
+          FlatRowEndTVar r' -> TRowEnd r'
+          FlatRowEndRec tid ts -> TRowRec tid ts
 
 instance Substable (TRowList Type) where
   applySubst s (TRowProp propName propType rest) = sortRow $ TRowProp propName (applySubst s propType) (applySubst s rest)
@@ -297,10 +307,9 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow tRowList)) -> tRowList
-      -- UGLY HACK! REMOVE THIS, IT'S WRONG
-      Just (Fix (TCons (TName (TypeId n)) _)) -> TRowEnd (Just $ RowTVar n)
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
+  applySubst s (TRowRec tid ts) = TRowRec tid $ applySubst s ts
 
 ----------------------------------------------------------------------
 

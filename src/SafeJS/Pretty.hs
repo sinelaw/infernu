@@ -116,7 +116,10 @@ instance Pretty t => Pretty (FType t) where
   prettyTab n (TCons (TName name) ts) = "<Named Type: mu '" ++ pretty name ++ "'. " ++ (unwords $ map (prettyTab n) ts) ++ ">"
   prettyTab t (TRow list) = "{"
                             ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))
-                            ++ maybe "" ((", "++) . pretty) r
+                            ++ (case r of
+                                 FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
+                                 FlatRowEndRec tid ts -> ", " ++ pretty (TCons (TName tid) ts) -- TODO 
+                               )
                             ++ "}"
     where (props, r) = flattenRow list
 

@@ -239,9 +239,10 @@ isRecParamOnly n1 typeId t1 =
               TRowEnd _ -> Just []
               TRowProp _ t' rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing t') (isRecParamRecList n' rlist'')
 
-dropAt i' [] = []
-dropAt 0 (x:xs) = xs
-dropAt n (x:xs) = dropAt (n-1) xs
+dropAt :: Integral a => a -> [b] -> [b]
+dropAt _ [] = []
+dropAt 0 (_:xs) = xs
+dropAt n (_:xs) = dropAt (n-1) xs
 
 replaceRecType :: TypeId -> TypeId -> Int -> Type -> Type
 replaceRecType typeId newTypeId indexToDrop t1 =
@@ -275,7 +276,8 @@ resolveSimpleMutualRecursion n t tid ix =
   do (Fix (TCons (TName _) ts), scheme) <- (Map.lookup tid . namedTypes <$> get) `failWithM` error "oh no." -- TODO
      newTypeId <- TypeId <$> fresh
      let qVars' = dropAt ix $ schemeVars scheme
-         sType' = replaceRecType tid newTypeId ix $ schemeType scheme
+         replaceOldNamedType = replaceRecType tid newTypeId ix
+         sType' = replaceOldNamedType $ schemeType scheme
          newTs = dropAt ix $ ts
          newNamedType = Fix (TCons (TName newTypeId) newTs)
          --updatedNamedType = Fix (TCons (TName tid) newTs)
@@ -284,8 +286,8 @@ resolveSimpleMutualRecursion n t tid ix =
      addNamedType newTypeId newNamedType updatedScheme
      -- TODO: we could alternatively update the existing named type, but that will break it's schema (will now take less params?)
      --addNamedType tid updatedNamedType updatedScheme
-     --return newNamedType -- TODO: Wrong! Should return 't' with some substitution applied
-     error "Mutually recursive types (not implemented completely)"
+     return $ replaceOldNamedType t
+     
      
 getNamedType :: TVarName -> Type -> Infer Type
 getNamedType n t =
@@ -553,18 +555,21 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> RowTVar -> TSubst
                -> (x, Set EPropName, Map EPropName (Type))
-               -> (x, Set EPropName, Maybe RowTVar)
+               -> (x, Set EPropName, FlatRowEnd Type)
                -> Infer TSubst
 unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
-           rowTail = fmap (const r) r2
+           rowTail = case r2 of
+                      FlatRowEndTVar (Just _) -> FlatRowEndTVar $ Just r
+                      _ -> r2
+--                                              fmap (const r) r2
            in1NotIn2row = tracePretty "in1NotIn2row" $ applySubst s1 . Fix . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
 
        case r2 of
-         Nothing -> if Set.null in1NotIn2
+         FlatRowEndTVar Nothing -> if Set.null in1NotIn2
                     then varBind a (getRowTVar r) (Fix $ TRow $ TRowEnd Nothing)
                     else unificationError a t1 t2
-         Just r2' -> recurse a (in1NotIn2row) (applySubst s1 $ Fix . TBody . TVar $ getRowTVar r2')
+         FlatRowEndTVar (Just r2') -> recurse a (in1NotIn2row) (applySubst s1 $ Fix . TBody . TVar $ getRowTVar r2')
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Pos.SourcePos -> TSubst -> [(Type, Type)] -> Infer TSubst
@@ -605,6 +610,8 @@ varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
               | isInsideRowType n t =
                   do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t) ()
                      namedType <- getNamedType n t
+                     -- let (TCons (TName n1) targs1) = unFix namedType
+                     -- t' <- unrollName a n1 targs1
                      return $ singletonSubst n namedType
               | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
               | otherwise = return $ singletonSubst n t
