@@ -511,8 +511,8 @@ unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> I
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' _ a (TBody x) (TBody y) = if x == y
-                                       then return nullSubst
-                                       else unificationError a x y
+                                 then return nullSubst
+                                 else unificationError a x y
 unify' recurse a (TCons (TName n1) targs1) (TCons (TName n2) targs2) =
   do if n1 == n2
      then return nullSubst
@@ -521,10 +521,11 @@ unify' recurse a (TCons (TName n1) targs1) (TCons (TName n2) targs2) =
           t1' <- unroll' n1 targs1
           t2' <- unroll' n2 targs2
           recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
-unify' recurse a (TCons (TName n1) targs1) t2 =
+unify' recurse a t1@(TCons (TName n1) targs1) t2 =
   do t1' <- unrollName a n1 targs1
+     traceLog ("unrolled: " ++ pretty t1 ++ " ==> " ++ pretty t1' ++ " for unification with ~ " ++ pretty t2) ()
      recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
-unify' recurse a t1 t2@(TCons (TName _) []) = recurse a (Fix t2) (Fix t1)
+unify' recurse a t1 t2@(TCons (TName _) _) = recurse a (Fix t2) (Fix t1)
 
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
@@ -654,6 +655,7 @@ isExpansive (ENew _ _ _) = True
 closeRowList :: TRowList Type -> TRowList Type
 closeRowList (TRowProp n t rest) = TRowProp n t (closeRowList rest)
 closeRowList (TRowEnd _) = TRowEnd Nothing
+-- TODO: Handle TRowRec, by defining a new named type in which all row types within are closed (recursively).
 
 -- | Replaces a top-level open row type with the closed equivalent.
 -- >>> closeRow (Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
