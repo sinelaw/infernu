@@ -303,21 +303,19 @@ getNamedType n t =
       -- in more than one such position:
       _ -> allocNamedType n t 
 
+
+unrollNameByScheme :: [Type] -> [TVarName] -> Type -> Type
+unrollNameByScheme ts qvars t = applySubst subst t
+  where assocs = zip qvars ts
+        subst = foldr (\(tvar,destType) s -> singletonSubst tvar destType `composeSubst` s) nullSubst assocs
+
 -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
 -- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh
 -- type variables.
 unrollName :: Pos.SourcePos -> TypeId -> [Type] -> Infer Type
 unrollName a tid ts =
   do (TScheme qvars t) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
-     let assocs = zip (map (Fix . TBody . TVar) qvars) ts
-         tryLookup :: Eq a => [(a, a)] -> a -> a
-         tryLookup pairs x = case lookup x pairs of
-                              Nothing -> x
-                              Just y -> y
-         replace' :: Type -> Type
-         replace' = tryLookup assocs
-     return $ Fix $ fmap replace' (unFix t)
-
+     return $ unrollNameByScheme ts qvars t
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
 -- >>> :{

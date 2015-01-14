@@ -308,6 +308,7 @@ instance Substable (TRowList Type) where
       Nothing -> t
       Just (Fix (TRow tRowList)) -> tRowList
       Just (Fix (TCons (TName tid) ts)) -> TRowRec tid ts
+      Just (Fix (TBody (TVar n))) -> TRowEnd $ Just $ RowTVar n
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
   applySubst s (TRowRec tid ts) = TRowRec tid $ applySubst s ts
