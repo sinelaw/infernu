@@ -307,6 +307,7 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow tRowList)) -> tRowList
+      Just (Fix (TCons (TName tid) ts)) -> TRowRec tid ts
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
   applySubst s (TRowRec tid ts) = TRowRec tid $ applySubst s ts

@@ -570,6 +570,7 @@ unifyRows recurse a r s1 (t1, names1, m1) (t2, names2, r2) =
                     then varBind a (getRowTVar r) (Fix $ TRow $ TRowEnd Nothing)
                     else unificationError a t1 t2
          FlatRowEndTVar (Just r2') -> recurse a (in1NotIn2row) (applySubst s1 $ Fix . TBody . TVar $ getRowTVar r2')
+         FlatRowEndRec tid ts -> recurse a (in1NotIn2row) (applySubst s1 $ Fix $ TCons (TName tid) ts)
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Pos.SourcePos -> TSubst -> [(Type, Type)] -> Infer TSubst
