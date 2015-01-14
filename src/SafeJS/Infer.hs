@@ -231,13 +231,15 @@ isRecParamOnly n1 typeId t1 =
   case unFix t1 of
    TBody (TVar n1') -> if n1' == n1 then sequence [typeId] else Just []
    TBody _ -> Just []
-   TCons (TName typeId') subTs -> msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
+   TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
    TRow rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
              case rlist' of
               TRowEnd _ -> Just []
               TRowProp _ t' rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing t') (isRecParamRecList n' rlist'')
+              TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
+  where recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
 
 dropAt :: Integral a => a -> [b] -> [b]
 dropAt _ [] = []
@@ -257,7 +259,9 @@ replaceRecType typeId newTypeId indexToDrop t1 =
              case rlist' of
               TRowEnd _ -> rlist'
               TRowProp p t' rlist'' -> TRowProp p (replaceRecType typeId newTypeId indexToDrop t') (go rlist'')
-
+              TRowRec tid ts -> if typeId == tid
+                                then TRowRec newTypeId $ dropAt indexToDrop ts
+                                else rlist'
 
 allocNamedType :: TVarName -> Type -> Infer Type
 allocNamedType n t =
@@ -504,9 +508,9 @@ unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ "
   where [a, b] = minifyVars [x, y]
 
 unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer TSubst
-unify' recurse a (TBody (TVar n)) t = varBind a n (Fix t)
-unify' recurse a t (TBody (TVar n)) = varBind a n (Fix t)
-unify' recurse a (TBody x) (TBody y) = if x == y
+unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
+unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
+unify' _ a (TBody x) (TBody y) = if x == y
                                        then return nullSubst
                                        else unificationError a x y
 unify' recurse a (TCons (TName n1) targs1) (TCons (TName n2) targs2) =
@@ -522,16 +526,16 @@ unify' recurse a (TCons (TName n1) targs1) t2 =
      recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
 unify' recurse a t1 t2@(TCons (TName _) []) = recurse a (Fix t2) (Fix t1)
 
-unify' recurse a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
+unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then fmap (tracePretty ("unified TCons's (" ++ show n1 ++ "): ")) <$> unifyl recurse a nullSubst $ zip ts1 ts2
     else unificationError a t1 t2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
-unify' recurse a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
-unify' recurse a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
-unify' recurse a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
-unify' recurse a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
+unify' _ a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
+unify' _ a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
+unify' _ a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
+unify' _ a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
 -- TODO: un-hackify!
 unify' recurse a t1@(TRow row1) t2@(TRow row2) =
   if t1 == t2
