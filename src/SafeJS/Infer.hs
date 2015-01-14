@@ -496,7 +496,9 @@ unify :: UnifyF
 unify = decycle3 unify''
 
 unify'' :: Maybe UnifyF -> UnifyF
-unify'' Nothing _ _ _ = return nullSubst
+unify'' Nothing _ t1 t2 =
+  do traceLog ("breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
+     return nullSubst
 unify'' (Just recurse) a t1 t2 =
   do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
      tr' <$> unify' recurse a (unFix t1) (unFix t2)
@@ -618,7 +620,7 @@ varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
                      -- let (TCons (TName n1) targs1) = unFix namedType
                      -- t' <- unrollName a n1 targs1
                      return $ singletonSubst n namedType
-              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
+              | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t in throwError a $ "Occurs check failed: " ++ pretty (f n) ++ " in " ++ pretty (mapVarNames f t)
               | otherwise = return $ singletonSubst n t
 
 -- | Drops the last element of a list. Does not entail an O(n) price.
@@ -881,7 +883,7 @@ unifyAllInstances a s tvs = do
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName
 minifyVarsFunc xs n = fromMaybe n $ Map.lookup n vars
-  where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) ([1..] :: [TVarName])
+  where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) ([0..] :: [TVarName])
 
 minifyVars :: (VarNames a) => a -> a
 minifyVars xs = mapVarNames (minifyVarsFunc xs) xs
@@ -994,10 +996,10 @@ typeInference builtins e = do
 -- "<dummy>:1:1: Error: Occurs check failed: a in (this: a -> b)"
 --
 -- >>> test $ fun ["m"] (let' "y" (var "m") (let' "x" (app (var "y") (lit (LitBoolean True))) (var "x")))
--- "((this: TBoolean -> a) -> a)"
+-- "(this: (this: TBoolean -> a) -> a)"
 --
 -- >>> test $ app (lit (LitNumber 2)) (lit (LitNumber 2))
--- "<dummy>:1:1: Error: Could not unify: TNumber with (TNumber -> a)"
+-- "<dummy>:1:1: Error: Could not unify: TNumber with (this: TNumber -> a)"
 --
 -- EAssign tests
 -- >>> test $ let' "x" (fun ["y"] (lit (LitNumber 0))) (assign "x" (fun ["y"] (var "y")) (var "x"))
@@ -1013,7 +1015,7 @@ typeInference builtins e = do
 -- "(this: b -> b)"
 --
 -- >>> test $ let' "x" (fun ["a"] (var "a")) (let' "getX" (fun ["v"] (var "x")) (let' "setX" (fun ["v"] (let' "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean True)))) (let' "_" (app (var "setX") (fun ["a"] (lit (LitString "a")))) (var "getX"))))
--- "(this: b -> (TString -> TString))"
+-- "(this: b -> (this: TString -> TString))"
 test :: Exp Pos.SourcePos -> String
 test e = case runTypeInference e of
           Left err -> pretty err
