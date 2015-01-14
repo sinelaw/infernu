@@ -1,6 +1,7 @@
 // FAIL valid/map.js:5:13: Error: Could not unify: [b] with {push: d, ..c} y valid/map.js
 // FAIL valid/method-as-func.js:5:3: Error: Could not unify: {method: (this: <Named Type: mu Ck. > -> TNumber)} with TUndefined y valid/method-as-func.js
 // FAIL valid/object-chaining-long.js:1:68: Error: Could not unify: (this: {method: <Named Type: mu Qg. d>, ..d} -> <Named Type: mu Qg. d>) with {method: <Named Type: mu Pi. b c>, ..c} y valid/object-chaining-long.js
+// FAIL valid/object-chaining-triple.js:1:68: Error: Could not unify: (this: {method: <Named Type: mu Cn. d>, ..d} -> <Named Type: mu Cn. d>) with {method: <Named Type: mu Bp. b c>, ..c} y valid/object-chaining-triple.js
 // FAIL valid/promise.js:33:31: Error: Could not unify: {resolve: <Named Type: mu Hg. b c d>, ..d} with TUndefined y valid/promise.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
 // FAIL valid/var-poly.js:6:4: Error: Could not unify: [d] with {o: b, ..c} y valid/var-poly.js

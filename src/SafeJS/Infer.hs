@@ -526,7 +526,6 @@ unify' recurse a t1@(TCons (TName n1) targs1) t2 =
      traceLog ("unrolled: " ++ pretty t1 ++ " ==> " ++ pretty t1' ++ " for unification with ~ " ++ pretty t2) ()
      recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
 unify' recurse a t1 t2@(TCons (TName _) _) = recurse a (Fix t2) (Fix t1)
-
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
