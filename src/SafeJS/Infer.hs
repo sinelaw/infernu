@@ -214,14 +214,27 @@ addNamedType tid t scheme = do
   modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
   return ()
 
--- Should ignore typeids and compare only schemes up to alpha equivalence including named type
--- constructors equivalence (TCons TName...).
-areEquivalentNamedTypes :: (TypeId, (Type, TScheme)) -> (TypeId, (Type, TScheme)) -> Bool
-areEquivalentNamedTypes (_, (t1, s1)) (_, (t2, s2)) = s2 == (TScheme { schemeVars = schemeVars s1', schemeType = replaceFix (unFix t1) (unFix t2) (schemeType s1') })
-  where s1' = mapVarNames (safeLookup' $ zip (schemeVars s1) (schemeVars s2)) s1
-        safeLookup' abs' a = case lookup a abs' of
-          Nothing -> a
-          Just b -> b
+-- | Compares schemes up to alpha equivalence including named type constructors equivalence (TCons
+-- TName...).
+-- 
+-- >>> let mkNamedType tid ts = Fix $ TCons (TName (TypeId tid)) ts
+--  
+-- >>> areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (mkNamedType 0 [])) (mkNamedType 1 [], TScheme [] (mkNamedType 1 []))
+-- True
+-- >>> :{
+--     areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 0 []]))
+--                             (mkNamedType 1 [], TScheme [] (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 1 []]))
+-- :}
+-- True
+--  
+-- >>> :{
+--     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (Fix $ TCons TFunc [Fix $ TBody $ TVar 10, mkNamedType 0 [Fix $ TBody $ TVar 10]]))
+--                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (Fix $ TCons TFunc [Fix $ TBody $ TVar 11, mkNamedType 1 [Fix $ TBody $ TVar 11]]))
+-- :}
+-- True
+areEquivalentNamedTypes :: (Type, TScheme) -> (Type, TScheme) -> Bool
+areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = replaceFix (unFix t1) (unFix t2) $ applySubst subst $ schemeType s1 })
+  where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
 
 -- Checks if a given type variable appears in the given type *only* as a parameter to a recursive
 -- type name.  If yes, returns the name of recursive types (and position within) in which it
@@ -269,11 +282,11 @@ allocNamedType n t =
      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          target = replaceFix (TBody (TVar n)) namedType t
      scheme <- generalize Map.empty target
-     currentNamedTypes <- filter (areEquivalentNamedTypes (typeId, (Fix namedType, scheme))) . Map.toList . namedTypes <$> get
+     currentNamedTypes <- filter (areEquivalentNamedTypes (Fix namedType, scheme)) . map snd . Map.toList . namedTypes <$> get
      case currentNamedTypes of
       [] -> do addNamedType typeId (Fix namedType) scheme
                return $ Fix namedType
-      ((_, (otherNT, _)):_) -> return otherNT
+      (otherNT, _):_ -> return otherNT
 
 resolveSimpleMutualRecursion :: TVarName -> Type -> TypeId -> Int -> Infer Type
 resolveSimpleMutualRecursion n t tid ix =
