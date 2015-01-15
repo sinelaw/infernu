@@ -3,4 +3,3 @@
 // FAIL valid/promise.js:33:31: Error: Could not unify: {resolve: <Named Type: mu Hg. a b c>, ..c} with TUndefined y valid/promise.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
 // FAIL valid/var-poly.js:6:4: Error: Could not unify: [c] with {o: a, ..b} y valid/var-poly.js
-// FAIL  n invalid/object-chaining.js
