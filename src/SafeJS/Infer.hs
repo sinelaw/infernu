@@ -233,7 +233,7 @@ addNamedType tid t scheme = do
 -- :}
 -- True
 areEquivalentNamedTypes :: (Type, TScheme) -> (Type, TScheme) -> Bool
-areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = replaceFix (unFix t1) (unFix t2) $ applySubst subst $ schemeType s1 })
+areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = applySubst subst $ replaceFix (unFix t1) (unFix t2) $ schemeType s1 })
   where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
 
 -- Checks if a given type variable appears in the given type *only* as a parameter to a recursive
