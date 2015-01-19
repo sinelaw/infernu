@@ -2,11 +2,11 @@
 
 A type inference and checker for JavaScript.
 
-This project is an ongoing effort to produce a practical tool for statically verifying JavaScript code. The type system is designed to support a **safe subset of JS**, not a superset of JS. That is, some otherwise valid JS code will not pass type checking with SJS. The reason for not allowing the dynamic behavior of JS, is to **guarantee more safety** and (as a bonus) allows fully unambiguous type inference.
+This project is an ongoing effort to produce a practical tool for statically verifying JavaScript code. The type system is designed to support a **safe subset of JS**, not a super set of JS. That is, some otherwise valid JS code will not pass type checking with SJS. The reason for not allowing the dynamic behavior of JS, is to **guarantee more safety** and (as a bonus) allows fully unambiguous type inference.
 
 **Features:**
 
-* Full type inference: no type annotations neccessary.
+* Full type inference: no type annotations necessary.
 * Parametric polymorphism (aka "generics"), based on Hindley-Milner type inference.
 * Row-type polymorphism, otherwise known as "static duck typing".
 * Recursive types for true representation of object-oriented methods.
@@ -117,3 +117,8 @@ TODO: More examples
 
 - [ ] type annotations
 - [ ] add support for CommonJS modules
+
+<!--  LocalWords:  SJS JS polymorphism Hindley Milner JS's Equi num arrNums TNumber TString getData
+ -->
+<!--  LocalWords:  useThisData TUndefined unifiable makeData TODO decls paren CommonJS
+ -->
