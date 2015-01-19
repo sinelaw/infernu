@@ -877,10 +877,10 @@ inferType' env (EIndex a eArr eIdx) =
      let s1'' = s1' `composeSubst` s1
      applySubstInfer s1''
      (s2, tId, eIdx') <- inferType env eIdx
-     s2' <- unify a (Fix $ TBody TNumber) tId
+     s2' <- unify a (Fix $ TBody TNumber) (applySubst s1'' tId)
      let s2'' = s2' `composeSubst` s2
      applySubstInfer s2''
-     let elemType' = applySubst s2'' elemType
+     let elemType' = applySubst (s2'' `composeSubst` s1'') elemType
      return (s2'' `composeSubst` s1'', elemType' , EIndex (a, elemType')  eArr' eIdx')
 
 unifyAllInstances :: Pos.SourcePos -> TSubst -> [TVarName] -> Infer TSubst

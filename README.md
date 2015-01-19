@@ -16,6 +16,38 @@ Polymorphism is value restricted, ML-style.
 
 Equi-recursive types are constrained to at least include a row type in the recursion to prevent inference of evil recursive types.
 
+## Example
+
+### Polymorphism
+
+Given the following function:
+
+    function makeData(x) {
+	    return {data: x};
+	}
+
+SJS infer the following type:
+
+    ((this: a, b) -> {data: b})
+
+In words: A function that takes anything for its `this`, and an argument of any type, call it `b`. It returns an object containing a single field, `data` of the same type `b` as the argument.
+
+### Row-type polymorphism (static duck typing)
+
+Given the following function:
+
+    function getData(obj) {
+		return obj.data;
+	}
+
+SJS infers:
+
+    ((this: h, {data: i, ..j}) -> i)
+
+In words: a function taking any type for `this`, and a parameter that contains **at least one property**, named "data" that has some type `i` (could be any type). The function returns the same type `i` as the data property.
+
+TODO: More examples
+
 ------------
 
 ## TODO
