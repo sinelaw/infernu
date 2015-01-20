@@ -1,8 +1,10 @@
-function (x) {  return x; }
+function f1(x) {  return x; }
 function debounce(f) {
     var current = [];
+    var has = false;
     return function(arg) {
-        var old = current.length > 0 ? current[0] : arg;
+        var old = has ? current[0] : arg;
+	has = true;
         current = [arg];
         return f(old);
     };
