@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module SafeJS.Util (checkFiles, annotatedSource) where
+module SafeJS.Util (checkFiles, annotatedSource, checkSource) where
 
 import           Control.Arrow               (second)
 import           Control.Monad               (forM)
@@ -13,7 +13,7 @@ import           SafeJS.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
 import           SafeJS.Infer                (getAnnotations, runTypeInference, minifyVars)
 import           SafeJS.Pretty               (pretty)
-import           SafeJS.Types                (Type, TypeError)
+import           SafeJS.Types                (Type, TypeError(..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -27,6 +27,11 @@ zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
 indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
 
+
+checkSource :: String -> Either TypeError [(Pos.SourcePos, Type)]
+checkSource src = case ES3Parser.parseFromString src of
+                   Left parseError -> Left $ TypeError { source = Pos.initialPos "<global>", message = show parseError }
+                   Right expr -> fmap getAnnotations $ fmap minifyVars $ runTypeInference $ translate $ ES3.unJavaScript expr
 
 checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, Type)])
 checkFiles fileNames = do
