@@ -104,7 +104,7 @@ TODO: More examples
 ## TODO
 
 - [ ] find a new name!
-- [ ] find a way to deal with methods that don't restrict "this" so that they can be calling them without this doesn't restrict them to 'undefined'
+- [ ] find a way to deal with methods that don't restrict "this" so that calling them without this doesn't restrict it to 'undefined'
 - [ ] consider allowing empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
 - [ ] in inferred types, preserve source code context info and use it for more readable unification errors
 - [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...`
