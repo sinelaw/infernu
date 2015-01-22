@@ -109,6 +109,12 @@ TODO: More examples
 - [ ] in inferred types, preserve source code context info and use it for more readable unification errors
 - [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...`
 - [ ] treat arrays and functions as objects with properties
+      Possible implementation: arrays types are divided into two parts: "naked" arrays, and array objects. Accessing an index is done by translating:
+	  arr[i] => arr._naked_array_[i]
+	  arr.length => arr.length
+	  
+      Same for functions (use .call?)
+	  
 - [ ] when concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere)
 - [ ] top-level type of naked object `{a:3}` isn't shown unless it is wrapped in a paren `({a:3})`.
 - [ ] support `arguments`, `call` and `bind`
