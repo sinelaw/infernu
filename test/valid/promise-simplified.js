@@ -1,9 +1,6 @@
-function _push(arr, val) { arr = val; return null; }
-
 function Promise(x) {
-    var _thens = x;
-    _push(_thens, x);
-    _thens = x;
+    var _thens = [];
+    _thens.push(x);
 }; 
 
 var p = Promise(123);

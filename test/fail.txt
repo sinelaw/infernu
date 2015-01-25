@@ -1,4 +1,4 @@
 // FAIL valid/method-as-func.js:5:3: Error: Could not unify: {method: (this: <Named Type: mu Ck. > -> TNumber)} with TUndefined y valid/method-as-func.js
-// FAIL valid/promise.js:33:31: Error: Could not unify: {resolve: <Named Type: mu Hg. a b c>, ..c} with TUndefined y valid/promise.js
+// FAIL valid/promise.js:30:31: Error: Could not unify: {resolve: <Named Type: mu Gd. a b c>, ..c} with TUndefined y valid/promise.js
 // FAIL valid/try.js:4:5: Error: Assertion failed, missing varId for var: "e" y valid/try.js
 // FAIL valid/var-poly.js:6:4: Error: Could not unify: {o: a, ..b} with {concat: ((this: [c], [c]) -> [c]), every: ((this: [c], ((this: TUndefined, TNumber) -> [c])) -> [c]), filter: ((this: [c], ((this: TUndefined, TNumber) -> [c])) -> [c]), indexOf: ((this: [c], c, TNumber) -> TNumber), join: ((this: [c], TString) -> TString), lastIndexOf: ((this: [c], TNumber) -> TNumber), length: TNumber, pop: (this: [c] -> c), push: ((this: [c], c) -> [c])} y valid/var-poly.js

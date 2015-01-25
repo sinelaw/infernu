@@ -1,8 +1,5 @@
 // Based on https://gist.github.com/unscriptable/814052 - (c) copyright unscriptable.com / John Hann, License MIT
 
-function _push(arr, val) { arr[0] = val; } // dummy
-function len(arr) { return 0; }
-
 function Promise () {
     var _thens = [];
     var that = this;
@@ -14,7 +11,7 @@ function Promise () {
     // robust promise implementation will also have an onProgress handler.
     this.then = function (onResolve, onReject) {
         // capture calls to then()
-        _push(_thens, { resolve: onResolve, reject: onReject });
+        _thens.push({ resolve: onResolve, reject: onReject });
     };
     
     /* This is the "back end" API. */
@@ -29,7 +26,7 @@ function Promise () {
         that.then = function(resolve, reject) { resolve(val); };
         that.resolve = errorFunc;
         that.reject = errorFunc;
-        for (i = 0; i < len(_thens); i++) {
+        for (i = 0; i < _thens.length; i++) {
             _thens[i].resolve(val);
         }
         _thens = [];
@@ -46,7 +43,7 @@ function Promise () {
         that.then = function(resolve, reject) { reject(ex); };
         that.resolve = errorFunc;
         that.reject = errorFunc;
-        for (i = 0; i < len(_thens); i++) {
+        for (i = 0; i < _thens.length; i++) {
             _thens[i].reject(ex);
         }
         _thens = [];

@@ -1,10 +1,8 @@
-function _push(arr, val) { arr[0] = val; } // dummy
-
 function Promise() {
     var _thens = [];
     _thens = [];
     this.push = function(x) {
-        _push(_thens, x);
+        _thens.push(x);
     };
 }; 
 
