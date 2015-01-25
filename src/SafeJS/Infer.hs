@@ -43,6 +43,7 @@ import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary  (Arbitrary (..))
 #endif
 
+import           SafeJS.BuiltinArray ( arrayRowType)
 import           SafeJS.Pretty
 import           SafeJS.Types
 import qualified SafeJS.Builtins            as Builtins
@@ -545,9 +546,12 @@ unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then fmap (tracePretty ("unified TCons's (" ++ show n1 ++ "): ")) <$> unifyl recurse a nullSubst $ zip ts1 ts2
     else unificationError a t1 t2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
-unify' _ a t1@(TRow _)    t2@(TCons _ _) = unificationError a t1 t2
+unify' r a t1@(TRow _)    t2@(TCons _ _) =
+  case tryMakeRow t2 of
+   Nothing -> unificationError a t1 t2
+   Just rowType -> unify' r a t1 (TRow rowType)
+unify' r a t1@(TCons _ _) t2@(TRow _)    = unify' r a t2 t1
 unify' _ a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
-unify' _ a t1@(TCons _ _) t2@(TRow _)    = unificationError a t1 t2
 unify' _ a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
 -- TODO: un-hackify!
 unify' recurse a t1@(TRow row1) t2@(TRow row2) =
@@ -644,6 +648,16 @@ dropLast (x:xs) = x : dropLast xs
 
 unifyAll :: Pos.SourcePos -> TSubst -> [Type] -> Infer TSubst
 unifyAll a s ts = unifyl unify a s $ zip (dropLast ts) (drop 1 ts)
+
+----------------------------------------------------------------------
+
+tryMakeRow :: FType Type -> Maybe (TRowList Type)
+tryMakeRow (TCons TArray [t]) = Just $ arrayRowType t
+tryMakeRow _ = Nothing
+
+
+
+----------------------------------------------------------------------
 
 
 isExpansive :: Exp a -> Bool

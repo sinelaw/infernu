@@ -23,7 +23,14 @@ flag trace
 
 library
   hs-source-dirs:      src
-  exposed-modules:     SafeJS.Infer, SafeJS.Parse, SafeJS.Util, SafeJS.Pretty, SafeJS.Types, SafeJS.Builtins, SafeJS.Decycle
+  exposed-modules:     SafeJS.Infer
+                     , SafeJS.Parse
+                     , SafeJS.Util
+                     , SafeJS.Pretty
+                     , SafeJS.Types
+                     , SafeJS.Builtins
+                     , SafeJS.BuiltinArray
+                     , SafeJS.Decycle
   -- TODO: use only mtl (not transformers)
   build-depends:       base, mtl, containers, transformers, either, language-ecmascript, digits, parsec
   default-language:    Haskell2010

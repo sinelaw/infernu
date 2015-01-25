@@ -108,6 +108,7 @@ TODO: More examples
 - [ ] consider allowing empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
 - [ ] in inferred types, preserve source code context info and use it for more readable unification errors
 - [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...`
+- [ ] deal with polymorphic object properties (e.g. array.map)
 - [ ] treat arrays and functions as objects with properties
       Possible implementation: arrays types are divided into two parts: "naked" arrays, and array objects. Accessing an index is done by translating:
 	  arr[i] => arr._naked_array_[i]
