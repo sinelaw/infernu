@@ -37,8 +37,8 @@ arrayProps elemType = let aType = array elemType in
   , ("join", func aType string string)
   , ("lastIndexOf", func aType number number)
 --  , "map" -- requires type variables, and maybe foralls on row properties
-  , ("pop", Fix $ TCons TFunc [aType, elemType])
-  , ("push", func aType elemType aType)
+  , ("pop", funcN [aType, elemType])
+  , ("push", funcN [aType, elemType, number])
   , ("reverse", funcN [aType, aType])
   , ("shift", funcN [aType, elemType])
   , ("slice", funcN [aType, number, number, aType])
