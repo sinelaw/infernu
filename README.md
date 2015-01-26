@@ -105,12 +105,11 @@ TODO: More examples
 
 - [ ] find a new name!
 - [ ] find a way to deal with methods that don't restrict "this" so that calling them without this doesn't restrict it to 'undefined'
-- [ ] consider allowing empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
+- [ ] allow empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
 - [ ] in inferred types, preserve source code context info and use it for more readable unification errors
 - [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...`
-- [ ] deal with polymorphic object properties (e.g. array.map)
-- [x] treat arrays as objects with properties
-- [ ] treat functions as objects with properties
+- [ ] deal with polymorphic object properties (e.g. array.map) - may require rank-n polymorphism or type scheme subtyping
+- [ ] treat functions as objects with properties - or should we? the only properties they have are: length (very weird! we might as well leave it out), and call/bind/apply (which need special handling)
 - [ ] when concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere)
 - [ ] top-level type of naked object `{a:3}` isn't shown unless it is wrapped in a paren `({a:3})`.
 - [ ] support `arguments`, `call` and `bind`
