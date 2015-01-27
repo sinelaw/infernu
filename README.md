@@ -1,4 +1,6 @@
-# SJS, for Safe JavaScript
+# Inferno, type inference and checking for JavaScript
+
+(Formerly known as Safe JS / SJS)
 
 A type inference and checker for JavaScript.
 
