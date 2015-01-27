@@ -1,1 +1,1 @@
-doctest  src/SafeJS/*.hs
+find src -iname "*.hs" | xargs doctest  

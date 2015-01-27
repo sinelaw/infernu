@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections   #-}
 {-# LANGUAGE BangPatterns    #-}
 
-module SafeJS.Infer
+module Inferno.Infer
     ( runTypeInference
     , test
     , Pretty(..)
@@ -43,11 +43,11 @@ import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary  (Arbitrary (..))
 #endif
 
-import           SafeJS.BuiltinArray ( arrayRowType)
-import           SafeJS.Pretty
-import           SafeJS.Types
-import qualified SafeJS.Builtins            as Builtins
-import           SafeJS.Decycle
+import           Inferno.BuiltinArray ( arrayRowType)
+import           Inferno.Pretty
+import           Inferno.Types
+import qualified Inferno.Builtins            as Builtins
+import           Inferno.Decycle
 
 #if TRACE
 import           Debug.Trace                (trace)

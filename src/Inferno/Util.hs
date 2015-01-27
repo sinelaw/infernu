@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module SafeJS.Util (checkFiles, annotatedSource, checkSource) where
+module Inferno.Util (checkFiles, annotatedSource, checkSource) where
 
 import           Control.Arrow               (second)
 import           Control.Monad               (forM)
@@ -9,11 +9,11 @@ import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
 
-import           SafeJS.Parse                (translate)
+import           Inferno.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
-import           SafeJS.Infer                (getAnnotations, runTypeInference, minifyVars)
-import           SafeJS.Pretty               (pretty)
-import           SafeJS.Types                (Type, TypeError(..))
+import           Inferno.Infer                (getAnnotations, runTypeInference, minifyVars)
+import           Inferno.Pretty               (pretty)
+import           Inferno.Types                (Type, TypeError(..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs

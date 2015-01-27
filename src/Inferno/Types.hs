@@ -8,7 +8,7 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE InstanceSigs  #-}
 
-module SafeJS.Types
+module Inferno.Types
        (Exp(..)
        , LitVal(..)
        , EVarName

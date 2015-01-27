@@ -1,8 +1,8 @@
-module SafeJS.Builtins
+module Inferno.Builtins
        (builtins)
        where
 
-import           SafeJS.Types
+import           Inferno.Types
 import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 

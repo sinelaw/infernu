@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
-module SafeJS.Pretty where
+module Inferno.Pretty where
 
-import SafeJS.Types
+import Inferno.Types
 import qualified Data.Char as Char
 import           Data.List                  (intercalate)
 import           Data.Char                  (chr, ord)

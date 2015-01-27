@@ -1,4 +1,4 @@
-module SafeJS.Parse
+module Inferno.Parse
        (translate)
        where
 
@@ -6,7 +6,7 @@ import           Control.Arrow                    ((***))
 import           Data.Maybe                       (mapMaybe)
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
-import           SafeJS.Types
+import           Inferno.Types
 import qualified Text.Parsec.Pos                  as Pos
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.

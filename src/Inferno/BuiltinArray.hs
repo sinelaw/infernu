@@ -1,8 +1,8 @@
-module SafeJS.BuiltinArray
+module Inferno.BuiltinArray
        (arrayRowType)
        where
 
-import SafeJS.Types
+import Inferno.Types
 
 func :: Type -> Type -> Type -> Type
 func this x y = Fix $ TCons TFunc [this, x, y]

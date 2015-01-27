@@ -4,7 +4,7 @@
 
 A type inference and checker for JavaScript.
 
-This project is an ongoing effort to produce a practical tool for statically verifying JavaScript code. The type system is designed to support a **safe subset of JS**, not a super set of JS. That is, some otherwise valid JS code will not pass type checking with SJS. The reason for not allowing the dynamic behavior of JS, is to **guarantee more safety** and (as a bonus) allows fully unambiguous type inference.
+This project is an ongoing effort to produce a practical tool for statically verifying JavaScript code. The type system is designed to support a **safe subset of JS**, not a super set of JS. That is, some otherwise valid JS code will not pass type checking with Inferno. The reason for not allowing the dynamic behavior of JS, is to **guarantee more safety** and (as a bonus) allows fully unambiguous type inference.
 
 **Features:**
 
@@ -32,7 +32,7 @@ JavaScript:
 	var num = 2;
 	var arrNums = [num, num];
 
-SJS infers (for arrNums):
+Inferno infers (for arrNums):
 
 	[TNumber]
 
@@ -50,7 +50,7 @@ That is, an object with two properties: 'something', of type string, and 'value'
 
 ### Functions and `this`
 
-In JS, `this` is one truly awful part. `this` is a dynamically scoped variable that takes on values depending on how the current function was invoked. SJS knows about this (pun intended) and infers types for functions indicating what `this` must be.
+In JS, `this` is one truly awful part. `this` is a dynamically scoped variable that takes on values depending on how the current function was invoked. Inferno knows about this (pun intended) and infers types for functions indicating what `this` must be.
 
 For example:
 
@@ -58,18 +58,18 @@ For example:
 		return this.data + 3;
 	}
 
-SJS infers:
+Inferno infers:
 
     (this: {data: TNumber, ..l} -> TNumber)
 
 In words: a function which expects `this` to be an object with at least one property, "data" of type number. It returns a number.
 
-If we call a function that needs `this` incorrectly, SJS will be angry:
+If we call a function that needs `this` incorrectly, Inferno will be angry:
 
     > useThisData();
 	Error: Could not unify: {data: TNumber, ..a} with TUndefined
 
-Because we called `useThisData` without a preceding object property access (e.g. `obj.useThisData`), it will get `undefined` for `this`. SJS is telling us that our expected type for `this` is not unifiable with the type `undefined`.
+Because we called `useThisData` without a preceding object property access (e.g. `obj.useThisData`), it will get `undefined` for `this`. Inferno is telling us that our expected type for `this` is not unifiable with the type `undefined`.
 
 ### Polymorphism
 
@@ -79,7 +79,7 @@ Given the following function:
 	    return {data: x};
 	}
 
-SJS infer the following type:
+Inferno infer the following type:
 
     ((this: a, b) -> {data: b})
 
@@ -93,7 +93,7 @@ Given the following function:
 		return obj.data;
 	}
 
-SJS infers:
+Inferno infers:
 
     ((this: h, {data: i, ..j}) -> i)
 
@@ -121,7 +121,7 @@ TODO: More examples
 - [ ] type annotations
 - [ ] add support for CommonJS modules
 
-<!--  LocalWords:  SJS JS polymorphism Hindley Milner JS's Equi num arrNums TNumber TString getData
+<!--  LocalWords:  JS polymorphism Hindley Milner JS's Equi num arrNums TNumber TString getData
  -->
 <!--  LocalWords:  useThisData TUndefined unifiable makeData TODO decls paren CommonJS
  -->

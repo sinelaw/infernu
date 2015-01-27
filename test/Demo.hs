@@ -2,8 +2,8 @@ module Demo where
 
 import           Data.Bool          (bool)
 import           Data.Functor       ((<$>))
-import           SafeJS.Util        (checkFiles)
-import           SafeJS.Infer       (pretty)
+import           Inferno.Util        (checkFiles)
+import           Inferno.Infer       (pretty)
 import           System.Environment (getArgs)
 
 isRight :: Either a b -> Bool

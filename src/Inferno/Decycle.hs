@@ -2,7 +2,7 @@
 
 -- | copied from https://raw.githubusercontent.com/Peaker/lamdu/wip_integration/bottlelib/Data/Function/Decycle.hs
 
-module SafeJS.Decycle(decycleOn, decycle, decycle2, decycle3) where
+module Inferno.Decycle(decycleOn, decycle, decycle2, decycle3) where
 
 import Data.Functor((<$>))
 import qualified Data.Set as Set

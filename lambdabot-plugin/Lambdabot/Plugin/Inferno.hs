@@ -1,8 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
--- | SJS
-module Lambdabot.Plugin.SJS (sjsPlugin) where
+-- | Inferno
+module Lambdabot.Plugin.Inferno (infernoPlugin) where
 
 import qualified Data.ByteString.Char8       as P
 import           Data.Functor                ((<$>))
@@ -18,8 +18,8 @@ import           SafeJS.Infer                (getAnnotations, minifyVars,
 import           SafeJS.Parse                (translate)
 
 
-sjsPlugin :: Module ()
-sjsPlugin = newModule
+infernoPlugin :: Module ()
+infernoPlugin = newModule
     { moduleCmds = return
         [ (command "js")
             { aliases = []
