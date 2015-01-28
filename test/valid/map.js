@@ -6,3 +6,11 @@ function map(arr, f) {
     }
     return res;
 }
+
+
+var arnum = map([1,2,3], function (x) { return x + 1; });
+
+var arstr = map(['a','b','c'], function (x) { return x; });
+
+arnum;
+arstr;
