@@ -815,9 +815,9 @@ inferType' env (ELet a n e1 e2) =
            else generalizeScheme
      env' <- addVarScheme env n t'
      (s2, t2, e2') <- inferType env' e2
-     applySubstInfer s2
      let s2' = s2 `composeSubst` s1'
          t = applySubst s2' t2
+     applySubstInfer s2'
      return (s2', t, ELet (a, t) n e1' e2')
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
@@ -831,7 +831,9 @@ inferType' env (EAssign a n expr1 expr2) =
      applySubstInfer s4
      (s5, tRest, expr2') <- inferType env expr2
      let tRest' = applySubst s4 tRest
-     return (s5 `composeSubst` s4, tRest', EAssign (a, tRest') n expr1' expr2')
+         s6 = s5 `composeSubst` s4
+     applySubstInfer s6
+     return (s6, tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (s1, objT, objExpr') <- inferType env objExpr
      applySubstInfer s1
@@ -845,7 +847,8 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      (s4, expr2T, expr2') <- inferType env expr2
      let s5 = s4 `composeSubst` s3'
      s6 <- unifyAllInstances a s5 [getRowTVar rowTailVar]
-     return (s6, applySubst s6 expr2T, EPropAssign (a, applySubst s6 expr2T) objExpr' n expr1' expr2')
+     let tRest = applySubst s6 expr2T
+     return (s6, tRest, EPropAssign (a, tRest) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (s1, tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
@@ -862,13 +865,13 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      s3' <- unify a tExpr1 elemType'
      let s3'' = s3' `composeSubst` s3 `composeSubst` s2''
      applySubstInfer s3''
-     s3''' <- unifyAllInstances a s3'' [elemTVarName]
-     let s3b = s3''' `composeSubst` s3''
+     s3b <- unifyAllInstances a s3'' [elemTVarName]
      applySubstInfer s3b
      (s4, tExpr2, expr2') <- inferType env expr2
      let s4' = s4 `composeSubst` s3b
      applySubstInfer s4'
-     return (s4', applySubst s4' tExpr2 , EIndexAssign (a, applySubst s4' elemType')  eArr' eIdx' expr1' expr2')
+     let tRest = applySubst s4' tExpr2
+     return (s4', tRest , EIndexAssign (a, tRest)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
   do tvName <- fresh
      let tv = Fix . TBody $ TVar tvName
