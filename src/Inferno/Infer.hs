@@ -80,9 +80,6 @@ traceLog !s !r = return $! trace s r `seq` r
 --   applySubst s = fmap (applySubst s)
 ----------------------------------------------------------------------
 
-ungeneralize :: TScheme -> TScheme
-ungeneralize (TScheme _ tbody) = TScheme [] tbody
-
 getQuantificands :: TScheme -> [TVarName]
 getQuantificands (TScheme tvars _) = tvars
 
@@ -825,18 +822,16 @@ inferType' env (ELet a n e1 e2) =
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign a n expr1 expr2) =
-  do varId <- getVarId n env `failWith` throwError a ("Assertion failed, missing varId for var: '" ++ show n ++ "'")
-     lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
-     let ungeneralizedScheme = ungeneralize lvalueScheme
-     lvalueT <- instantiate ungeneralizedScheme
-     setVarScheme n varId ungeneralizedScheme
+  do lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
+     lvalueT <- instantiate lvalueScheme
      (s1, rvalueT, expr1') <- inferType env expr1
      s2 <- unify a rvalueT (applySubst s1 lvalueT)
      let s3 = s2 `composeSubst` s1
      s4 <- unifyAllInstances a s3 $ getQuantificands lvalueScheme
      applySubstInfer s4
      (s5, tRest, expr2') <- inferType env expr2
-     return (s5 `composeSubst` s4, tRest, EAssign (a, tRest) n expr1' expr2')
+     let tRest' = applySubst s4 tRest
+     return (s5 `composeSubst` s4, tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (s1, objT, objExpr') <- inferType env objExpr
      applySubstInfer s1
