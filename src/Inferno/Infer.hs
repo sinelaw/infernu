@@ -691,7 +691,7 @@ tryMakeRow _ = Nothing
 
 
 isExpansive :: Exp a -> Bool
-isExpansive (EVar _ _)        = True
+isExpansive (EVar _ _)        = False
 isExpansive (EApp _ _ _)      = True
 isExpansive (EAssign _ _ _ _) = True
 isExpansive (EPropAssign _ _ _ _ _) = True
@@ -703,8 +703,8 @@ isExpansive (EArray _ _)  = True
 isExpansive (ETuple _ _)  = True
 isExpansive (ERow _ _ _)    = True
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
-isExpansive (EProp _ _ _)  = True
-isExpansive (EIndex _ _ _)  = True
+isExpansive (EProp _ e _)  = isExpansive e
+isExpansive (EIndex _ a b)  = any isExpansive [a, b]
 isExpansive (ENew _ _ _) = True
 ----------------------------------------------------------------------
 
