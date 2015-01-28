@@ -16,8 +16,14 @@ tab t = replicate (t*4) ' '
 class Pretty a where
   prettyTab :: Int -> a -> String
 
+instance Pretty a => Pretty (Maybe a) where
+  prettyTab _ x = maybe "Nothing" pretty x
+  
 instance (Pretty a, Pretty b) => Pretty (a,b) where
   prettyTab _ (a,b) = "(" ++ pretty a ++ ", " ++ pretty b ++ ")"
+
+instance (Pretty a, Pretty b, Pretty c) => Pretty (a,b,c) where
+  prettyTab _ (a,b,c) = "(" ++ pretty a ++ ", " ++ pretty b ++ ", " ++ pretty c ++ ")"
 
 prettyList :: Pretty a => [a] -> String
 prettyList [] = "[]"

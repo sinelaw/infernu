@@ -447,12 +447,13 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 -- Simple recursive type:
 --
 -- >>> let tvar0 = Fix $ TBody $ TVar 0
--- >>> let recRow = Fix $ TRow $ TRowProp "x" tvar0 (TRowEnd $ Just $ RowTVar 1)
+-- >>> let tvar3 = Fix $ TBody $ TVar 3
+-- >>> let recRow = Fix $ TRow $ TRowProp "x" tvar0 $ TRowProp "y" tvar3 (TRowEnd $ Just $ RowTVar 2)
 -- >>> let s = fromRight $ u tvar0 recRow
 -- >>> s
--- fromList [(0,Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 1))]))]
+-- fromList [(0,Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]))]
 -- >>> applySubst s tvar0
--- Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 1))])
+-- Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])
 --
 -- >>> :{
 -- pretty $ runInfer $ do
@@ -461,7 +462,7 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 --     t <- unrollName p n1 targs1
 --     return t
 -- :}
--- "{x: <Named Type: mu 'B'. b>, ..b}"
+-- "{x: <Named Type: mu 'B'. c d>, y: d, ..c}"
 --
 -- Unifying a rolled recursive type with its (unequal) unrolling should yield a null subst:
 --
@@ -482,11 +483,12 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 -- >>> :{
 -- pretty $ runInfer $ do
 --     s1 <- unify p tvar0 recRow
---     tvar2 <- Fix . TBody . TVar <$> fresh
---     s2 <- unify p (applySubst s1 recRow) (applySubst s1 $ Fix $ TRow $ TRowProp "x" tvar2 (TRowEnd Nothing))
+--     let tvar4 = Fix . TBody . TVar $ 4
+--         tvar5 = Fix . TBody . TVar $ 5
+--     s2 <- unify p (applySubst s1 recRow) (applySubst s1 $ Fix $ TRow $ TRowProp "x" tvar4 $ TRowProp "y" tvar5 (TRowEnd Nothing))
 --     return $ applySubst (s2 `composeSubst` s1) recRow
 -- :}
--- "{x: <Named Type: mu 'B'. {}>}"
+-- "{x: <Named Type: mu 'B'. {} f>, y: f}"
 --
 -- >>> let rec2 = Fix $ TCons TFunc [recRow, Fix $ TBody TNumber]
 -- >>> :{
@@ -494,7 +496,7 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 --     s1 <- unify p tvar0 rec2
 --     return $ applySubst s1 rec2
 -- :}
--- "(this: {x: <Named Type: mu 'B'. b>, ..b} -> TNumber)"
+-- "(this: {x: <Named Type: mu 'B'. c d>, y: d, ..c} -> TNumber)"
 --
 -- >>> :{
 -- runInfer $ do
@@ -503,6 +505,37 @@ type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 --     return $ (applySubst s1 rec2 == applySubst s2 rec2)
 -- :}
 -- Right True
+--
+--
+-- Test generalization/instantiation of recursive types
+--
+-- >>> :{
+-- pretty $ runInfer $ do
+--     s1 <- unify p tvar0 rec2
+--     generalize Map.empty $ applySubst s1 rec2
+-- :}
+-- "forall c d. (this: {x: <Named Type: mu 'B'. c d>, y: d, ..c} -> TNumber)"
+--
+-- >>> :{
+-- putStrLn $ fromRight $ runInfer $ do
+--     s1 <- unify p tvar0 rec2
+--     tscheme <- generalize Map.empty $ applySubst s1 rec2
+--     forM_ [1,2..10] $ const fresh
+--     t1 <- instantiate tscheme
+--     t2 <- instantiate tscheme
+--     unrolledT1 <- unrollName p (TypeId 1) [Fix $ TRow $ TRowEnd Nothing]
+--     return $ concat $ Data.List.intersperse "\n"
+--                           [ pretty tscheme
+--                           , pretty t1
+--                           , pretty t2
+--                           , pretty unrolledT1
+--                           ]
+-- :}
+-- forall c d. (this: {x: <Named Type: mu 'B'. c d>, y: d, ..c} -> TNumber)
+-- (this: {x: <Named Type: mu 'B'. m n>, y: n, ..m} -> TNumber)
+-- (this: {x: <Named Type: mu 'B'. o p>, y: p, ..o} -> TNumber)
+-- (this: {x: <Named Type: mu 'B'. {} d>, y: d} -> TNumber)
+--
 --
 unify :: UnifyF
 unify = decycle3 unify''
