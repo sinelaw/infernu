@@ -175,3 +175,12 @@ Examples:
 
         { method: o -> Int, x: String } -> Int
         o -> Int
+
+
+# Higher-rank polymorphism for object methods
+
+See:
+
+- http://blog.huoc.org/higher-rank-polymorphism.html
+- "Semi-Explicit First-Class Polymorphism for ML" (1999), by Jacques Guarrigue and Didier Rémy. (1999) http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.46.4858
+
