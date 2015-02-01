@@ -159,10 +159,11 @@ instance Pretty VarId where
   prettyTab _ = show
 
 instance Pretty InferState where
-  prettyTab t (InferState ns vs vi tn) = "InferState { nameSource: "
-                                         ++ pretty ns ++ newline
-                                         ++ ", varSchemes: " ++ pretty vs ++ newline
-                                         ++ ", varInstances: " ++ pretty vi ++ newline
-                                         ++ ", namedTypes: " ++ pretty tn ++ newline
-                                         ++ "}"
+  prettyTab t (InferState ns sub vs vi tn) = "InferState { nameSource: "
+                                             ++ pretty ns ++ newline
+                                             ++ ", subst: " ++ pretty sub ++ newline
+                                             ++ ", varSchemes: " ++ pretty vs ++ newline
+                                             ++ ", varInstances: " ++ pretty vi ++ newline
+                                             ++ ", namedTypes: " ++ pretty tn ++ newline
+                                             ++ "}"
     where newline = "\n" ++ tab (t+1)

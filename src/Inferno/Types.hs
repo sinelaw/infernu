@@ -33,6 +33,9 @@ module Inferno.Types
        , flattenRow
        , unflattenRow
        , TSubst
+       , nullSubst
+       , composeSubst
+       , singletonSubst
        , VarId(..)
        , NameSource(..)
        , VarNames(freeTypeVars, mapVarNames)
@@ -132,8 +135,6 @@ replaceFix tsource tdest (Fix t') = Fix $ fmapReplace replaceFix tsource tdest t
 
 type Type = Fix FType
 
-type TSubst = Map.Map TVarName (Type)
-
 data TypeError = TypeError { source :: Pos.SourcePos, message :: String }
                deriving (Show, Eq, Ord)
 
@@ -230,6 +231,35 @@ instance VarNames (FType (Fix FType)) where
 --   -- mapVarNames f (TCons n ts) = TCons n $ mapVarNames f ts
 --   -- mapVarNames f (TRow r) = TRow $ mapVarNames f r
 
+----------------------------------------------------------------------
+
+type TSubst = Map.Map TVarName (Type)
+
+nullSubst :: TSubst
+nullSubst = Map.empty
+
+-- | composeSubst should obey the law:
+-- applySubst (composeSubst new old) t = applySubst new (applySubst old t)
+-- >>> composeSubst (Map.fromList []) (Map.fromList [])
+-- fromList []
+-- >>> composeSubst (Map.fromList [(0,Fix (TBody (TVar 1)))]) (Map.fromList [])
+-- fromList [(0,Fix (TBody (TVar 1)))]
+-- >>> composeSubst (Map.fromList []) (Map.fromList [(0,Fix (TBody (TVar 1)))])
+-- fromList [(0,Fix (TBody (TVar 1)))]
+-- >>> composeSubst (Map.fromList [(1,Fix (TBody (TVar 2)))]) (Map.fromList [(0,Fix (TBody (TVar 1)))])
+-- fromList [(0,Fix (TBody (TVar 2))),(1,Fix (TBody (TVar 2)))]
+-- >>> composeSubst (Map.fromList [(0,Fix (TBody (TVar 1)))]) (Map.fromList [(1,Fix (TBody (TVar 2)))])
+-- fromList [(0,Fix (TBody (TVar 2))),(1,Fix (TBody (TVar 2)))]
+composeSubst :: TSubst -> TSubst -> TSubst
+composeSubst new old = applySubst new old `Map.union` new
+
+singletonSubst :: TVarName -> Type -> TSubst
+singletonSubst = Map.singleton
+
+#ifdef QUICKCHECK
+prop_composeSubst :: TSubst -> TSubst -> Type -> Bool
+prop_composeSubst new old t = applySubst (composeSubst new old) t == applySubst new (applySubst old t)
+#endif
 
 ----------------------------------------------------------------------
 
@@ -359,6 +389,7 @@ data NameSource = NameSource { lastName :: TVarName }
 
 
 data InferState = InferState { nameSource   :: NameSource
+                             , mainSubst :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
@@ -376,4 +407,5 @@ instance VarNames InferState where
 
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
+                       , mainSubst = s `composeSubst` (mainSubst is)
                        , varInstances = Map.fromList $ map (\(k,v) -> (k, (applySubst s v) `Set.union` v)) $ Map.assocs $ varInstances is }

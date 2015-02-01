@@ -28,6 +28,9 @@ library
                      , Inferno.Util
                      , Inferno.Pretty
                      , Inferno.Types
+                     , Inferno.Unify
+                     , Inferno.InferState
+                     , Inferno.Log
                      , Inferno.Builtins
                      , Inferno.BuiltinArray
                      , Inferno.Decycle
