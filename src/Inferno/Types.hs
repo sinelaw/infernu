@@ -397,8 +397,8 @@ data InferState = InferState { nameSource   :: NameSource
                    deriving (Show, Eq)
 
 -- | VarNames instance for InferState
--- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])], namedTypes = Map.empty }
--- InferState {nameSource = NameSource {lastName = 0}, varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])], namedTypes = fromList []}
+-- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, mainSubst = Map.empty, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])], namedTypes = Map.empty }
+-- InferState {nameSource = NameSource {lastName = 0}, mainSubst = fromList [], varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])], namedTypes = fromList []}
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is

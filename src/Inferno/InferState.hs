@@ -263,7 +263,7 @@ applySubstInfer s =
 --
 -- For example:
 --
--- >>> runInferWith (InferState { nameSource = NameSource 2, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+-- >>> runInferWith (InferState { nameSource = NameSource 2, mainSubst = Map.empty, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 -- Right Fix (TCons TFunc [Fix (TBody (TVar 3)),Fix (TBody (TVar 1))])
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
@@ -323,10 +323,10 @@ instantiateVar a n env = do
 -- TODO add tests for monotypes
 generalize :: TypeEnv -> Type -> Infer TScheme
 generalize tenv t = do
-  unboundVars <- Set.difference (freeTypeVars t) <$> getFreeTVars tenv
-  return $ TScheme (Set.toList unboundVars) t
-
-
+  s <- getMainSubst
+  let t' = applySubst s t
+  unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
+  return $ TScheme (Set.toList unboundVars) t'
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName
 minifyVarsFunc xs n = fromMaybe n $ Map.lookup n vars
@@ -338,3 +338,11 @@ minifyVars xs = mapVarNames (minifyVarsFunc xs) xs
 getVarInstances :: Infer (Map.Map TVarName (Set.Set (Type)))
 getVarInstances = varInstances <$> get
 
+
+getMainSubst :: Infer TSubst
+getMainSubst = mainSubst <$> get
+
+applyMainSubst :: Substable b => b -> Infer b
+applyMainSubst x =
+  do s <- getMainSubst
+     return $ applySubst s x
