@@ -141,9 +141,9 @@ inferType' _ (ELit a lit) = do
                     LitUndefined -> TUndefined
                     LitNull -> TNull
   return (t, ELit (a,t) lit)
-inferType' env (EVar a n) = do
-  t <- instantiateVar a n env
-  return (t, EVar (a, t) n)
+inferType' env (EVar a n) =
+  do t <- instantiateVar a n env
+     return (t, EVar (a, t) n)
 inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
      env' <- foldM (\e (n, t) -> addVarScheme e n $ TScheme [] t) env $ zip argNames argTypes
@@ -151,8 +151,7 @@ inferType' env (EAbs a argNames e2) =
      let t = Fix $ TCons TFunc $ argTypes ++ [t1]
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
-  do tvarName <- fresh
-     let tvar = Fix $ TBody (TVar tvarName)
+  do tvar <- Fix . TBody . TVar <$> fresh
      (t1, e1') <- inferType env e1
      argsTE <- tracePretty "EApp: unify type args" <$> accumInfer env eArgs
      let rargsTE = reverse argsTE
@@ -163,10 +162,9 @@ inferType' env (EApp a e1 eArgs) =
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1
      argsTE <- accumInfer env eArgs
-     thisTVarName <- fresh
+     thisT <- Fix . TBody . TVar <$> fresh
      resT <- Fix . TBody . TVar <$> fresh
-     let thisT = Fix . TBody $ TVar thisTVarName
-         rargsTE = reverse argsTE
+     let rargsTE = reverse argsTE
          tArgs = thisT : map fst rargsTE
          eArgs' = map snd rargsTE
      unify a t1 (Fix . TCons TFunc $ tArgs ++ [resT])
@@ -216,12 +214,11 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      (tExpr2, expr2') <- inferType env expr2
      return (tExpr2 , EIndexAssign (a, tExpr2)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
-  do tvName <- fresh
-     let tv = Fix . TBody $ TVar tvName
+  do tv <- Fix . TBody . TVar <$> fresh
      te <- accumInfer env exprs
      let types = map fst te
      unifyl unify a $ zip (tv:types) types
-     let t = Fix $ TCons TArray [Fix . TBody $ TVar tvName]
+     let t = Fix $ TCons TArray [tv]
      return (t, EArray (a,t) $ map snd te)
 inferType' env (ETuple a exprs) =
   do te <- accumInfer env exprs
@@ -244,10 +241,9 @@ inferType' env (EIfThenElse a ePred eThen eElse) =
 inferType' env (EProp a eObj propName) =
   do (tObj, eObj') <- inferType env eObj
      rowVar <- RowTVar <$> fresh
-     propVar <- fresh
-     unify a tObj $ Fix . TRow $ TRowProp propName (Fix . TBody $ TVar propVar) $ TRowEnd (Just rowVar)
-     let t = Fix . TBody $ TVar propVar
-     return (t, EProp (a,t) eObj' propName)
+     propType <- Fix . TBody . TVar <$> fresh
+     unify a tObj $ Fix . TRow $ TRowProp propName propType $ TRowEnd (Just rowVar)
+     return (propType, EProp (a,propType) eObj' propName)
 inferType' env (EIndex a eArr eIdx) =
   do (tArr, eArr') <- inferType env eArr
      elemType <- Fix . TBody . TVar <$> fresh
@@ -269,19 +265,21 @@ createEnv :: Map EVarName TScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
     where allTVars :: TScheme -> Set TVarName
           allTVars (TScheme qvars t) = freeTypeVars t `Set.union` (Set.fromList qvars)
+          
           safeLookup :: Eq a => [(a,a)] -> a -> a
           safeLookup assoc n = fromMaybe n $ lookup n assoc
+
           addVarScheme' :: Map EVarName VarId -> (EVarName, TScheme) -> Infer (Map EVarName VarId)
-          addVarScheme' m (name, tscheme) = do
-            allocNames <- forM (Set.toList $ allTVars tscheme) $ \tvName -> (fresh >>= return . (tvName,))
-            addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
+          addVarScheme' m (name, tscheme) =
+            do allocNames <- forM (Set.toList $ allTVars tscheme) $ \tvName -> (fresh >>= return . (tvName,))
+               addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 
 typeInference :: Map EVarName TScheme -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type))
-typeInference builtins e = do
-  env <- createEnv builtins
-  (_t, e') <- inferType env e
-  return e'
+typeInference builtins e =
+  do env <- createEnv builtins
+     (_t, e') <- inferType env e
+     return e'
 
 ----------------------------------------------------------------------
 --
