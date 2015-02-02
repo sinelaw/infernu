@@ -1,12 +1,12 @@
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TupleSections     #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE InstanceSigs  #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE DeriveFoldable       #-}
+{-# LANGUAGE DeriveFunctor        #-}
+{-# LANGUAGE DeriveTraversable    #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE InstanceSigs         #-}
+{-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Inferno.Types
        (Exp(..)
@@ -45,19 +45,19 @@ module Inferno.Types
 #endif
        ) where
 
-import           Data.Foldable   (Foldable (..), foldr)
-import           Data.Traversable   (Traversable (..))
-import qualified Data.Map.Lazy   as Map
-import           Data.Maybe      (fromMaybe)
-import qualified Data.Set        as Set
-import qualified Text.Parsec.Pos as Pos
-import Prelude hiding (foldr)
+import           Data.Foldable             (Foldable (..), foldr)
+import qualified Data.Map.Lazy             as Map
+import           Data.Maybe                (fromMaybe)
+import qualified Data.Set                  as Set
+import           Data.Traversable          (Traversable (..))
+import           Prelude                   hiding (foldr)
+import qualified Text.Parsec.Pos           as Pos
 
 #ifdef QUICKCHECK
+import           Data.DeriveTH
 import           Data.Functor              ((<$>))
 import           Data.Map.Lazy             (Map)
 import qualified Data.Map.Lazy             as Map
-import           Data.DeriveTH
 import           Test.QuickCheck           (choose, resize)
 import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary (Arbitrary (..))
@@ -404,7 +404,7 @@ data NameSource = NameSource { lastName :: TVarName }
 
 
 data InferState = InferState { nameSource   :: NameSource
-                             , mainSubst :: TSubst
+                             , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
@@ -445,7 +445,7 @@ $( derive makeArbitrary ''FType )
 
 instance Arbitrary (Fix FType) where
     arbitrary = Fix <$> arbitrary
-  
+
 
 {-# WARNING runAllTests "QuickCheck runner, do not use!" #-}
 runAllTests :: IO Bool
