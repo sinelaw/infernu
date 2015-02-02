@@ -25,27 +25,30 @@ array t = Fix $ TCons TArray [t]
 boolean :: Fix FType
 boolean = Fix $ TBody TBoolean
 
-arrayProps :: Type -> [(String, Type)]
+ts :: t -> TScheme t
+ts = TScheme []
+
+arrayProps :: Type -> [(String, TypeScheme)]
 arrayProps elemType = let aType = array elemType in
-  [ ("length", number)
-  , ("concat", func aType aType aType)
+  [ ("length", ts number)
+  , ("concat", ts $ func aType aType aType)
      -- TODO support thisArg (requires type variables)
-  , ("every", func aType (funcN [undef, elemType, number, aType, boolean]) boolean) -- missing thisArg
-  , ("filter", func aType (funcN [undef, elemType, number, aType, boolean]) aType) -- missing thisArg
+  , ("every", ts $ func aType (funcN [undef, elemType, number, aType, boolean]) boolean) -- missing thisArg
+  , ("filter", ts $ func aType (funcN [undef, elemType, number, aType, boolean]) aType) -- missing thisArg
     -- TODO support optional argument for fromIndex (last parameter)
-  , ("indexOf", funcN [aType, elemType, number, number])
-  , ("join", func aType string string)
-  , ("lastIndexOf", func aType number number)
+  , ("indexOf", ts $ funcN [aType, elemType, number, number])
+  , ("join", ts $ func aType string string)
+  , ("lastIndexOf", ts $ func aType number number)
 --  , "map" -- requires type variables, and maybe foralls on row properties
-  , ("pop", funcN [aType, elemType])
-  , ("push", funcN [aType, elemType, number])
-  , ("reverse", funcN [aType, aType])
-  , ("shift", funcN [aType, elemType])
-  , ("slice", funcN [aType, number, number, aType])
-  , ("some", func aType (funcN [undef, elemType, number, aType, boolean]) aType) -- missing thisArg
-  , ("sort", func aType (funcN [undef, elemType, elemType, number]) aType)
-  , ("splice", funcN [aType, number, number, aType])
-  , ("unshift", funcN [aType, elemType])
+  , ("pop", ts $ funcN [aType, elemType])
+  , ("push", ts $ funcN [aType, elemType, number])
+  , ("reverse", ts $ funcN [aType, aType])
+  , ("shift", ts $ funcN [aType, elemType])
+  , ("slice", ts $ funcN [aType, number, number, aType])
+  , ("some", ts $ func aType (funcN [undef, elemType, number, aType, boolean]) aType) -- missing thisArg
+  , ("sort", ts $ func aType (funcN [undef, elemType, elemType, number]) aType)
+  , ("splice", ts $ funcN [aType, number, number, aType])
+  , ("unshift", ts $ funcN [aType, elemType])
   ]
 
 arrayRowType :: Type -> TRowList Type

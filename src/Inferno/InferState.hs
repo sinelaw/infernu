@@ -152,7 +152,8 @@ isRecParamOnly n1 typeId t1 =
      where isRecParamRecList n' rlist' =
              case rlist' of
               TRowEnd _ -> Just []
-              TRowProp _ t' rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing t') (isRecParamRecList n' rlist'')
+              -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
+              TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing t') (isRecParamRecList n' rlist'')
               TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
   where recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
 
@@ -173,7 +174,7 @@ replaceRecType typeId newTypeId indexToDrop t1 =
      where go rlist' =
              case rlist' of
               TRowEnd _ -> rlist'
-              TRowProp p t' rlist'' -> TRowProp p (replaceRecType typeId newTypeId indexToDrop t') (go rlist'')
+              TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv $ replaceRecType typeId newTypeId indexToDrop t') (go rlist'')
               TRowRec tid ts -> if typeId == tid
                                 then TRowRec newTypeId $ dropAt indexToDrop ts
                                 else rlist'
@@ -183,7 +184,7 @@ allocNamedType n t =
   do typeId <- TypeId <$> fresh
      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          target = replaceFix (TBody (TVar n)) namedType t
-     scheme <- generalize Map.empty target
+     scheme <- unsafeGeneralize Map.empty target
      currentNamedTypes <- filter (areEquivalentNamedTypes (Fix namedType, scheme)) . map snd . Map.toList . namedTypes <$> get
      case currentNamedTypes of
       [] -> do addNamedType typeId (Fix namedType) scheme
@@ -310,12 +311,35 @@ instantiateVar a n env = do
 -- Right (TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 0))])})
 --
 -- TODO add tests for monotypes
-generalize :: TypeEnv -> Type -> Infer TypeScheme
-generalize tenv t = do
+unsafeGeneralize :: TypeEnv -> Type -> Infer TypeScheme
+unsafeGeneralize tenv t = do
   s <- getMainSubst
   let t' = applySubst s t
   unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
   return $ TScheme (Set.toList unboundVars) t'
+
+isExpansive :: Exp a -> Bool
+isExpansive (EVar _ _)        = False
+isExpansive (EApp _ _ _)      = True
+isExpansive (EAssign _ _ _ _) = True
+isExpansive (EPropAssign _ _ _ _ _) = True
+isExpansive (EIndexAssign _ _ _ _ _) = True
+isExpansive (ELet _ _ _ _)    = True
+isExpansive (EAbs _ _ _)      = False
+isExpansive (ELit _ _)        = False
+isExpansive (EArray _ _)  = True
+isExpansive (ETuple _ _)  = True
+isExpansive (ERow _ _ _)    = True
+isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
+isExpansive (EProp _ e _)  = isExpansive e
+isExpansive (EIndex _ a b)  = any isExpansive [a, b]
+isExpansive (ENew _ _ _) = True
+
+
+generalize :: Exp a -> TypeEnv -> Type -> Infer TypeScheme
+generalize exp' env t = if isExpansive exp'
+                        then return $ TScheme [] t
+                        else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName
 minifyVarsFunc xs n = fromMaybe n $ Map.lookup n vars

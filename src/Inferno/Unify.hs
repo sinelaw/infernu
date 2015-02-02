@@ -8,7 +8,7 @@ module Inferno.Unify
 
 
 import           Data.Monoid                (Monoid(..))
-
+import Control.Monad (liftM2)
 import           Data.Traversable              (Traversable (..))
 import           Data.Functor               ((<$>))
 
@@ -17,7 +17,7 @@ import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (mapMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
-import           Prelude                    hiding (foldr, sequence)
+import           Prelude                    hiding (foldr, sequence, mapM)
 import qualified Text.Parsec.Pos            as Pos
 
 import           Inferno.BuiltinArray ( arrayRowType)
@@ -214,19 +214,25 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
            names2 = Set.fromList $ Map.keys m2
            (m1, r1) = flattenRow row1
            names1 = Set.fromList $ Map.keys m1
+           
            commonNames = Set.toList $ names1 `Set.intersection` names2
---           namesToTypes :: Map EPropName (Type a) -> [EPropName] -> [Type a]
-           namesToTypes m = mapMaybe $ flip Map.lookup m
---           commonTypes :: [(Type, Type)]
-           commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
-       unifyl recurse a commonTypes
+           
+           --namesToTypes :: Map EPropName (TScheme t) -> [EPropName] -> [t]
+           -- TODO: This ignores quantified variables in the schemes.
+           -- It should be AT LEAST alpha-equivalence below (in the unifyl)
+           namesToTypes m props = mapM instantiate ((mapMaybe $ flip Map.lookup m) props)
+           
+           --commonTypes :: [(Type, Type)]
+           commonTypes = liftM2 zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
+           
+       commonTypes >>= unifyl recurse a 
        r <- RowTVar <$> fresh
        unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
        unifyRows recurse a r(tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
        return ()
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> RowTVar
-               -> (x, Set EPropName, Map EPropName (Type))
+               -> (x, Set EPropName, Map EPropName TypeScheme)
                -> (x, Set EPropName, FlatRowEnd Type)
                -> Infer ()
 unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =

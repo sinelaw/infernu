@@ -41,22 +41,6 @@ getQuantificands (TScheme tvars _) = tvars
 getAnnotations :: Exp a -> [a]
 getAnnotations = foldr (:) []
 
-isExpansive :: Exp a -> Bool
-isExpansive (EVar _ _)        = False
-isExpansive (EApp _ _ _)      = True
-isExpansive (EAssign _ _ _ _) = True
-isExpansive (EPropAssign _ _ _ _ _) = True
-isExpansive (EIndexAssign _ _ _ _ _) = True
-isExpansive (ELet _ _ _ _)    = True
-isExpansive (EAbs _ _ _)      = False
-isExpansive (ELit _ _)        = False
-isExpansive (EArray _ _)  = True
-isExpansive (ETuple _ _)  = True
-isExpansive (ERow _ _ _)    = True
-isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
-isExpansive (EProp _ e _)  = isExpansive e
-isExpansive (EIndex _ a b)  = any isExpansive [a, b]
-isExpansive (ENew _ _ _) = True
 ----------------------------------------------------------------------
 
 closeRowList :: TRowList Type -> TRowList Type
@@ -138,10 +122,7 @@ inferType' env (ELet a n e1 e2) =
      recEnv <- addVarScheme env n $ TScheme [] recType
      (t1, e1') <- inferType recEnv e1
      unify a t1 recType
-     let generalizeScheme = tracePretty ("let generalized '" ++ pretty n ++ "' --") <$> generalize env t1
-     t' <- if isExpansive e1
-           then return $ TScheme [] t1
-           else generalizeScheme
+     t' <- generalize e1 env t1
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
      return (t2, ELet (a, t2) n e1' e2')
@@ -159,7 +140,7 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     unify a objT $ Fix . TRow $ TRowProp n rvalueT $ TRowEnd (Just rowTailVar)
+     unify a objT $ Fix . TRow $ TRowProp n (TScheme [] rvalueT) $ TRowEnd (Just rowTailVar)
      unifyAllInstances a [getRowTVar rowTailVar]
      (expr2T, expr2') <- inferType env expr2
      return (expr2T, EPropAssign (a, expr2T) objExpr' n expr1' expr2')
@@ -189,9 +170,12 @@ inferType' env (ETuple a exprs) =
 inferType' env (ERow a isOpen propExprs) =
   do te <- accumInfer env $ map snd propExprs
      endVar <- RowTVar <$> fresh
-     let propNamesTypes = zip (map fst propExprs) (reverse $ map fst te)
+     let propNamesTypes = zip propExprs (reverse $ map fst te)
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
-         rowType = Fix . TRow $ foldr (\(n,t') r -> TRowProp n t' r) rowEnd' propNamesTypes
+         accumRowProp' row ((propName, propExpr), propType) =
+           do ts <- generalize propExpr env propType
+              return $ TRowProp propName ts row
+     rowType <- Fix . TRow <$> foldM  accumRowProp' rowEnd' propNamesTypes
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (EIfThenElse a ePred eThen eElse) =
   do (tp, ePred') <- inferType env ePred
@@ -203,8 +187,11 @@ inferType' env (EIfThenElse a ePred eThen eElse) =
 inferType' env (EProp a eObj propName) =
   do (tObj, eObj') <- inferType env eObj
      rowVar <- RowTVar <$> fresh
-     propType <- Fix . TBody . TVar <$> fresh
-     unify a tObj $ Fix . TRow $ TRowProp propName propType $ TRowEnd (Just rowVar)
+     propTypeScheme <- case unFix tObj of
+--                  TRow tRowList -> --TODO
+                  _ -> TScheme [] . Fix . TBody . TVar <$> fresh
+     unify a tObj $ Fix . TRow $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)
+     propType <- instantiate propTypeScheme
      return (propType, EProp (a,propType) eObj' propName)
 inferType' env (EIndex a eArr eIdx) =
   do (tArr, eArr') <- inferType env eArr

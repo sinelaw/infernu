@@ -121,7 +121,7 @@ liftRowTVar :: (TVarName -> TVarName) -> RowTVar -> RowTVar
 liftRowTVar f (RowTVar x) = RowTVar (f x)
 
 -- | Row type.
-data TRowList t = TRowProp EPropName t (TRowList t)
+data TRowList t = TRowProp EPropName (TScheme t) (TRowList t)
                 | TRowEnd (Maybe RowTVar)
                 | TRowRec TypeId [t]
                   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
@@ -334,14 +334,14 @@ sortRow row = row -- TODO implement
 
 data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) | FlatRowEndRec TypeId [t]
 
-flattenRow :: TRowList t -> (Map.Map EPropName t, FlatRowEnd t)
+flattenRow :: TRowList t -> (Map.Map EPropName (TScheme t), FlatRowEnd t)
 flattenRow = flattenRow' (Map.empty, FlatRowEndTVar Nothing)
-    where flattenRow' :: (Map.Map EPropName t, FlatRowEnd t) -> TRowList t -> (Map.Map EPropName t, FlatRowEnd t)
+    where flattenRow' :: (Map.Map EPropName (TScheme t), FlatRowEnd t) -> TRowList t -> (Map.Map EPropName (TScheme t), FlatRowEnd t)
           flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
           flattenRow' (m,_) (TRowEnd r') = (m, FlatRowEndTVar r')
           flattenRow' (m,_) (TRowRec tid ts) = (m, FlatRowEndRec tid ts)
 
-unflattenRow :: Map.Map EPropName t -> FlatRowEnd t -> (EPropName -> Bool) -> TRowList t
+unflattenRow :: Map.Map EPropName (TScheme t) -> FlatRowEnd t -> (EPropName -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) rend m
   where rend = case r of
           FlatRowEndTVar r' -> TRowEnd r'
@@ -362,7 +362,7 @@ instance Substable (TRowList Type) where
 ----------------------------------------------------------------------
 
 data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t }
-             deriving (Show, Eq, Functor)
+             deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type TypeScheme = TScheme Type 
 
