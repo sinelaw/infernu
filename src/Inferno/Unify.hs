@@ -226,12 +226,19 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
 
        forM_ commonTypes $ \(t1s, t2s) ->
          do let crap = Fix $ TBody TUndefined
+                unifySchemes' = do t1' <- instantiate t1s
+                                   t2' <- instantiate t2s
+                                   recurse a t1' t2'
+                isSimpleScheme =
+                  case t1s of
+                    TScheme [] _ -> True
+                    TScheme [q] (Fix (TCons TFunc (Fix (TBody (TVar x)):_))) -> x == q -- function parameterized only on 'this'
+                    _ -> False
             if areEquivalentNamedTypes (crap, t1s) (crap, t2s)
               then return ()
-              else if null (schemeVars t1s) -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
-                   then do t1' <- instantiate t1s
-                           t2' <- instantiate t2s
-                           recurse a t1' t2'
+                    -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
+              else if isSimpleScheme
+                   then unifySchemes'
                    else unificationError a t1 t2
 
        r <- RowTVar <$> fresh
