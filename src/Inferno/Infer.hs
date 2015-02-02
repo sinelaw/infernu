@@ -35,7 +35,7 @@ import           Inferno.Unify             (unify, unifyAll, unifyl)
 
 
 
-getQuantificands :: TScheme -> [TVarName]
+getQuantificands :: TypeScheme -> [TVarName]
 getQuantificands (TScheme tvars _) = tvars
 
 getAnnotations :: Exp a -> [a]
@@ -223,21 +223,21 @@ unifyAllInstances a tvs = do
   let unifyAll' equivs = unifyAll a . tracePretty "equivalence:" $ Set.toList equivs
   mapM_ unifyAll' equivalenceSets
 
-createEnv :: Map EVarName TScheme -> Infer (Map EVarName VarId)
+createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
-    where allTVars :: TScheme -> Set TVarName
+    where allTVars :: TypeScheme -> Set TVarName
           allTVars (TScheme qvars t) = freeTypeVars t `Set.union` (Set.fromList qvars)
 
           safeLookup :: Eq a => [(a,a)] -> a -> a
           safeLookup assoc n = fromMaybe n $ lookup n assoc
 
-          addVarScheme' :: Map EVarName VarId -> (EVarName, TScheme) -> Infer (Map EVarName VarId)
+          addVarScheme' :: Map EVarName VarId -> (EVarName, TypeScheme) -> Infer (Map EVarName VarId)
           addVarScheme' m (name, tscheme) =
             do allocNames <- forM (Set.toList $ allTVars tscheme) $ \tvName -> (fresh >>= return . (tvName,))
                addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 
-typeInference :: Map EVarName TScheme -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type))
+typeInference :: Map EVarName TypeScheme -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type))
 typeInference builtins e =
   do env <- createEnv builtins
      (_t, e') <- inferType env e

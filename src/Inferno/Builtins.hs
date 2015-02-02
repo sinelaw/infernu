@@ -6,10 +6,10 @@ import           Inferno.Types
 import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 
-unaryFunc :: Type -> Type -> TScheme
+unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2]
 
-binaryFunc :: Type -> Type -> Type -> TScheme
+binaryFunc :: Type -> Type -> Type -> TypeScheme
 binaryFunc t1 t2 t3 = TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2, t3]
 
 tBoolean :: Type
@@ -21,16 +21,16 @@ tNumber = Fix $ TBody TNumber
 tString :: Type
 tString = Fix $ TBody TString
 
-numRelation :: TScheme
+numRelation :: TypeScheme
 numRelation = binaryFunc tNumber tNumber tBoolean
 
-numOp :: TScheme
+numOp :: TypeScheme
 numOp = binaryFunc tNumber tNumber tNumber
 
-boolRelation :: TScheme
+boolRelation :: TypeScheme
 boolRelation = binaryFunc tBoolean tBoolean tBoolean
 
-builtins :: Map EVarName TScheme
+builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
   ("!",            unaryFunc tBoolean tBoolean),
   ("~",            unaryFunc tNumber  tNumber),

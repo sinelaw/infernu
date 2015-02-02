@@ -28,6 +28,7 @@ module Inferno.Types
        , FlatRowEnd(..)
        , TRowList(..)
        , TScheme(..)
+       , TypeScheme
        , TypeEnv
        , Substable(..)
        , flattenRow
@@ -360,9 +361,10 @@ instance Substable (TRowList Type) where
 
 ----------------------------------------------------------------------
 
--- | Type scheme: a type expression with a "forall" over some type variables that may appear in it (universal quantification).
-data TScheme = TScheme { schemeVars :: [TVarName], schemeType :: Type }
-             deriving (Show, Eq)
+data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t }
+             deriving (Show, Eq, Functor)
+
+type TypeScheme = TScheme Type 
 
 -- | VarNames instance for TScheme
 --
@@ -380,11 +382,11 @@ data TScheme = TScheme { schemeVars :: [TVarName], schemeType :: Type }
 -- fromList []
 -- >>> freeTypeVars $ TScheme [1] (Fix $ TBody $ TNumber)
 -- fromList []
-instance VarNames TScheme where
+instance VarNames t => VarNames (TScheme t) where
   freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
-instance Substable TScheme where
+instance Substable t => Substable (TScheme t) where
   -- | When subsituting on a TScheme, we allow replacing quantified vars!
   -- (i.e. we don't do (foldr Map.delete s qvars) $ applySubst t)
   applySubst s (TScheme qvars t) = TScheme qvars $ applySubst s t
@@ -406,9 +408,9 @@ data NameSource = NameSource { lastName :: TVarName }
 data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
-                             , varSchemes   :: Map.Map VarId TScheme
+                             , varSchemes   :: Map.Map VarId TypeScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
-                             , namedTypes   :: Map.Map TypeId (Type, TScheme) }
+                             , namedTypes   :: Map.Map TypeId (Type, TypeScheme) }
                    deriving (Show, Eq)
 
 -- | VarNames instance for InferState

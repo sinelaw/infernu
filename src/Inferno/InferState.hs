@@ -55,23 +55,23 @@ failWithM action err = do
   result <- action
   failWith result err
 
-getVarSchemeByVarId :: VarId -> Infer (Maybe TScheme)
+getVarSchemeByVarId :: VarId -> Infer (Maybe TypeScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
 
 getVarId :: EVarName -> TypeEnv -> Maybe VarId
 getVarId = Map.lookup
 
-getVarScheme :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Maybe TScheme)
+getVarScheme :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Maybe TypeScheme)
 getVarScheme a n env = case getVarId n env of
                        Nothing -> throwError a $ "Unbound variable: '" ++ show n ++ "'"
                        Just varId -> getVarSchemeByVarId varId
 
-setVarScheme :: EVarName -> VarId -> TScheme -> Infer ()
+setVarScheme :: EVarName -> VarId -> TypeScheme -> Infer ()
 setVarScheme n varId scheme = do
   modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ pretty n ++ ": " ++ pretty scheme) . Map.insert varId scheme $ varSchemes is }
   return ()
 
-addVarScheme :: TypeEnv -> EVarName -> TScheme -> Infer TypeEnv
+addVarScheme :: TypeEnv -> EVarName -> TypeScheme -> Infer TypeEnv
 addVarScheme env n scheme = do
   varId <- tracePretty ("-- '" ++ pretty n ++ "' = varId") <$> freshVarId
   setVarScheme n varId scheme
@@ -110,7 +110,7 @@ getFreeTVars env = do
                 tr = tracePretty $ " collected from " ++ pretty varId ++ " free type variables: "
   foldM collectFreeTVs Set.empty (Map.elems env)
 
-addNamedType :: TypeId -> Type -> TScheme -> Infer ()
+addNamedType :: TypeId -> Type -> TypeScheme -> Infer ()
 addNamedType tid t scheme = do
   traceLog ("===> Introducing named type: " ++ pretty tid ++ " => " ++ pretty scheme) ()
   modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
@@ -134,7 +134,7 @@ addNamedType tid t scheme = do
 --                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (Fix $ TCons TFunc [Fix $ TBody $ TVar 11, mkNamedType 1 [Fix $ TBody $ TVar 11]]))
 -- :}
 -- True
-areEquivalentNamedTypes :: (Type, TScheme) -> (Type, TScheme) -> Bool
+areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
 areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = applySubst subst $ replaceFix (unFix t1) (unFix t2) $ schemeType s1 })
   where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
 
@@ -266,7 +266,7 @@ applySubstInfer s =
 -- :}
 -- Right Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 1))])
 --
-instantiate :: TScheme -> Infer (Type)
+instantiate :: TypeScheme -> Infer (Type)
 instantiate (TScheme tvarNames t) = do
   allocNames <- forM tvarNames $ \tvName -> do
     freshName <- fresh
@@ -310,7 +310,7 @@ instantiateVar a n env = do
 -- Right (TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 0))])})
 --
 -- TODO add tests for monotypes
-generalize :: TypeEnv -> Type -> Infer TScheme
+generalize :: TypeEnv -> Type -> Infer TypeScheme
 generalize tenv t = do
   s <- getMainSubst
   let t' = applySubst s t

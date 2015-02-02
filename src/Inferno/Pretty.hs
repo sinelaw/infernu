@@ -133,7 +133,7 @@ instance Pretty t => Pretty (FType t) where
 instance Pretty Type where
   prettyTab n (Fix t) = prettyTab n t
 
-instance Pretty TScheme where
+instance Pretty t => Pretty (TScheme t) where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
 
