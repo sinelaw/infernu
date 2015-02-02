@@ -58,10 +58,10 @@ unify a t1 t2 = decycledUnify a t1 t2
 -- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 1)
 -- Right (fromList [(0,Fix (TRow (TRowEnd (Just (RowTVar 1)))))])
 --
--- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowProp "x" (Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
--- Right (fromList [(0,Fix (TRow (TRowProp "x" Fix (TBody TNumber) (TRowEnd (Just (RowTVar 1))))))])
+-- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowProp "x" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
+-- Right (fromList [(0,Fix (TRow (TRowProp "x" (TScheme {schemeVars = [], schemeType = Fix (TBody TNumber)}) (TRowEnd (Just (RowTVar 1))))))])
 --
--- >>> let row1 z = (Fix $ TRow $ TRowProp "x" (Fix $ TBody TNumber) (TRowEnd z))
+-- >>> let row1 z = (Fix $ TRow $ TRowProp "x" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd z))
 -- >>> let sCloseRow = fromRight $ u (row1 $ Just $ RowTVar 1) (row1 Nothing)
 -- >>> pretty $ applySubst sCloseRow (row1 $ Just $ RowTVar 1)
 -- "{x: TNumber}"
@@ -70,7 +70,7 @@ unify a t1 t2 = decycledUnify a t1 t2
 --
 -- >>> let tvar0 = Fix $ TBody $ TVar 0
 -- >>> let tvar3 = Fix $ TBody $ TVar 3
--- >>> let recRow = Fix $ TRow $ TRowProp "x" tvar0 $ TRowProp "y" tvar3 (TRowEnd $ Just $ RowTVar 2)
+-- >>> let recRow = Fix $ TRow $ TRowProp "x" (TScheme [] tvar0) $ TRowProp "y" (TScheme [] tvar3) (TRowEnd $ Just $ RowTVar 2)
 -- >>> let s = fromRight $ u tvar0 recRow
 -- >>> s
 -- fromList [(0,Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]))]
@@ -104,7 +104,7 @@ unify a t1 t2 = decycledUnify a t1 t2
 --     du tvar0 recRow
 --     let tvar4 = Fix . TBody . TVar $ 4
 --         tvar5 = Fix . TBody . TVar $ 5
---     s2 <- du recRow (Fix $ TRow $ TRowProp "x" tvar4 $ TRowProp "y" tvar5 (TRowEnd Nothing))
+--     s2 <- du recRow (Fix $ TRow $ TRowProp "x" (TScheme [] tvar4) $ TRowProp "y" (TScheme [] tvar5) (TRowEnd Nothing))
 --     return $ applySubst s2 recRow
 -- :}
 -- "{x: <Named Type: mu 'B'. {} f>, y: f}"
@@ -131,14 +131,14 @@ unify a t1 t2 = decycledUnify a t1 t2
 -- >>> :{
 -- pretty $ runInfer $ do
 --     s1 <- du tvar0 rec2
---     generalize Map.empty $ applySubst s1 rec2
+--     generalize (ELit "bla" LitUndefined) Map.empty $ applySubst s1 rec2
 -- :}
 -- "forall c d. (this: {x: <Named Type: mu 'B'. c d>, y: d, ..c} -> TNumber)"
 --
 -- >>> :{
 -- putStrLn $ fromRight $ runInfer $ do
 --     s1 <- du tvar0 rec2
---     tscheme <- generalize Map.empty $ applySubst s1 rec2
+--     tscheme <- generalize (ELit "bla" LitUndefined) Map.empty $ applySubst s1 rec2
 --     Control.Monad.forM_ [1,2..10] $ const fresh
 --     t1 <- instantiate tscheme
 --     t2 <- instantiate tscheme
@@ -224,27 +224,42 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
            --commonTypes :: [(Type, Type)]
            commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
-       forM_ commonTypes $ \(t1s, t2s) ->
-         do let crap = Fix $ TBody TUndefined
-                unifySchemes' = do t1' <- instantiate t1s
-                                   t2' <- instantiate t2s
-                                   recurse a t1' t2'
-                isSimpleScheme =
-                  case t1s of
-                    TScheme [] _ -> True
-                    TScheme [q] (Fix (TCons TFunc (Fix (TBody (TVar x)):_))) -> x == q -- function parameterized only on 'this'
-                    _ -> False
-            if areEquivalentNamedTypes (crap, t1s) (crap, t2s)
-              then return ()
-                    -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
-              else if isSimpleScheme
-                   then unifySchemes'
-                   else unificationError a t1 t2
-
+       forM_ commonTypes (unifyRowPropertyBiased' recurse a (t1, t2))
        r <- RowTVar <$> fresh
        unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
        unifyRows recurse a r(tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
        return ()
+
+
+-- | TODO: This hacky piece of code implements a simple 'subtyping' relation between
+-- type schemes.  The logic is that if the LHS type is "more specific" than we allow
+-- unifying with the RHS.  Instead of actually checking properly for subtyping
+-- (including co/contra variance, etc.) we allow normal unification in two cases,
+-- and fail all others:
+--
+-- 1. If the LHS is not quanitified at all
+-- 2. If the LHS is a function type quantified only on the type of 'this'
+--
+unifyRowPropertyBiased' :: (Pretty x, VarNames x) => UnifyF -> Pos.SourcePos -> (x, x) -> (TypeScheme, TypeScheme) -> Infer ()
+unifyRowPropertyBiased' recurse a (t1, t2) (tprop1s, tprop2s) =
+   do let crap = Fix $ TBody TUndefined
+          unifySchemes' = do tprop1 <- instantiate tprop1s
+                             tprop2 <- instantiate tprop2s
+                             recurse a tprop1 tprop2
+          isSimpleScheme =
+            -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 
+            case tprop1s of
+             TScheme [] _ -> True
+             TScheme [q] (Fix (TCons TFunc (Fix (TBody (TVar x)) : ts))) ->
+                -- function parameterized only on 'this'
+               (x == q) && (not $ x `Set.member` freeTypeVars ts)
+             -- other cases - don't allow!
+             _ -> False
+      if areEquivalentNamedTypes (crap, tprop1s) (crap, tprop2s)
+        then return ()
+        else if isSimpleScheme
+             then unifySchemes'
+             else unificationError a t1 t2
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> RowTVar
                -> (x, Set EPropName, Map EPropName TypeScheme)

@@ -193,13 +193,13 @@ instance VarNames t => VarNames (Exp (a, t)) where
 
 -- | VarNames instance for TRowList
 --
--- >>> freeTypeVars (TRowProp "x" (Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
+-- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
 -- fromList [1]
--- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowEnd Nothing))
+-- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody $ TVar 2) (TRowEnd Nothing))
 -- fromList [2]
--- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowEnd $ Just $ RowTVar 1))
+-- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody $ TVar 2) (TRowEnd $ Just $ RowTVar 1))
 -- fromList [1,2]
--- >>> freeTypeVars (TRowProp "x" (Fix $ TBody $ TVar 2) (TRowProp "y" (Fix $ TBody $ TVar 3) (TRowEnd $ Just $ RowTVar 1)))
+-- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody $ TVar 2) (TRowProp "y" (TScheme [] $ Fix $ TBody $ TVar 3) (TRowEnd $ Just $ RowTVar 1)))
 -- fromList [1,2,3]
 instance VarNames t => VarNames (TRowList t) where
   freeTypeVars (TRowEnd (Just (RowTVar n))) = Set.singleton n
@@ -307,8 +307,8 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- Fix (TRow (TRowEnd Nothing))
 -- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 0)
 -- Fix (TRow (TRowEnd Nothing))
--- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (Fix $ TBody TString) (TRowEnd $ Just $ RowTVar 0))
--- Fix (TRow (TRowProp "bla" Fix (TBody TString) (TRowEnd Nothing)))
+-- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (TScheme [] $ Fix $ TBody TString) (TRowEnd $ Just $ RowTVar 0))
+-- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = Fix (TBody TString)}) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
   applySubst s ft@(Fix t) =

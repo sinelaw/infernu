@@ -121,6 +121,8 @@ addNamedType tid t scheme = do
 -- 
 -- >>> let mkNamedType tid ts = Fix $ TCons (TName (TypeId tid)) ts
 --  
+-- >>> areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (Fix $ TBody TNumber)) (mkNamedType 1 [], TScheme [] (Fix $ TBody TString))
+-- False
 -- >>> areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (mkNamedType 0 [])) (mkNamedType 1 [], TScheme [] (mkNamedType 1 []))
 -- True
 -- >>> :{
@@ -288,14 +290,14 @@ instantiateVar a n env = do
 --
 -- Example:
 --
--- >>> runInfer $ generalize Map.empty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
+-- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
 -- Right (TScheme {schemeVars = [0,1], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 1))])})
 --
 -- >>> :{
 -- runInfer $ do
 --     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
 --     tenv <- addVarScheme Map.empty "x" t
---     generalize tenv (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
+--     generalize (ELit "bla" LitUndefined) tenv (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
 -- :}
 -- Right (TScheme {schemeVars = [2], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 2))])})
 --
@@ -307,7 +309,7 @@ instantiateVar a n env = do
 --
 -- 3. result: forall 2. 1 -> 2
 --
--- >>> runInfer $ generalize Map.empty (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 0)])
+-- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 0)])
 -- Right (TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 0))])})
 --
 -- TODO add tests for monotypes

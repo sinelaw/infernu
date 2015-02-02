@@ -49,12 +49,12 @@ closeRowList (TRowEnd _) = TRowEnd Nothing
 -- TODO: Handle TRowRec, by defining a new named type in which all row types within are closed (recursively).
 
 -- | Replaces a top-level open row type with the closed equivalent.
--- >>> closeRow (Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
--- Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just (RowTVar 1))))) (TRowEnd Nothing)))
--- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
--- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd Nothing))) (TRowEnd Nothing))),Fix (TBody TString)])
--- >>> closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (Fix $ TRow $ TRowProp "a.a" (Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)), Fix $ TBody TString])
--- Fix (TCons TFunc [Fix (TRow (TRowProp "a" Fix (TRow (TRowProp "a.a" Fix (TBody TNumber) (TRowEnd (Just (RowTVar 1))))) (TRowEnd (Just (RowTVar 2))))),Fix (TBody TString)])
+-- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "aa" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
+-- "{a: {aa: TNumber, ..b}}"
+-- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "aa" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
+-- "(this: {a: {aa: TNumber}} -> TString)"
+-- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "a.a" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)), Fix $ TBody TString])
+-- "(this: {a: {a.a: TNumber, ..b}, ..c} -> TString)"
 closeRow :: Type -> Type
 closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
 closeRow t = t
@@ -140,7 +140,8 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     unify a objT $ Fix . TRow $ TRowProp n (TScheme [] rvalueT) $ TRowEnd (Just rowTailVar)
+     rValueScheme <- return $ TScheme [] rvalueT -- generalize expr1 env rvalueT
+     unify a objT $ Fix . TRow $ TRowProp n rValueScheme $ TRowEnd (Just rowTailVar)
      unifyAllInstances a [getRowTVar rowTailVar]
      (expr2T, expr2') <- inferType env expr2
      return (expr2T, EPropAssign (a, expr2T) objExpr' n expr1' expr2')
@@ -295,7 +296,7 @@ typeInference builtins e =
 -- "TBoolean"
 --
 -- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitNumber 3)) (var "x"))
--- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
+-- "<dummy>:1:1: Error: Could not unify: TBoolean with TNumber"
 --
 -- >>> test $ let' "x" (array [lit (LitBoolean True)]) (var "x")
 -- "[TBoolean]"
