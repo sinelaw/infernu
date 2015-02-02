@@ -3,7 +3,9 @@ module Test where
 
 import Inferno.Infer
 
+main :: IO ()
 main = do
-  runAllTests
+  res <- runAllTests
+  print res
   return ()
   

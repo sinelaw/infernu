@@ -21,19 +21,8 @@ import           Data.Set                   (Set)
 import           Prelude                    hiding (foldr, sequence)
 import qualified Text.Parsec.Pos            as Pos
 
-#ifdef QUICKCHECK
-import           Data.DeriveTH
-import           Test.QuickCheck            (choose, resize)
-import           Test.QuickCheck.All
-import           Test.QuickCheck.Arbitrary  (Arbitrary (..))
-#endif
-
-
-
 import           Inferno.Pretty
 import           Inferno.Types
-
-
 import           Inferno.Log
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.

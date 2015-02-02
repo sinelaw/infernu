@@ -20,18 +20,9 @@ import           Data.Set                   (Set)
 import           Prelude                    hiding (foldr, sequence)
 import qualified Text.Parsec.Pos            as Pos
 
-#ifdef QUICKCHECK
-import           Data.DeriveTH
-import           Test.QuickCheck            (choose, resize)
-import           Test.QuickCheck.All
-import           Test.QuickCheck.Arbitrary  (Arbitrary (..))
-#endif
-
-
 import           Inferno.BuiltinArray ( arrayRowType)
 import           Inferno.Pretty
 import           Inferno.Types
-
 import           Inferno.Decycle
 import           Inferno.InferState
 import           Inferno.Log

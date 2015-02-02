@@ -40,6 +40,10 @@ library
   ghc-options: -Wall -O2 -rtsopts -threaded
   if flag(trace)
     cpp-options: -DTRACE
+  if flag(quickcheck)
+    cpp-options: -DQUICKCHECK
+    build-depends: QuickCheck, derive
+    default-extensions: TemplateHaskell, DeriveGeneric, FlexibleInstances
 
 executable inferno
   main-is: Main.hs
@@ -48,6 +52,10 @@ executable inferno
   ghc-options: -Wall -O2 -rtsopts -threaded
   if flag(trace)
     cpp-options: -DTRACE
+  if flag(quickcheck)
+    cpp-options: -DQUICKCHECK
+    build-depends: QuickCheck, derive
+    default-extensions: TemplateHaskell, DeriveGeneric
 
 executable inferno-demo
   main-is: Demo.hs
@@ -57,6 +65,10 @@ executable inferno-demo
   ghc-options: -Wall  -O2 -main-is Demo
   if flag(trace)
     cpp-options: -DTRACE
+  if flag(quickcheck)
+    cpp-options: -DQUICKCHECK
+    build-depends: QuickCheck, derive
+    default-extensions: TemplateHaskell, DeriveGeneric
 
 executable test
   if flag(quickcheck)
