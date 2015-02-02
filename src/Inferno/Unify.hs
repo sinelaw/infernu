@@ -1,31 +1,29 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE TupleSections   #-}
-{-# LANGUAGE BangPatterns    #-}
+{-# LANGUAGE CPP           #-}
+{-# LANGUAGE TupleSections #-}
 
 module Inferno.Unify
        (unify, unifyAll, unifyl)
        where
 
+import           Control.Monad        (forM_)
+import           Data.Functor         ((<$>))
+import           Data.Monoid          (Monoid (..))
+import           Data.Traversable     (Traversable (..))
 
-import           Data.Monoid                (Monoid(..))
-import Control.Monad (liftM2)
-import           Data.Traversable              (Traversable (..))
-import           Data.Functor               ((<$>))
+import           Data.Map.Lazy        (Map)
+import qualified Data.Map.Lazy        as Map
+import           Data.Maybe           (mapMaybe)
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
+import           Prelude              hiding (foldr, mapM, sequence)
+import qualified Text.Parsec.Pos      as Pos
 
-import qualified Data.Map.Lazy              as Map
-import           Data.Map.Lazy              (Map)
-import           Data.Maybe                 (mapMaybe)
-import qualified Data.Set                   as Set
-import           Data.Set                   (Set)
-import           Prelude                    hiding (foldr, sequence, mapM)
-import qualified Text.Parsec.Pos            as Pos
-
-import           Inferno.BuiltinArray ( arrayRowType)
-import           Inferno.Pretty
-import           Inferno.Types
+import           Inferno.BuiltinArray (arrayRowType)
 import           Inferno.Decycle
 import           Inferno.InferState
 import           Inferno.Log
+import           Inferno.Pretty
+import           Inferno.Types
 
 ----------------------------------------------------------------------
 tryMakeRow :: FType Type -> Maybe (TRowList Type)
@@ -194,6 +192,7 @@ unify' recurse a t1@(TCons (TName n1) targs1) t2 =
 unify' recurse a t1 t2@(TCons (TName _) _) = recurse a (Fix t2) (Fix t1)
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
+-- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
     if (n1 == n2) && (length ts1 == length ts2)
     then unifyl recurse a $ zip ts1 ts2
@@ -214,18 +213,27 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
            names2 = Set.fromList $ Map.keys m2
            (m1, r1) = flattenRow row1
            names1 = Set.fromList $ Map.keys m1
-           
+
            commonNames = Set.toList $ names1 `Set.intersection` names2
-           
+
            --namesToTypes :: Map EPropName (TScheme t) -> [EPropName] -> [t]
            -- TODO: This ignores quantified variables in the schemes.
            -- It should be AT LEAST alpha-equivalence below (in the unifyl)
-           namesToTypes m props = mapM instantiate ((mapMaybe $ flip Map.lookup m) props)
-           
+           namesToTypes m props = (mapMaybe $ flip Map.lookup m) props
+
            --commonTypes :: [(Type, Type)]
-           commonTypes = liftM2 zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
-           
-       commonTypes >>= unifyl recurse a 
+           commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
+
+       forM_ commonTypes $ \(t1s, t2s) ->
+         do let crap = Fix $ TBody TUndefined
+            if areEquivalentNamedTypes (crap, t1s) (crap, t2s)
+              then return ()
+              else if null (schemeVars t1s) -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
+                   then do t1' <- instantiate t1s
+                           t2' <- instantiate t2s
+                           recurse a t1' t2'
+                   else unificationError a t1 t2
+
        r <- RowTVar <$> fresh
        unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
        unifyRows recurse a r(tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
@@ -286,7 +294,7 @@ varBind :: Pos.SourcePos -> TVarName -> Type -> Infer ()
 varBind a n t =
   do s <- varBind' a n t
      applySubstInfer s
-     
+
 varBind' :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                | isInsideRowType n t =

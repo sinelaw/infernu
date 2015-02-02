@@ -132,7 +132,7 @@ inferType' env (EAssign a n expr1 expr2) =
   do lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
-     unify a rvalueT lvalueT
+     unify a lvalueT rvalueT
      unifyAllInstances a $ getQuantificands lvalueScheme
      (tRest, expr2') <- inferType env expr2
      return (tRest, EAssign (a, tRest) n expr1' expr2')
@@ -148,9 +148,9 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
      let elemType = Fix . TBody . TVar $ elemTVarName
-     unify a (Fix $ TCons TArray [elemType]) tArr
+     unify a tArr $ Fix $ TCons TArray [elemType]
      (tId, eIdx') <- inferType env eIdx
-     unify a (Fix $ TBody TNumber) tId
+     unify a tId $ Fix $ TBody TNumber
      (tExpr1, expr1') <- inferType env expr1
      unify a tExpr1 elemType
      unifyAllInstances a [elemTVarName]
@@ -190,7 +190,7 @@ inferType' env (EProp a eObj propName) =
      propTypeScheme <- case unFix tObj of
 --                  TRow tRowList -> --TODO
                   _ -> TScheme [] . Fix . TBody . TVar <$> fresh
-     unify a tObj $ Fix . TRow $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)
+     unify a (Fix . TRow $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)) tObj
      propType <- instantiate propTypeScheme
      return (propType, EProp (a,propType) eObj' propName)
 inferType' env (EIndex a eArr eIdx) =
