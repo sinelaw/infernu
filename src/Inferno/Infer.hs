@@ -34,38 +34,12 @@ import           Inferno.Types
 import           Inferno.Unify             (unify, unifyAll, unifyl)
 
 
-----------------------------------------------------------------------
-
--- var x = 2;    --> let x = ref 2 in    | x :: a
--- x = 3;        -->   x := 3            |
-
--- var f = function (x) { return [x]; }    --> let f = ref (\x -> arr [x])  :: Ref (forall a. a -> [a])
--- var g = f;                              -->     g = ref (!f)             :: Ref (forall a. a -> [a])
--- var st = f('abc');                      -->     st = ref (!f 'abc')      :: Ref [String]
--- var num = f(1234);                      -->     num = ref (!f 1234)      :: Ref [Number]
-
-----------------------------------------------------------------------
-
-
--- instance (Functor f, Foldable f, Types a) => Types (f a) where
---   freeTypeVars = foldr (Set.union . freeTypeVars) Set.empty
---   applySubst s = fmap (applySubst s)
-----------------------------------------------------------------------
 
 getQuantificands :: TScheme -> [TVarName]
 getQuantificands (TScheme tvars _) = tvars
 
 getAnnotations :: Exp a -> [a]
 getAnnotations = foldr (:) []
-
-
--- alphaEquivalent :: TScheme -> TScheme -> Bool
--- alphaEquivalent ts1@(TScheme tvn1 _) (TScheme tvn2 t2) = ts1 == TScheme tvn1 ts2'
---     where TScheme _ ts2' = applySubst substVarNames (TScheme [] t2)
---           substVarNames = Map.fromList . map (\(old,new) -> (old, TBody $ TVar new)) $ zip tvn2 tvn1
-
-----------------------------------------------------------------------
-
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = False
