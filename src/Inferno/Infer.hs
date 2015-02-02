@@ -10,9 +10,6 @@ module Inferno.Infer
     , getAnnotations
     , minifyVars
     , TypeError
-#ifdef QUICKCHECK
-    , runAllTests
-#endif
     )
     where
 
@@ -28,13 +25,6 @@ import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 import           Prelude                   hiding (foldr, sequence)
 import qualified Text.Parsec.Pos           as Pos
-
-#ifdef QUICKCHECK
-import           Data.DeriveTH
-import           Test.QuickCheck           (choose, resize)
-import           Test.QuickCheck.All
-import           Test.QuickCheck.Arbitrary (Arbitrary (..))
-#endif
 
 import qualified Inferno.Builtins          as Builtins
 import           Inferno.InferState
@@ -397,28 +387,3 @@ test e = case runTypeInference e of
 runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type))
 runTypeInference e = runInfer $ typeInference Builtins.builtins e
 
-
-#ifdef QUICKCHECK
--- Test runner
-return []
-
-instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Map k v) where
-    arbitrary = Map.fromList <$> resize 2 arbitrary
-    shrink m = map (flip Map.delete m) (Map.keys m)
-
-$( derive makeArbitrary ''TypeId )
-$( derive makeArbitrary ''RowTVar )
-$( derive makeArbitrary ''TRowList )
-$( derive makeArbitrary ''TConsName )
-$( derive makeArbitrary ''TBody )
-$( derive makeArbitrary ''FType )
-
-instance Arbitrary (Fix FType) where
-    arbitrary = Fix <$> arbitrary
-  
-
-{-# WARNING runAllTests "QuickCheck runner, do not use!" #-}
-runAllTests :: IO Bool
-runAllTests = $(quickCheckAll)
-
-#endif

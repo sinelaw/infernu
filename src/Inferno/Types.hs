@@ -40,6 +40,9 @@ module Inferno.Types
        , NameSource(..)
        , VarNames(freeTypeVars, mapVarNames)
        , EPropName
+#ifdef QUICKCHECK
+       , runAllTests
+#endif
        ) where
 
 import           Data.Foldable   (Foldable (..), foldr)
@@ -49,6 +52,18 @@ import           Data.Maybe      (fromMaybe)
 import qualified Data.Set        as Set
 import qualified Text.Parsec.Pos as Pos
 import Prelude hiding (foldr)
+
+#ifdef QUICKCHECK
+import           Data.Functor              ((<$>))
+import           Data.Map.Lazy             (Map)
+import qualified Data.Map.Lazy             as Map
+import           Data.DeriveTH
+import           Test.QuickCheck           (choose, resize)
+import           Test.QuickCheck.All
+import           Test.QuickCheck.Arbitrary (Arbitrary (..))
+#endif
+
+
 
 type EVarName = String
 type EPropName = String
@@ -409,3 +424,32 @@ instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
                        , mainSubst = s `composeSubst` (mainSubst is)
                        , varInstances = Map.fromList $ map (\(k,v) -> (k, (applySubst s v) `Set.union` v)) $ Map.assocs $ varInstances is }
+
+
+
+
+#ifdef QUICKCHECK
+-- Test runner
+return []
+
+instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Map k v) where
+    arbitrary = Map.fromList <$> resize 2 arbitrary
+    shrink m = map (flip Map.delete m) (Map.keys m)
+
+$( derive makeArbitrary ''TypeId )
+$( derive makeArbitrary ''RowTVar )
+$( derive makeArbitrary ''TRowList )
+$( derive makeArbitrary ''TConsName )
+$( derive makeArbitrary ''TBody )
+$( derive makeArbitrary ''FType )
+
+instance Arbitrary (Fix FType) where
+    arbitrary = Fix <$> arbitrary
+  
+
+{-# WARNING runAllTests "QuickCheck runner, do not use!" #-}
+runAllTests :: IO Bool
+runAllTests = $(quickCheckAll)
+
+#endif
+
