@@ -192,27 +192,32 @@ unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
           t1' <- unroll' n1 targs1
           t2' <- unroll' n2 targs2
           recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
-unify' recurse a t1@(TCons (TName n1) targs1) t2 =
-  do t1' <- unrollName a n1 targs1
-     traceLog ("unrolled: " ++ pretty t1 ++ " ==> " ++ pretty t1' ++ " for unification with ~ " ++ pretty t2) ()
-     recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
-unify' recurse a t1 t2@(TCons (TName _) _) = recurse a (Fix t2) (Fix t1)
+
+unify' recurse a (TCons (TName n1) targs1) t2 = unrollName a n1 targs1 >>= \t1' -> recurse a t1' (Fix t2)
+unify' recurse a t1 (TCons (TName n2) targs2) = unrollName a n2 targs2 >>= \t2' -> recurse a (Fix t1) t2'
+
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
-unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
+unify' _ a t1@(TCons _ _) t2@(TBody _) = unificationError a t1 t2
+
 -- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
   do when (n1 /= n2) $ unificationError a t1 t2
      case matchZip ts1 ts2 of
       Nothing -> unificationError a t1 t2
       Just ts -> unifyl recurse a ts
---throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
-unify' r a t1@(TRow _)    t2@(TCons _ _) =
+
+unify' r a t1@(TRow _) t2@(TCons _ _) =
   case tryMakeRow t2 of
    Nothing -> unificationError a t1 t2
-   Just rowType -> unify' r a t1 (TRow rowType)
-unify' r a t1@(TCons _ _) t2@(TRow _)    = unify' r a t2 t1
+   Just rowType -> r a (Fix t1) (Fix $ TRow rowType)
+unify' r a t1@(TCons _ _) t2@(TRow _) =
+  case tryMakeRow t1 of
+   Nothing -> unificationError a t1 t2
+   Just rowType -> r a (Fix $ TRow rowType) (Fix t2)
+   
 unify' _ a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
 unify' _ a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
+
 -- TODO: un-hackify!
 unify' recurse a t1@(TRow row1) t2@(TRow row2) =
   if t1 == t2 then return ()

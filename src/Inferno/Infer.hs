@@ -290,7 +290,7 @@ typeInference builtins e =
 -- "(this: a -> a)"
 --
 -- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (lit (LitBoolean True)) (var "id"))
--- "<dummy>:1:1: Error: Could not unify: TBoolean with (this: a -> a)"
+-- "<dummy>:1:1: Error: Could not unify: (this: a -> a) with TBoolean"
 --
 -- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitBoolean False)) (var "x"))
 -- "TBoolean"
