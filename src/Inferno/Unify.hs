@@ -185,6 +185,7 @@ unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ "
 unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
+unify' _ _ (TBody TUndefined) _ = return () -- TODO verify this is ok. undefined being treated as "bottom" type here.
 unify' _ a (TBody x) (TBody y) = whenNotEq x y $ unificationError a x y
 unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
   do if n1 == n2

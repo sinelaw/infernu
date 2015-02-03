@@ -1,3 +1,3 @@
 function getUndefined() {}
-var x = getUndefined();
-x = 3;
+var x = 3;
+x = getUndefined();
