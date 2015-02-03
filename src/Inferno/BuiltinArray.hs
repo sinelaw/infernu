@@ -1,8 +1,12 @@
+{-# LANGUAGE TupleSections #-}
 module Inferno.BuiltinArray
        (arrayRowType)
        where
 
+import           Control.Monad             (foldM, forM)
 import Inferno.Types
+import Inferno.InferState
+import           Inferno.Lib (safeLookup)
 
 func :: Type -> Type -> Type -> Type
 func this x y = Fix $ TCons TFunc [this, x, y]
@@ -55,7 +59,9 @@ arrayProps elemType = let aType = array elemType in
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
-arrayRowType :: Type -> TRowList Type
-arrayRowType elemType = foldr addProp (TRowEnd Nothing) $ arrayProps elemType
-  where addProp (name, t) rowlist = TRowProp name t rowlist
-
+arrayRowType :: Type -> Infer (TRowList Type)
+arrayRowType elemType = foldM addProp (TRowEnd Nothing) $ arrayProps elemType
+  where addProp rowlist (name, propTS) =
+          do allocNames <- forM (schemeVars propTS) $ \tvName -> (fresh >>= return . (tvName,))
+             let ts' = mapVarNames (safeLookup allocNames) propTS
+             return $ TRowProp name ts' rowlist

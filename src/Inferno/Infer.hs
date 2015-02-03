@@ -20,7 +20,7 @@ import           Data.Functor              ((<$>))
 
 import           Data.Map.Lazy             (Map)
 import qualified Data.Map.Lazy             as Map
-import           Data.Maybe                (fromMaybe, mapMaybe)
+import           Data.Maybe                (mapMaybe)
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 import           Prelude                   hiding (foldr, sequence)
@@ -30,6 +30,7 @@ import qualified Inferno.Builtins          as Builtins
 import           Inferno.InferState
 import           Inferno.Log
 import           Inferno.Pretty
+import           Inferno.Lib (safeLookup)
 import           Inferno.Types
 import           Inferno.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
 
@@ -224,9 +225,6 @@ createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
     where allTVars :: TypeScheme -> Set TVarName
           allTVars (TScheme qvars t) = freeTypeVars t `Set.union` (Set.fromList qvars)
-
-          safeLookup :: Eq a => [(a,a)] -> a -> a
-          safeLookup assoc n = fromMaybe n $ lookup n assoc
 
           addVarScheme' :: Map EVarName VarId -> (EVarName, TypeScheme) -> Infer (Map EVarName VarId)
           addVarScheme' m (name, tscheme) =

@@ -121,7 +121,7 @@ instance Pretty t => Pretty (FType t) where
   prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
   prettyTab n (TCons (TName name) ts) = "<Named Type: mu '" ++ pretty name ++ "'. " ++ (unwords $ map (prettyTab n) ts) ++ ">"
   prettyTab t (TRow list) = "{"
-                            ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) (Map.toList props))
+                            ++ intercalate ", " (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
                             ++ (case r of
                                  FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
                                  FlatRowEndRec tid ts -> ", " ++ pretty (TCons (TName tid) ts) -- TODO 

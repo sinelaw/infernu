@@ -9,6 +9,7 @@ import           Control.Monad        (forM_, when)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
 import           Data.Traversable     (Traversable (..))
+import           Data.Foldable     (Foldable (..))
 
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
@@ -25,10 +26,13 @@ import           Inferno.Log
 import           Inferno.Pretty
 import           Inferno.Types
 import           Inferno.Lib (matchZip)
+
+
 ----------------------------------------------------------------------
-tryMakeRow :: FType Type -> Maybe (TRowList Type)
-tryMakeRow (TCons TArray [t]) = Just $ arrayRowType t
-tryMakeRow _ = Nothing
+
+tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
+tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
+tryMakeRow _ = return Nothing
 
 ----------------------------------------------------------------------
 
@@ -207,13 +211,15 @@ unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
       Just ts -> unifyl recurse a ts
 
 unify' r a t1@(TRow _) t2@(TCons _ _) =
-  case tryMakeRow t2 of
-   Nothing -> unificationError a t1 t2
-   Just rowType -> r a (Fix t1) (Fix $ TRow rowType)
+  do res <- tryMakeRow t2
+     case res of
+      Nothing -> unificationError a t1 t2
+      Just rowType -> r a (Fix t1) (Fix $ TRow rowType)
 unify' r a t1@(TCons _ _) t2@(TRow _) =
-  case tryMakeRow t1 of
-   Nothing -> unificationError a t1 t2
-   Just rowType -> r a (Fix $ TRow rowType) (Fix t2)
+  do res <- tryMakeRow t1
+     case res of
+      Nothing -> unificationError a t1 t2
+      Just rowType -> r a (Fix $ TRow rowType) (Fix t2)
    
 unify' _ a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
 unify' _ a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
@@ -236,10 +242,16 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
          --commonTypes :: [(Type, Type)]
          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
-     forM_ commonTypes $ unifyRowPropertyBiased' recurse a (unificationError a t1 t2)
+     forM_ commonTypes $ \(ts1, ts2) -> unifyRowPropertyBiased' recurse a (unificationError a ts1 ts2) (ts1, ts2)
      r <- RowTVar <$> fresh
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
+
+
+-- TODO: should be biased, and fail if more-specific type contains a qualified type variable in the position where the more-general type has a type or free variable
+unifyTypeSchemes :: UnifyF -> Pos.SourcePos -> TypeScheme -> TypeScheme -> Infer ()
+unifyTypeSchemes r a s1 s2 = r a (schemeType s2) (applySubst subst $ schemeType s1)
+  where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
 
 
 unifyRowPropertyBiased :: Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
@@ -270,6 +282,7 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
                (x == q) && (not $ x `Set.member` freeTypeVars ts)
              -- other cases - don't allow!
              _ -> False
+      -- TODO should do biased type scheme unification here
       if areEquivalentNamedTypes (crap, tprop1s) (crap, tprop2s)
         then return ()
         else if isSimpleScheme
