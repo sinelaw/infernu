@@ -31,7 +31,7 @@ import           Inferno.InferState
 import           Inferno.Log
 import           Inferno.Pretty
 import           Inferno.Types
-import           Inferno.Unify             (unify, unifyAll, unifyl)
+import           Inferno.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
 
 
 
@@ -140,8 +140,17 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     rValueScheme <- return $ TScheme [] rvalueT -- generalize expr1 env rvalueT
-     unify a objT $ Fix . TRow $ TRowProp n rValueScheme $ TRowEnd (Just rowTailVar)
+     let rvalueScheme = TScheme [] rvalueT -- generalize expr1 env rvalueT
+         rank0Unify = unify a objT $ Fix . TRow $ TRowProp n rvalueScheme $ TRowEnd (Just rowTailVar)
+     case unFix objT of
+       TRow trowList ->
+         case Map.lookup n . fst $ flattenRow trowList of
+          -- lvalue is known to be a property with some scheme
+          Just lvalueScheme ->
+            do generalizedRvalue <- generalize expr1 env rvalueT
+               unifyRowPropertyBiased a rank0Unify (lvalueScheme, generalizedRvalue)
+          Nothing -> rank0Unify
+       _ -> rank0Unify
      unifyAllInstances a [getRowTVar rowTailVar]
      (expr2T, expr2') <- inferType env expr2
      return (expr2T, EPropAssign (a, expr2T) objExpr' n expr1' expr2')

@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Inferno.Unify
-       (unify, unifyAll, unifyl)
+       (unify, unifyAll, unifyl, unifyRowPropertyBiased)
        where
 
 import           Control.Monad        (forM_, when)
@@ -236,11 +236,14 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
          --commonTypes :: [(Type, Type)]
          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
-     forM_ commonTypes (unifyRowPropertyBiased' recurse a (t1, t2))
+     forM_ commonTypes $ unifyRowPropertyBiased' recurse a (unificationError a t1 t2)
      r <- RowTVar <$> fresh
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
 
+
+unifyRowPropertyBiased :: Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
+unifyRowPropertyBiased = unifyRowPropertyBiased' unify
 
 -- | TODO: This hacky piece of code implements a simple 'subtyping' relation between
 -- type schemes.  The logic is that if the LHS type is "more specific" than we allow
@@ -251,9 +254,10 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
 -- 1. If the LHS is not quanitified at all
 -- 2. If the LHS is a function type quantified only on the type of 'this'
 --
-unifyRowPropertyBiased' :: (Pretty x, VarNames x) => UnifyF -> Pos.SourcePos -> (x, x) -> (TypeScheme, TypeScheme) -> Infer ()
-unifyRowPropertyBiased' recurse a (t1, t2) (tprop1s, tprop2s) =
-   do let crap = Fix $ TBody TUndefined
+unifyRowPropertyBiased' :: UnifyF -> Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
+unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
+   do traceLog ("Unifying row properties: " ++ pretty tprop1s ++ " ~ " ++ pretty tprop2s) ()
+      let crap = Fix $ TBody TUndefined
           unifySchemes' = do tprop1 <- instantiate tprop1s
                              tprop2 <- instantiate tprop2s
                              recurse a tprop1 tprop2
@@ -270,7 +274,7 @@ unifyRowPropertyBiased' recurse a (t1, t2) (tprop1s, tprop2s) =
         then return ()
         else if isSimpleScheme
              then unifySchemes'
-             else unificationError a t1 t2
+             else errorAction
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> RowTVar
                -> (x, Set EPropName, Map EPropName TypeScheme)
