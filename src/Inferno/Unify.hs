@@ -5,7 +5,7 @@ module Inferno.Unify
        (unify, unifyAll, unifyl)
        where
 
-import           Control.Monad        (forM_)
+import           Control.Monad        (forM_, when)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
 import           Data.Traversable     (Traversable (..))
@@ -159,6 +159,11 @@ unify a t1 t2 = decycledUnify a t1 t2
 decycledUnify :: UnifyF
 decycledUnify = decycle3 unify''
 
+whenNotEq :: (Monad m, Eq a) => a -> a -> m () -> m ()
+whenNotEq x y action = if x == y
+                       then return ()
+                       else action
+
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 =
   do traceLog ("breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
@@ -167,9 +172,7 @@ unify'' (Just recurse) a t1 t2 =
      s <- getMainSubst
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
-     if t1' == t2'
-       then return ()
-       else unify' recurse a t1' t2'
+     unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
@@ -178,7 +181,7 @@ unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ "
 unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
-unify' _ a (TBody x) (TBody y) = unificationError a x y
+unify' _ a (TBody x) (TBody y) = whenNotEq x y $ unificationError a x y
 unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
   do if n1 == n2
      then case matchZip targs1 targs2 of
@@ -198,9 +201,11 @@ unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
 -- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
-    if (n1 == n2) && (length ts1 == length ts2)
-    then unifyl recurse a $ zip ts1 ts2
-    else unificationError a t1 t2 --throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
+  do when (n1 /= n2) $ unificationError a t1 t2
+     case matchZip ts1 ts2 of
+      Nothing -> unificationError a t1 t2
+      Just ts -> unifyl recurse a ts
+--throwError $ "TCons names or number of parameters do not match: " ++ pretty n1 ++ " /= " ++ pretty n2
 unify' r a t1@(TRow _)    t2@(TCons _ _) =
   case tryMakeRow t2 of
    Nothing -> unificationError a t1 t2
@@ -210,7 +215,9 @@ unify' _ a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
 unify' _ a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
 -- TODO: un-hackify!
 unify' recurse a t1@(TRow row1) t2@(TRow row2) =
-  do let (m2, r2) = flattenRow row2
+  if t1 == t2 then return ()
+  else do 
+     let (m2, r2) = flattenRow row2
          names2 = Set.fromList $ Map.keys m2
          (m1, r1) = flattenRow row1
          names1 = Set.fromList $ Map.keys m1
@@ -227,8 +234,7 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
      forM_ commonTypes (unifyRowPropertyBiased' recurse a (t1, t2))
      r <- RowTVar <$> fresh
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
-     unifyRows recurse a r(tracePretty "t2" $ t2, names2, m2) (tracePretty "t1" $ t1, names1, r1)
-     return ()
+     unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
 
 
 -- | TODO: This hacky piece of code implements a simple 'subtyping' relation between
