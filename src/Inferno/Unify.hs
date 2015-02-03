@@ -179,7 +179,7 @@ unify' _ a (TBody x) (TBody y) = if x == y
                                  else unificationError a x y
 unify' recurse a (TCons (TName n1) targs1) (TCons (TName n2) targs2) =
   do if n1 == n2
-     then return ()
+     then unifyl recurse a $ zip targs1 targs2
      else
        do let unroll' n' targs' = unrollName a n' targs'
           t1' <- unroll' n1 targs1
