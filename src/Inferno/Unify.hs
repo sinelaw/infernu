@@ -248,12 +248,6 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
 
 
--- TODO: should be biased, and fail if more-specific type contains a qualified type variable in the position where the more-general type has a type or free variable
-unifyTypeSchemes :: UnifyF -> Pos.SourcePos -> TypeScheme -> TypeScheme -> Infer ()
-unifyTypeSchemes r a s1 s2 = r a (schemeType s2) (applySubst subst $ schemeType s1)
-  where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
-
-
 unifyRowPropertyBiased :: Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
 unifyRowPropertyBiased = unifyRowPropertyBiased' unify
 
@@ -277,9 +271,9 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 
             case tprop1s of
              TScheme [] _ -> True
-             TScheme [q] (Fix (TCons TFunc (Fix (TBody (TVar x)) : ts))) ->
+--             TScheme [q] (Fix (TCons TFunc (Fix (TBody (TVar x)) : ts))) ->
                 -- function parameterized only on 'this'
-               (x == q) && (not $ x `Set.member` freeTypeVars ts)
+--               (x == q) && (not $ x `Set.member` freeTypeVars ts)
              -- other cases - don't allow!
              _ -> False
       -- TODO should do biased type scheme unification here

@@ -62,6 +62,7 @@ closeRow t = t
 
 ----------------------------------------------------------------------
 
+
 -- For efficiency reasons, types list is returned in reverse order.
 accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer [(Type, Exp (Pos.SourcePos, Type))]
 accumInfer env =
