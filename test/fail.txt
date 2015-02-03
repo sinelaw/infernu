@@ -1,4 +1,3 @@
-// FAIL valid/map.js:11:17: Error: Could not unify: forall d`. ((this: [a], ((this: TUndefined, a, TNumber, [a]) -> d`)) -> [d`]) with forall dy. ((this: [TNumber], ((this: TUndefined, TNumber, TNumber, [TNumber]) -> dy)) -> [dy]) y valid/map.js
 // FAIL valid/promise.js:30:31: Error: Could not unify: {resolve: <Named Type: mu Gh. a b c>, ..c} with TUndefined y valid/promise.js
 // FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error: Could not unify: forall bu. ((this: bu, bu) -> bu) with ((this: a, b) -> b) y valid/prop-polymorphic-assign2-this.js
 // FAIL valid/prop-polymorphic-assign3.js:4:1: Error: Could not unify: forall bj. ((this: bj, TNumber) -> TNumber) with ((this: a, b) -> b) y valid/prop-polymorphic-assign3.js

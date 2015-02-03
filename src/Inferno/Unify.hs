@@ -9,7 +9,7 @@ import           Control.Monad        (forM_, when)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
 import           Data.Traversable     (Traversable (..))
-import           Data.Foldable     (Foldable (..))
+
 
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
@@ -264,7 +264,8 @@ unifyRowPropertyBiased' :: UnifyF -> Pos.SourcePos -> Infer () -> (TypeScheme, T
 unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
    do traceLog ("Unifying row properties: " ++ pretty tprop1s ++ " ~ " ++ pretty tprop2s) ()
       let crap = Fix $ TBody TUndefined
-          unifySchemes' = do tprop1 <- instantiate tprop1s
+          unifySchemes' = do traceLog ("Unifying props: " ++ pretty tprop1s ++ " ~~ " ++ pretty tprop2s) ()
+                             tprop1 <- instantiate tprop1s
                              tprop2 <- instantiate tprop2s
                              recurse a tprop1 tprop2
           isSimpleScheme =
@@ -279,7 +280,7 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
       -- TODO should do biased type scheme unification here
       if areEquivalentNamedTypes (crap, tprop1s) (crap, tprop2s)
         then return ()
-        else if isSimpleScheme
+        else if isSimpleScheme || (length (schemeVars tprop1s) == length (schemeVars tprop2s)) -- isSimpleScheme
              then unifySchemes'
              else errorAction
 
