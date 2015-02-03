@@ -140,7 +140,7 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     rValueScheme <- generalize expr1 env rvalueT -- return $ TScheme [] rvalueT -- generalize expr1 env rvalueT
+     rValueScheme <- return $ TScheme [] rvalueT -- generalize expr1 env rvalueT
      unify a objT $ Fix . TRow $ TRowProp n rValueScheme $ TRowEnd (Just rowTailVar)
      unifyAllInstances a [getRowTVar rowTailVar]
      (expr2T, expr2') <- inferType env expr2
