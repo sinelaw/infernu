@@ -28,6 +28,9 @@ boolean = Fix $ TBody TBoolean
 ts :: t -> TScheme t
 ts = TScheme []
 
+tvar :: TVarName -> Type
+tvar = Fix . TBody . TVar
+
 arrayProps :: Type -> [(String, TypeScheme)]
 arrayProps elemType = let aType = array elemType in
   [ ("length", ts number)
@@ -39,7 +42,7 @@ arrayProps elemType = let aType = array elemType in
   , ("indexOf", ts $ funcN [aType, elemType, number, number])
   , ("join", ts $ func aType string string)
   , ("lastIndexOf", ts $ func aType number number)
---  , "map" -- requires type variables, and maybe foralls on row properties
+  , ("map", TScheme [0] $ func aType (funcN [undef, elemType, number, aType, tvar 0]) (array $ tvar 0))-- requires type variables, and maybe foralls on row properties
   , ("pop", ts $ funcN [aType, elemType])
   , ("push", ts $ funcN [aType, elemType, number])
   , ("reverse", ts $ funcN [aType, aType])
