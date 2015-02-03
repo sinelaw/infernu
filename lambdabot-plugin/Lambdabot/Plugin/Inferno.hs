@@ -12,10 +12,9 @@ import           Lambdabot.Plugin
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 
-import           SafeJS.Infer                (getAnnotations, minifyVars,
+import           Inferno.Infer                (getAnnotations, minifyVars,
                                               pretty, runTypeInference)
---import           SafeJS.Util        (chec
-import           SafeJS.Parse                (translate)
+import           Inferno.Parse                (translate)
 
 
 infernoPlugin :: Module ()

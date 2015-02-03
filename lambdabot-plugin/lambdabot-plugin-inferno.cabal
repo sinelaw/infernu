@@ -16,7 +16,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Lambdabot.Plugin.INFERNO
+  exposed-modules:     Lambdabot.Plugin.Inferno
   -- other-modules:       
   -- other-extensions:    
   other-extensions:    TemplateHaskell, MultiParamTypeClasses, TypeSynonymInstances
