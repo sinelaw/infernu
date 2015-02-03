@@ -54,6 +54,7 @@ arrayProps elemType = let aType = array elemType in
   , ("unshift", ts $ funcN [aType, elemType])
   ]
 
+-- TODO: when inserting builtin types, do fresh renaming of scheme qvars
 arrayRowType :: Type -> TRowList Type
 arrayRowType elemType = foldr addProp (TRowEnd Nothing) $ arrayProps elemType
   where addProp (name, t) rowlist = TRowProp name t rowlist
