@@ -107,16 +107,15 @@ TODO: More examples
 
 ## TODO
 
-- [ ] find a way to deal with methods that don't restrict "this" so that calling them without this doesn't restrict it to 'undefined' - may be related to the fact that methods are monomorphic (the 'this' type var is free)?
 - [ ] allow empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
 - [ ] in inferred types, preserve source code context info and use it for more readable unification errors
 - [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...`
-- [ ] deal with polymorphic object properties (e.g. array.map) - may require rank-n polymorphism or type scheme subtyping
 - [ ] find a reasonable solution for optional parameters - perhaps using an implicit "Maybe"-like type or implicit type unions, and require guards?
-- [ ] treat functions as objects with properties - or should we? the only properties they have are: length (very weird! we might as well leave it out), and call/bind/apply (which need special handling)
 - [ ] when concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere)
-- [ ] top-level type of naked object `{a:3}` isn't shown unless it is wrapped in a paren `({a:3})`.
+- [ ] BUG: top-level type of naked object `{a:3}` isn't shown unless it is wrapped in a paren `({a:3})`.
 - [ ] support `arguments` (a tuple?) and function `bind`
+- [ ] deal better with inferred polymorphic object properties - requires full rank-n unification
+- [ ] Should we treat functions as objects with properties? the only properties they have are: length (very weird! we might as well leave it out), and call/bind/apply (which need special handling)
 
 ### Future
 
