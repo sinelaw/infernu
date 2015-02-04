@@ -129,6 +129,7 @@ data TRowList t = TRowProp EPropName (TScheme t) (TRowList t)
 data FType t = TBody TBody
              | TCons TConsName [t]
              | TRow (TRowList t)
+             | TAmb TVarName [t]
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 newtype Fix f = Fix { unFix :: f (Fix f) }
@@ -226,10 +227,12 @@ instance VarNames t => VarNames (TRowList t) where
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
   freeTypeVars (Fix (TRow trlist)) = freeTypeVars trlist
+  freeTypeVars (Fix (TAmb n ts)) = Set.insert n $ freeTypeVars ts
   freeTypeVars (Fix t) = freeTypeVars' t
 
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
   mapVarNames f (Fix (TRow trlist)) = Fix $ TRow $ mapVarNames f trlist
+  mapVarNames f (Fix (TAmb n ts)) = Fix $ TAmb (f n) $ mapVarNames f ts
   mapVarNames f (Fix t) = Fix $ mapVarNames' f t
 
 instance VarNames (FType (Fix FType)) where
@@ -313,12 +316,13 @@ instance Substable Type where
   applySubst :: TSubst -> Type -> Type
   applySubst s ft@(Fix t) =
     case t of
-     TBody (TVar n) -> substT' t n
+     TBody (TVar n) -> substT' n t
      TRow r -> Fix $ TRow $ applySubst s r
+     TAmb n ts -> substT' n . TAmb n $ map (applySubst s) ts
      _ -> if ft `elem` (Map.elems s)
           then ft
           else Fix $ fmap (applySubst s) t
-     where substT' defaultT n = fromMaybe (Fix defaultT) $ Map.lookup n s
+     where substT' n defaultT = fromMaybe (Fix defaultT) $ Map.lookup n s
     --traverse (fmap f) t
     --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
      --     f t = t

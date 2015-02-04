@@ -128,6 +128,7 @@ instance Pretty t => Pretty (FType t) where
                                )
                             ++ "}"
     where (props, r) = flattenRow list
+  prettyTab t (TAmb n ts) = pretty n ++ "=(" ++ intercalate "|" (map (prettyTab t)  ts) ++ ")"
 
 --instance Pretty t => Pretty (Fix t) where
 instance Pretty Type where

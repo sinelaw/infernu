@@ -5,7 +5,7 @@ module Inferno.Unify
        (unify, unifyAll, unifyl, unifyRowPropertyBiased)
        where
 
-import           Control.Monad        (forM_, when)
+import           Control.Monad        (forM_, when, forM)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
 import           Data.Traversable     (Traversable (..))
@@ -184,11 +184,27 @@ unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
   where [a, b] = minifyVars [x, y]
 
+isRight :: Either a b -> Bool
+isRight (Right _) = True
+isRight _ = False
+
+-- | Main unification function
 unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
+
+-- | Type variables
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
+
+unify' r a (TAmb n ambTs) t2 = unifyAmb r a True n ambTs t2
+unify' r a t1 (TAmb n ambTs) = unifyAmb r a False n ambTs t1
+
+-- | undefined
 unify' _ _ (TBody TUndefined) _ = return () -- TODO verify this is ok. undefined being treated as "bottom" type here.
+
+-- | Two simple types
 unify' _ a (TBody x) (TBody y) = whenNotEq x y $ unificationError a x y
+
+-- | Two recursive types
 unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
   do if n1 == n2
      then case matchZip targs1 targs2 of
@@ -200,12 +216,15 @@ unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
           t2' <- unroll' n2 targs2
           recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
 
+-- | A recursive type and another type
 unify' recurse a (TCons (TName n1) targs1) t2 = unrollName a n1 targs1 >>= \t1' -> recurse a t1' (Fix t2)
 unify' recurse a t1 (TCons (TName n2) targs2) = unrollName a n2 targs2 >>= \t2' -> recurse a (Fix t1) t2'
 
+-- | A type constructor vs. a simple type
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' _ a t1@(TCons _ _) t2@(TBody _) = unificationError a t1 t2
 
+-- | Two type constructors
 -- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
   do when (n1 /= n2) $ unificationError a t1 t2
@@ -213,11 +232,13 @@ unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
       Nothing -> unificationError a t1 t2
       Just ts -> unifyl recurse a ts
 
+-- | Type constructor vs. row type
 unify' r a (TRow tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TCons _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
 unify' r a (TRow tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TBody _)   (TRow tRowList)  = unifyTryMakeRow r a False tRowList t1
 
+-- | Two row types
 -- TODO: un-hackify!
 unify' recurse a t1@(TRow row1) t2@(TRow row2) =
   if t1 == t2 then return ()
@@ -240,6 +261,26 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
      r <- RowTVar <$> fresh
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
+
+unifyAmb
+  :: UnifyF
+     -> Pos.SourcePos
+     -> Bool
+     -> TVarName
+     -> [Type]
+     -> FType Type
+     -> Infer ()
+unifyAmb r a leftBiased n ambTs t2 = do
+  let innerUnify' ambT = if leftBiased
+                         then r a ambT (Fix t2)
+                         else r a (Fix t2) ambT
+      t1 = TAmb n ambTs
+  res <- forM ambTs $ \ambT ->  runSubInfer $ (const ambT) <$> innerUnify' ambT
+  case filter isRight res of
+   [Right resT] -> varBind a n resT
+   _ -> if leftBiased
+        then unificationError a t1 t2
+        else unificationError a t2 t1
 
 unifyTryMakeRow :: UnifyF -> Pos.SourcePos -> Bool -> TRowList Type -> FType Type -> Infer ()
 unifyTryMakeRow r a leftBiased tRowList t2 =

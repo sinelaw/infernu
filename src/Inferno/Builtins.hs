@@ -9,8 +9,17 @@ import           Data.Map.Lazy              (Map)
 unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2]
 
-binaryFunc :: Type -> Type -> Type -> TypeScheme
-binaryFunc t1 t2 t3 = TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2, t3]
+binaryFunc  :: Type -> Type -> Type -> Type -> Fix FType
+binaryFunc tThis t1 t2 t3 = Fix $ TCons TFunc [tThis, t1, t2, t3]
+
+binarySimpleFunc :: Type -> Type -> Type
+binarySimpleFunc tThis t = Fix $ TCons TFunc [tThis, t, t, t]
+
+binaryFuncS :: Type -> Type -> Type -> TypeScheme
+binaryFuncS t1 t2 t3 = TScheme [0] $ binaryFunc (Fix $ TBody $ TVar 0) t1 t2 t3
+
+tVar :: TVarName -> Type
+tVar = Fix . TBody . TVar
 
 tBoolean :: Type
 tBoolean = Fix $ TBody TBoolean
@@ -22,20 +31,20 @@ tString :: Type
 tString = Fix $ TBody TString
 
 numRelation :: TypeScheme
-numRelation = binaryFunc tNumber tNumber tBoolean
+numRelation = binaryFuncS tNumber tNumber tBoolean
 
 numOp :: TypeScheme
-numOp = binaryFunc tNumber tNumber tNumber
+numOp = binaryFuncS tNumber tNumber tNumber
 
 boolRelation :: TypeScheme
-boolRelation = binaryFunc tBoolean tBoolean tBoolean
+boolRelation = binaryFuncS tBoolean tBoolean tBoolean
 
 builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
   ("!",            unaryFunc tBoolean tBoolean),
   ("~",            unaryFunc tNumber  tNumber),
   ("typeof",       TScheme [0,1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, tString]),
-  ("+",            numOp),
+  ("+",            TScheme [0,1] $ Fix $ TAmb 0 [binarySimpleFunc (tVar 1) tNumber, binarySimpleFunc (tVar 1) tString]),
   ("-",            numOp),
   ("*",            numOp),
   ("/",            numOp),

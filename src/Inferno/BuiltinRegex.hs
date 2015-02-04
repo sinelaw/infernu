@@ -8,35 +8,17 @@ import Inferno.Types
 import Inferno.InferState
 import           Inferno.Lib (safeLookup)
 
-func :: Type -> Type -> Type -> Type
-func this x y = Fix $ TCons TFunc [this, x, y]
-
-funcN :: [Fix FType] -> Fix FType
-funcN xs = Fix $ TCons TFunc xs
-
 string :: Type
 string = Fix $ TBody TString
 
-number :: Type
-number = Fix $ TBody TNumber
-
-undef :: Type
-undef = Fix $ TBody TUndefined
-
-regex :: Type
-regex = Fix $ TBody TRegex
-
-boolean :: Fix FType
-boolean = Fix $ TBody TBoolean
+-- regex :: Type
+-- regex = Fix $ TBody TRegex
 
 ts :: t -> TScheme t
 ts = TScheme []
 
-tvar :: TVarName -> Type
-tvar = Fix . TBody . TVar
-
 regexProps :: [(String, TypeScheme)]
-regexProps = let aType = regex in
+regexProps = 
   [ ("source", ts string)
   ]
 

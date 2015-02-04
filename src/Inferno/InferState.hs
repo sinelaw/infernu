@@ -21,6 +21,7 @@ import           Data.Set                   (Set)
 import           Prelude                    hiding (foldr, sequence)
 import qualified Text.Parsec.Pos            as Pos
 
+
 import           Inferno.Pretty
 import           Inferno.Types
 import           Inferno.Log
@@ -31,6 +32,11 @@ type Infer a = StateT InferState (EitherT TypeError Identity) a
 runInferWith :: InferState -> Infer a -> Either TypeError a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
+runSubInfer :: Infer a -> Infer (Either TypeError a)
+runSubInfer a = do
+  s <- get
+  return $ runInferWith s a
+  
 runInfer :: Infer a -> Either TypeError a
 runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, mainSubst = nullSubst, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }
 
@@ -150,6 +156,7 @@ isRecParamOnly n1 typeId t1 =
    TBody _ -> Just []
    TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
+   TAmb _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
    TRow rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
              case rlist' of
@@ -172,6 +179,7 @@ replaceRecType typeId newTypeId indexToDrop t1 =
                                   then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
                                   else t1
    TCons n subTs -> Fix $ TCons n $ map (replaceRecType typeId newTypeId indexToDrop) subTs
+   TAmb n subTs -> Fix $ TAmb n $ map (replaceRecType typeId newTypeId indexToDrop) subTs
    TRow rlist -> Fix $ TRow $ go rlist
      where go rlist' =
              case rlist' of
