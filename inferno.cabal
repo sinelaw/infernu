@@ -34,6 +34,7 @@ library
                      , Inferno.Lib
                      , Inferno.Builtins
                      , Inferno.BuiltinArray
+                     , Inferno.BuiltinRegex
                      , Inferno.Decycle
   -- TODO: use only mtl (not transformers)
   build-depends:       base, mtl, containers, transformers, either, language-ecmascript, digits, parsec

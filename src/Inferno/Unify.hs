@@ -20,6 +20,7 @@ import           Prelude              hiding (foldr, mapM, sequence)
 import qualified Text.Parsec.Pos      as Pos
 
 import           Inferno.BuiltinArray (arrayRowType)
+import           Inferno.BuiltinRegex (regexRowType)
 import           Inferno.Decycle
 import           Inferno.InferState
 import           Inferno.Log
@@ -32,6 +33,7 @@ import           Inferno.Lib (matchZip)
 
 tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
 tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
+tryMakeRow (TBody TRegex) = Just <$> regexRowType
 tryMakeRow _ = return Nothing
 
 ----------------------------------------------------------------------
@@ -211,19 +213,10 @@ unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
       Nothing -> unificationError a t1 t2
       Just ts -> unifyl recurse a ts
 
-unify' r a t1@(TRow _) t2@(TCons _ _) =
-  do res <- tryMakeRow t2
-     case res of
-      Nothing -> unificationError a t1 t2
-      Just rowType -> r a (Fix t1) (Fix $ TRow rowType)
-unify' r a t1@(TCons _ _) t2@(TRow _) =
-  do res <- tryMakeRow t1
-     case res of
-      Nothing -> unificationError a t1 t2
-      Just rowType -> r a (Fix $ TRow rowType) (Fix t2)
-   
-unify' _ a t1@(TRow _)    t2@(TBody _)   = unificationError a t1 t2
-unify' _ a t1@(TBody _)   t2@(TRow _)    = unificationError a t1 t2
+unify' r a (TRow tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TCons _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
+unify' r a (TRow tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TBody _)   (TRow tRowList)  = unifyTryMakeRow r a False tRowList t1
 
 -- TODO: un-hackify!
 unify' recurse a t1@(TRow row1) t2@(TRow row2) =
@@ -247,6 +240,16 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
      r <- RowTVar <$> fresh
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
+
+unifyTryMakeRow :: UnifyF -> Pos.SourcePos -> Bool -> TRowList Type -> FType Type -> Infer ()
+unifyTryMakeRow r a leftBiased tRowList t2 =
+  do let tRow = TRow tRowList
+     res <- tryMakeRow t2
+     case res of
+      Nothing -> unificationError a tRow t2
+      Just rowType -> if leftBiased
+                      then r a (Fix tRow) (Fix $ TRow rowType)
+                      else r a (Fix $ TRow rowType) (Fix tRow)
 
 
 unifyRowPropertyBiased :: Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
