@@ -273,10 +273,6 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 
             case tprop1s of
              TScheme [] _ -> True
---             TScheme [q] (Fix (TCons TFunc (Fix (TBody (TVar x)) : ts))) ->
-                -- function parameterized only on 'this'
---               (x == q) && (not $ x `Set.member` freeTypeVars ts)
-             -- other cases - don't allow!
              _ -> False
       -- TODO should do biased type scheme unification here
       if areEquivalentNamedTypes (crap, tprop1s) (crap, tprop2s)

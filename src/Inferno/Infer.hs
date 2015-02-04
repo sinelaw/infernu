@@ -25,6 +25,7 @@ import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 import           Prelude                   hiding (foldr, sequence)
 import qualified Text.Parsec.Pos           as Pos
+import Data.List (intersperse)
 
 import qualified Inferno.Builtins          as Builtins
 import           Inferno.InferState
@@ -101,7 +102,9 @@ inferType' env (EAbs a argNames e2) =
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
      (t1, e1') <- inferType env e1
-     argsTE <- tracePretty "EApp: unify type args" <$> accumInfer env eArgs
+     traceLog ("EApp: Inferred type for func expr: " ++ pretty t1) ()
+     argsTE <- accumInfer env eArgs
+     traceLog ("EApp: Inferred types for func args: " ++ (concat . intersperse ", " $ map pretty argsTE)) ()
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
