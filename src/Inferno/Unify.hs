@@ -14,6 +14,7 @@ import           Data.Traversable     (Traversable (..))
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
 import           Data.Maybe           (mapMaybe)
+import           Data.Either          (rights)
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
 import           Prelude              hiding (foldr, mapM, sequence)
@@ -184,10 +185,6 @@ unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
   where [a, b] = minifyVars [x, y]
 
-isRight :: Either a b -> Bool
-isRight (Right _) = True
-isRight _ = False
-
 -- | Main unification function
 unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 
@@ -275,12 +272,22 @@ unifyAmb r a leftBiased n ambTs t2 = do
                          then r a ambT (Fix t2)
                          else r a (Fix t2) ambT
       t1 = TAmb n ambTs
-  res <- forM ambTs $ \ambT ->  runSubInfer $ (const ambT) <$> innerUnify' ambT
-  case filter isRight res of
-   [Right resT] -> varBind a n resT
-   _ -> if leftBiased
-        then unificationError a t1 t2
-        else unificationError a t2 t1
+      errorAction = if leftBiased
+                    then unificationError a t1 t2
+                    else unificationError a t2 t1
+  res <- forM ambTs $ \ambT ->  runSubInfer $ do innerUnify' ambT
+                                                 s <- getMainSubst
+                                                 return (ambT, s)
+  case rights res of
+   [] -> errorAction
+   [(ambT, subst)] -> do applySubstInfer subst
+                         varBind a n $ applySubst subst ambT
+   resTs -> do n' <- fresh
+               let substs = map snd resTs
+                   types = map (\(t,s) -> applySubst s t) resTs
+                   subst = foldl (Map.unionWithKey (\k t1 t2 -> Fix $ TAmb k [t1, t2])) Map.empty substs
+               applySubstInfer subst
+               varBind a n $ applySubst subst $ Fix $ TAmb n' $ types
 
 unifyTryMakeRow :: UnifyF -> Pos.SourcePos -> Bool -> TRowList Type -> FType Type -> Infer ()
 unifyTryMakeRow r a leftBiased tRowList t2 =

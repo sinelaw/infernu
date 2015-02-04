@@ -1,7 +1,7 @@
-// FAIL valid/builtins/plus.js:4:28: Error: Could not unify: d=(((this: e, TNumber, TNumber) -> TNumber)|((this: e, TString, TString) -> TString)) with ((this: TNull, a, b) -> c) y valid/builtins/plus.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error: Could not unify: {f: <Named Type: mu Cl. a {, ..b}>, ..b} with TUndefined y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error: Could not unify: {f: <Named Type: mu Cq. a>} with TUndefined y valid/nothis-as-param.js
-ERROR y valid/object-chaining-long.js
+return[0.0])}).method ({method: (this -> let return ERROR y valid/object-chaining-long.js
 // FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error: Could not unify: forall bx. ((this: bx, bx) -> bx) with ((this: a, b) -> b) y valid/prop-polymorphic-assign2-this.js
 // FAIL valid/prop-polymorphic-assign3.js:4:1: Error: Could not unify: forall bm. ((this: bm, TNumber) -> TNumber) with ((this: a, b) -> b) y valid/prop-polymorphic-assign3.js
 // FAIL valid/try.js:4:5: Error: Unbound variable: "e" y valid/try.js
+// FAIL  n invalid/builtins/plus-func.js
