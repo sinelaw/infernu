@@ -8,8 +8,8 @@ module Inferno.Unify
 import           Control.Monad        (forM_, when, forM)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
-import           Data.Traversable     (Traversable (..))
-
+import           Data.Traversable     (Traversable (..), sequence)
+import           Data.Foldable        (Foldable (..), foldrM)
 
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
@@ -17,7 +17,7 @@ import           Data.Maybe           (mapMaybe)
 import           Data.Either          (rights)
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
-import           Prelude              hiding (foldr, mapM, sequence)
+import           Prelude              hiding (foldr, foldl, mapM, sequence)
 import qualified Text.Parsec.Pos      as Pos
 
 import           Inferno.BuiltinArray (arrayRowType)
@@ -27,7 +27,7 @@ import           Inferno.InferState
 import           Inferno.Log
 import           Inferno.Pretty
 import           Inferno.Types
-import           Inferno.Lib (matchZip)
+import           Inferno.Lib (matchZip, flipMap, splatMap)
 
 
 ----------------------------------------------------------------------
@@ -284,10 +284,20 @@ unifyAmb r a leftBiased n ambTs t2 = do
                          varBind a n $ applySubst subst ambT
    resTs -> do n' <- fresh
                let substs = map snd resTs
-                   types = map (\(t,s) -> applySubst s t) resTs
-                   subst = foldl (Map.unionWithKey (\k t1 t2 -> Fix $ TAmb k [t1, t2])) Map.empty substs
+                   -- Step 1: For each optional subst of the ambigious type, collect all the sets of variables that map to the same type
+                   inverseSubsts :: [Map Type (Set TVarName)]
+                   inverseSubsts = map flipMap $ map (\(t,s) -> Map.filterWithKey (\k a -> k `Set.member` freeTypeVars t) s) resTs
+                   -- Step 2: For each set of type variables, make a list of types they could map to (the ambiguity for this set)
+                   typesPerSet :: Map (Set TVarName) [Type]
+                   typesPerSet = foldr (\typeMap resMap -> Map.foldrWithKey (\t -> Map.adjust (t:)) resMap typeMap) Map.empty inverseSubsts
+                   -- TODO: Assert that all values in ambigsPerSet have the same length.
+                   -- Step 3: Create an ambigious type from each fo the [Type] lists
+                   ambigTypesPerSet :: Infer (Map (Set TVarName) Type)
+                   ambigTypesPerSet = sequence $ Map.map (\ts -> fresh >>= \n -> return $ Fix $ TAmb n ts) typesPerSet
+
+               subst <- splatMap <$> ambigTypesPerSet
                applySubstInfer subst
-               varBind a n $ applySubst subst $ Fix $ TAmb n' $ types
+--               varBind a n $ applySubst subst $ Fix $ TAmb n' $ types
 
 unifyTryMakeRow :: UnifyF -> Pos.SourcePos -> Bool -> TRowList Type -> FType Type -> Infer ()
 unifyTryMakeRow r a leftBiased tRowList t2 =
