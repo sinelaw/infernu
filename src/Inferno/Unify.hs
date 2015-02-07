@@ -286,16 +286,22 @@ unifyAmb r a leftBiased n ambTs t2 = do
                let substs = map snd resTs
                    -- Step 1: For each optional subst of the ambigious type, collect all the sets of variables that map to the same type
                    inverseSubsts :: [Map Type (Set TVarName)]
-                   inverseSubsts = map flipMap $ map (\(t,s) -> Map.filterWithKey (\k a -> k `Set.member` freeTypeVars t) s) resTs
+                   inverseSubsts = map flipMap $ map (\(t,s) -> Map.filterWithKey (\k a -> not $ k `Set.member` freeTypeVars t) s) resTs
                    -- Step 2: For each set of type variables, make a list of types they could map to (the ambiguity for this set)
                    typesPerSet :: Map (Set TVarName) [Type]
-                   typesPerSet = foldr (\typeMap resMap -> Map.foldrWithKey (\t -> Map.adjust (t:)) resMap typeMap) Map.empty inverseSubsts
+                   typesPerSet = foldr foldInverseSubsts Map.empty inverseSubsts
+                     where foldInverseSubsts :: Map Type (Set TVarName) -> Map (Set TVarName) [Type] -> Map (Set TVarName) [Type]
+                           foldInverseSubsts typeMap resMap = Map.foldrWithKey (\t -> Map.alter (Just . (t:) . maybe [] id)) resMap typeMap
                    -- TODO: Assert that all values in ambigsPerSet have the same length.
                    -- Step 3: Create an ambigious type from each fo the [Type] lists
                    ambigTypesPerSet :: Infer (Map (Set TVarName) Type)
                    ambigTypesPerSet = sequence $ Map.map (\ts -> fresh >>= \n -> return $ Fix $ TAmb n ts) typesPerSet
 
+               traceLog ("resTs: " ++ pretty resTs) ()
+               traceLog ("inverseSubsts: " ++ show inverseSubsts) ()
+               traceLog ("typesPerSet: " ++ show typesPerSet) ()
                subst <- splatMap <$> ambigTypesPerSet
+               traceLog ("TAmb subst:" ++ pretty subst) ()
                applySubstInfer subst
 --               varBind a n $ applySubst subst $ Fix $ TAmb n' $ types
 
