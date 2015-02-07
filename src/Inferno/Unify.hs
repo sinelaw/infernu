@@ -9,7 +9,7 @@ import           Control.Monad        (forM_, when, forM)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
 import           Data.Traversable     (Traversable (..), sequence)
-import           Data.Foldable        (Foldable (..), foldrM)
+import           Data.Foldable        (Foldable (..))
 
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
@@ -282,11 +282,9 @@ unifyAmb r a leftBiased n ambTs t2 = do
    [] -> errorAction
    [(ambT, subst)] -> do applySubstInfer subst
                          varBind a n $ applySubst subst ambT
-   resTs -> do n' <- fresh
-               let substs = map snd resTs
-                   -- Step 1: For each optional subst of the ambigious type, collect all the sets of variables that map to the same type
+   resTs -> do let -- Step 1: For each optional subst of the ambigious type, collect all the sets of variables that map to the same type
                    inverseSubsts :: [Map Type (Set TVarName)]
-                   inverseSubsts = map flipMap $ map (\(t,s) -> Map.filterWithKey (\k a -> not $ k `Set.member` freeTypeVars t) s) resTs
+                   inverseSubsts = map flipMap $ map (\(t,s) -> Map.filterWithKey (\k _ -> not $ k `Set.member` freeTypeVars t) s) resTs
                    -- Step 2: For each set of type variables, make a list of types they could map to (the ambiguity for this set)
                    typesPerSet :: Map (Set TVarName) [Type]
                    typesPerSet = foldr foldInverseSubsts Map.empty inverseSubsts
@@ -295,7 +293,7 @@ unifyAmb r a leftBiased n ambTs t2 = do
                    -- TODO: Assert that all values in ambigsPerSet have the same length.
                    -- Step 3: Create an ambigious type from each fo the [Type] lists
                    ambigTypesPerSet :: Infer (Map (Set TVarName) Type)
-                   ambigTypesPerSet = sequence $ Map.map (\ts -> fresh >>= \n -> return $ Fix $ TAmb n ts) typesPerSet
+                   ambigTypesPerSet = sequence $ Map.map (\ts -> fresh >>= \n' -> return $ Fix $ TAmb n' ts) typesPerSet
 
                traceLog ("resTs: " ++ pretty resTs) ()
                traceLog ("inverseSubsts: " ++ show inverseSubsts) ()
