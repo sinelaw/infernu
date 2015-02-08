@@ -66,5 +66,7 @@ builtins = Map.fromList [
   -- avoid coercions on == and !=
   ("==",           TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean]),
   ("!=",           TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean]),
-  ("RegExp",       TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, tString, tString, Fix $ TBody $ TRegex])
+  ("RegExp",       TScheme [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, tString, tString, Fix $ TBody $ TRegex]),
+  ("String",       TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, Fix $ TBody $ TString]),
+  ("Number",       TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, Fix $ TBody $ TNumber])
   ]
