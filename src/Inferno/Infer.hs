@@ -125,6 +125,7 @@ inferType' env (ENew a e1 eArgs) =
      -- close the row type
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
      unify a thisT (closeRow resolvedThisT)
+     -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
      return (thisT, ENew (a, thisT) e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
