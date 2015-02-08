@@ -14,7 +14,7 @@ module Inferno.Infer
     where
 
 
-import           Control.Monad             (foldM, forM, when)
+import           Control.Monad             (foldM, forM)
 import           Data.Foldable             (Foldable (..))
 import           Data.Functor              ((<$>))
 
