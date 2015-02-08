@@ -14,7 +14,7 @@ module Inferno.Infer
     where
 
 
-import           Control.Monad             (foldM, forM)
+import           Control.Monad             (foldM, forM, when)
 import           Data.Foldable             (Foldable (..))
 import           Data.Functor              ((<$>))
 
@@ -119,6 +119,10 @@ inferType' env (ENew a e1 eArgs) =
          tArgs = thisT : map fst rargsTE
          eArgs' = map snd rargsTE
      unify a t1 (Fix . TCons TFunc $ tArgs ++ [resT])
+     -- constrain 'this' to be a row type:
+     rowConstraintVar <- RowTVar <$> fresh
+     unify a (Fix . TRow . TRowEnd $ Just rowConstraintVar) thisT
+     -- close the row type
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
      unify a thisT (closeRow resolvedThisT)
      return (thisT, ENew (a, thisT) e1' eArgs')
