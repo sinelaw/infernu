@@ -54,6 +54,8 @@ import           Data.Traversable          (Traversable (..))
 import           Prelude                   hiding (foldr)
 import qualified Text.Parsec.Pos           as Pos
 
+import           Inferno.Fix               (Fix (..), replaceFix)
+
 #ifdef QUICKCHECK
 import           Data.DeriveTH
 import           Data.Functor              ((<$>))
@@ -131,24 +133,6 @@ data FType t = TBody TBody
              | TRow (TRowList t)
              | TAmb TVarName [t]
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
-
-newtype Fix f = Fix { unFix :: f (Fix f) }
-
-instance Show (f (Fix f)) => Show (Fix f) where
-  show (Fix x) = "Fix (" ++ (show x) ++ ")"
-instance Eq (f (Fix f)) => Eq (Fix f) where
-  a == b = unFix a == unFix b
-instance Ord (f (Fix f)) => Ord (Fix f) where
-  (Fix x) `compare` (Fix y) = x `compare` y
-
-fmapReplace :: (Functor f, Eq (f a)) => (f a -> f b -> a -> b) -> f a -> f b -> f a -> f b
-fmapReplace recurse tsource tdest t =
-  if t == tsource
-  then tdest
-  else fmap (recurse tsource tdest) t
-
-replaceFix :: (Functor f, Eq (f (Fix f))) => f (Fix f) -> f (Fix f) -> Fix f -> Fix f
-replaceFix tsource tdest (Fix t') = Fix $ fmapReplace replaceFix tsource tdest t'
 
 type Type = Fix FType
 

@@ -28,6 +28,7 @@ library
                      , Inferno.Util
                      , Inferno.Pretty
                      , Inferno.Types
+                     , Inferno.Fix
                      , Inferno.Unify
                      , Inferno.InferState
                      , Inferno.Log
