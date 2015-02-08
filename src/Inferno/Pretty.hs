@@ -2,6 +2,9 @@
 module Inferno.Pretty where
 
 import Inferno.Types
+import           Inferno.Fix               (fixToList)
+
+import           Data.Maybe                 (catMaybes)
 import qualified Data.Char as Char
 import           Data.List                  (intercalate)
 import           Data.Char                  (chr, ord)
@@ -105,34 +108,50 @@ instance Pretty RowTVar where
   prettyTab _ t = ".." ++ pretty (getRowTVar t)
 
 instance Pretty t => Pretty (FType t) where
-  prettyTab n (TBody t) = prettyTab n t
-  prettyTab n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple args ++ " -> " ++ prettyTab n (last ts) ++ ")"
-    where nonThisArgs = map (prettyTab n) . drop 1 $ init ts
-          thisArg = case ts of
-                     [] -> Nothing
-                     (x:_) -> Just x
-          args = case thisArg of
-                  Just this -> ("this: " ++ prettyTab n this) : nonThisArgs
-                  _ -> nonThisArgs
---                  _ -> nonThisArgs -- theoretically 'this' could be some non-row type that isn't null/undefined, but that isn't supposed to happen! TODO: add assertion
---  prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
-  prettyTab n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
-  prettyTab _ (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map pretty ts)
-  prettyTab n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-  prettyTab n (TCons (TName name) ts) = "<Named Type: mu '" ++ pretty name ++ "'. " ++ (unwords $ map (prettyTab n) ts) ++ ">"
-  prettyTab t (TRow list) = "{"
-                            ++ intercalate ", " (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
-                            ++ (case r of
-                                 FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
-                                 FlatRowEndRec tid ts -> ", " ++ pretty (TCons (TName tid) ts) -- TODO 
-                               )
-                            ++ "}"
-    where (props, r) = flattenRow list
-  prettyTab t (TAmb n ts) = pretty n ++ "=(" ++ intercalate "|" (map (prettyTab t)  ts) ++ ")"
+  prettyTab = prettyType 
+
+prettyType :: Pretty t => Int -> FType t -> String
+prettyType n (TBody t) = prettyTab n t
+prettyType n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple args ++ " -> " ++ prettyTab n (last ts) ++ ")"
+  where nonThisArgs = map (prettyTab n) . drop 1 $ init ts
+        args = case ts of
+                [] -> nonThisArgs
+                (this:_) -> ("this: " ++ prettyTab n this) : nonThisArgs
+-- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
+prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
+prettyType n (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map (prettyTab n) ts)
+prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
+prettyType n (TCons (TName name) ts) = "<Named Type: mu '" ++ pretty name ++ "'. " ++ (unwords $ map (prettyTab n) ts) ++ ">"
+prettyType t (TRow list) = "{"
+                          ++ intercalate ", " (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
+                          ++ (case r of
+                               FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
+                               FlatRowEndRec tid ts -> ", " ++ prettyTab t (TCons (TName tid) ts) -- TODO 
+                             )
+                          ++ "}"
+  where (props, r) = flattenRow list
+prettyType n (TAmb v _) = prettyTab n v -- ++ "=(" ++ intercalate "|" (map (prettyTab n') ts') ++ ")"
+
+unAmb (TAmb v' ts') = Just (v', ts')
+unAmb _ = Nothing
+
+extractAmbs :: FType (Fix FType) -> [(TVarName, [Fix FType])]
+extractAmbs t = catMaybes . map (unAmb . unFix) . Set.toList . Set.fromList . fixToList $ Fix t
+
+prettyAmbs :: FType (Fix FType) -> String
+prettyAmbs t = intercalate ", " $ map (\(n,ts) -> pretty n ++ " = (" ++ (intercalate " | " (map pretty ts)) ++ ")") $ extractAmbs t
 
 --instance Pretty t => Pretty (Fix t) where
 instance Pretty Type where
-  prettyTab n (Fix t) = prettyTab n t
+  prettyTab n (Fix t) = constraints ++ (prettyType n $ unFix $ removeAmbs $ Fix t)
+    where constraints = case prettyAmbs t of
+                         "" -> ""
+                         constrStr -> constrStr ++ " => "
+          removeAmbs (Fix t') =
+            case unAmb t' of
+             Nothing -> Fix $ fmap (removeAmbs) t'
+             Just (v, _) -> Fix $ TBody $ TVar v
+
 
 instance Pretty t => Pretty (TScheme t) where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
