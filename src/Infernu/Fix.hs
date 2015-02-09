@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Inferno.Fix
+module Infernu.Fix
        ( Fix(..)
        , fmapReplace
        , replaceFix

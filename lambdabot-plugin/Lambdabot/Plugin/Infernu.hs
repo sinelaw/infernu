@@ -1,8 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
--- | Inferno
-module Lambdabot.Plugin.Inferno (infernoPlugin) where
+-- | Infernu
+module Lambdabot.Plugin.Infernu (infernuPlugin) where
 
 import qualified Data.ByteString.Char8       as P
 import           Data.Functor                ((<$>))
@@ -12,13 +12,13 @@ import           Lambdabot.Plugin
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 
-import           Inferno.Infer                (getAnnotations, minifyVars,
+import           Infernu.Infer                (getAnnotations, minifyVars,
                                               pretty, runTypeInference)
-import           Inferno.Parse                (translate)
+import           Infernu.Parse                (translate)
 
 
-infernoPlugin :: Module ()
-infernoPlugin = newModule
+infernuPlugin :: Module ()
+infernuPlugin = newModule
     { moduleCmds = return
         [ (command "js")
             { aliases = []

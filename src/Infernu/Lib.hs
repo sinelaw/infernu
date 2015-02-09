@@ -1,4 +1,4 @@
-module Inferno.Lib where
+module Infernu.Lib where
 
 import           Data.Maybe                (fromMaybe)
 import           Data.Map.Lazy             (Map)

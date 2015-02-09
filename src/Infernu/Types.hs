@@ -8,7 +8,7 @@
 {-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Inferno.Types
+module Infernu.Types
        (Exp(..)
        , LitVal(..)
        , EVarName
@@ -54,7 +54,7 @@ import           Data.Traversable          (Traversable (..))
 import           Prelude                   hiding (foldr)
 import qualified Text.Parsec.Pos           as Pos
 
-import           Inferno.Fix               (Fix (..), replaceFix)
+import           Infernu.Fix               (Fix (..), replaceFix)
 
 #ifdef QUICKCHECK
 import           Data.DeriveTH

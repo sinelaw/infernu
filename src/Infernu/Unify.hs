@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP           #-}
 {-# LANGUAGE TupleSections #-}
 
-module Inferno.Unify
+module Infernu.Unify
        (unify, unifyAll, unifyl, unifyRowPropertyBiased)
        where
 
@@ -20,14 +20,14 @@ import qualified Data.Set             as Set
 import           Prelude              hiding (foldr, foldl, mapM, sequence)
 import qualified Text.Parsec.Pos      as Pos
 
-import           Inferno.BuiltinArray (arrayRowType)
-import           Inferno.BuiltinRegex (regexRowType)
-import           Inferno.Decycle
-import           Inferno.InferState
-import           Inferno.Log
-import           Inferno.Pretty
-import           Inferno.Types
-import           Inferno.Lib (matchZip, flipMap, splatMap)
+import           Infernu.BuiltinArray (arrayRowType)
+import           Infernu.BuiltinRegex (regexRowType)
+import           Infernu.Decycle
+import           Infernu.InferState
+import           Infernu.Log
+import           Infernu.Pretty
+import           Infernu.Types
+import           Infernu.Lib (matchZip, flipMap, splatMap)
 
 
 ----------------------------------------------------------------------

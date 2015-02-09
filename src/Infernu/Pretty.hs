@@ -1,17 +1,17 @@
 {-# LANGUAGE FlexibleInstances #-}
-module Inferno.Pretty where
+module Infernu.Pretty where
 
-import Inferno.Types
-import           Inferno.Fix               (fixToList)
+import           Infernu.Fix     (fixToList)
+import           Infernu.Types
 
-import           Data.Maybe                 (catMaybes)
-import qualified Data.Char as Char
-import           Data.List                  (intercalate)
-import           Data.Char                  (chr, ord)
-import qualified Data.Digits                as Digits
-import qualified Data.Map.Lazy              as Map
-import qualified Data.Set              as Set
-import qualified Text.Parsec.Pos            as Pos
+import           Data.Char       (chr, ord)
+import qualified Data.Char       as Char
+import qualified Data.Digits     as Digits
+import           Data.List       (intercalate)
+import qualified Data.Map.Lazy   as Map
+import           Data.Maybe      (catMaybes)
+import qualified Data.Set        as Set
+import qualified Text.Parsec.Pos as Pos
 
 tab :: Int -> String
 tab t = replicate (t*4) ' '
@@ -21,7 +21,7 @@ class Pretty a where
 
 instance Pretty a => Pretty (Maybe a) where
   prettyTab _ x = maybe "Nothing" pretty x
-  
+
 instance (Pretty a, Pretty b) => Pretty (a,b) where
   prettyTab _ (a,b) = "(" ++ pretty a ++ ", " ++ pretty b ++ ")"
 
@@ -108,7 +108,7 @@ instance Pretty RowTVar where
   prettyTab _ t = ".." ++ pretty (getRowTVar t)
 
 instance Pretty t => Pretty (FType t) where
-  prettyTab = prettyType 
+  prettyTab = prettyType
 
 prettyType :: Pretty t => Int -> FType t -> String
 prettyType n (TBody t) = prettyTab n t
@@ -126,7 +126,7 @@ prettyType t (TRow list) = "{"
                           ++ intercalate ", " (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
                           ++ (case r of
                                FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
-                               FlatRowEndRec tid ts -> ", " ++ prettyTab t (TCons (TName tid) ts) -- TODO 
+                               FlatRowEndRec tid ts -> ", " ++ prettyTab t (TCons (TName tid) ts) -- TODO
                              )
                           ++ "}"
   where (props, r) = flattenRow list

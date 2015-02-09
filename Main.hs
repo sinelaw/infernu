@@ -1,8 +1,8 @@
 module Main (main) where
 
 import           Control.Monad      (forM)
-import           Inferno.Infer       (pretty)
-import           Inferno.Util
+import           Infernu.Infer       (pretty)
+import           Infernu.Util
 import           System.Environment (getArgs)
 import qualified Text.Parsec.Pos    as Pos
 

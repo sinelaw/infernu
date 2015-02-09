@@ -2,7 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections   #-}
 
-module Inferno.Infer
+module Infernu.Infer
     ( runTypeInference
     , test
     , Pretty(..)
@@ -27,13 +27,13 @@ import           Prelude                   hiding (foldr, sequence)
 import qualified Text.Parsec.Pos           as Pos
 import Data.List (intersperse)
 
-import qualified Inferno.Builtins          as Builtins
-import           Inferno.InferState
-import           Inferno.Log
-import           Inferno.Pretty
-import           Inferno.Lib (safeLookup)
-import           Inferno.Types
-import           Inferno.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
+import qualified Infernu.Builtins          as Builtins
+import           Infernu.InferState
+import           Infernu.Log
+import           Infernu.Pretty
+import           Infernu.Lib (safeLookup)
+import           Infernu.Types
+import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
 
 
 

@@ -2,11 +2,11 @@
 {-# LANGUAGE TupleSections   #-}
 {-# LANGUAGE BangPatterns    #-}
 
-module Inferno.Log
+module Infernu.Log
        (trace, tracePretty, traceLog)
        where
 
-import           Inferno.Pretty
+import           Infernu.Pretty
 
 
 #if TRACE

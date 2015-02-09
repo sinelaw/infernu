@@ -1,4 +1,4 @@
-name:                inferno
+name:                infernu
 version:             0.1.0.0
 -- synopsis:
 -- description:
@@ -23,20 +23,20 @@ flag trace
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Inferno.Infer
-                     , Inferno.Parse
-                     , Inferno.Util
-                     , Inferno.Pretty
-                     , Inferno.Types
-                     , Inferno.Fix
-                     , Inferno.Unify
-                     , Inferno.InferState
-                     , Inferno.Log
-                     , Inferno.Lib
-                     , Inferno.Builtins
-                     , Inferno.BuiltinArray
-                     , Inferno.BuiltinRegex
-                     , Inferno.Decycle
+  exposed-modules:     Infernu.Infer
+                     , Infernu.Parse
+                     , Infernu.Util
+                     , Infernu.Pretty
+                     , Infernu.Types
+                     , Infernu.Fix
+                     , Infernu.Unify
+                     , Infernu.InferState
+                     , Infernu.Log
+                     , Infernu.Lib
+                     , Infernu.Builtins
+                     , Infernu.BuiltinArray
+                     , Infernu.BuiltinRegex
+                     , Infernu.Decycle
   -- TODO: use only mtl (not transformers)
   build-depends:       base, mtl, containers, transformers, either, language-ecmascript, digits, parsec
   default-language:    Haskell2010
@@ -48,9 +48,9 @@ library
     build-depends: QuickCheck, derive
     default-extensions: TemplateHaskell, DeriveGeneric, FlexibleInstances
 
-executable inferno
+executable infernu
   main-is: Main.hs
-  build-depends:       base, parsec, inferno
+  build-depends:       base, parsec, infernu
   default-language:    Haskell2010
   ghc-options: -Wall -O2 -rtsopts -threaded
   if flag(trace)
@@ -60,10 +60,10 @@ executable inferno
     build-depends: QuickCheck, derive
     default-extensions: TemplateHaskell, DeriveGeneric
 
-executable inferno-demo
+executable infernu-demo
   main-is: Demo.hs
   hs-source-dirs: test
-  build-depends:       base, inferno
+  build-depends:       base, infernu
   default-language:    Haskell2010
   ghc-options: -Wall  -O2 -main-is Demo
   if flag(trace)
@@ -82,7 +82,7 @@ executable test
     buildable: False
   main-is: Test.hs
   hs-source-dirs: test
-  build-depends:       base, inferno
+  build-depends:       base, infernu
   default-language:    Haskell2010
   ghc-options: -Wall  -O2 -main-is Test
   if flag(trace)

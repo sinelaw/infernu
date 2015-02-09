@@ -1,8 +1,8 @@
-module Inferno.Builtins
+module Infernu.Builtins
        (builtins)
        where
 
-import           Inferno.Types
+import           Infernu.Types
 import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 

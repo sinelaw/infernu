@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, TypeSynonymInstances, FlexibleInstances #-}
 module Test where
 
-import Inferno.Types
+import Infernu.Types
 
 main :: IO ()
 main = do

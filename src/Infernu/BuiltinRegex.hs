@@ -1,12 +1,12 @@
 {-# LANGUAGE TupleSections #-}
-module Inferno.BuiltinRegex
+module Infernu.BuiltinRegex
        (regexRowType)
        where
 
 import           Control.Monad             (foldM, forM)
-import Inferno.Types
-import Inferno.InferState
-import           Inferno.Lib (safeLookup)
+import Infernu.Types
+import Infernu.InferState
+import           Infernu.Lib (safeLookup)
 
 string :: Type
 string = Fix $ TBody TString

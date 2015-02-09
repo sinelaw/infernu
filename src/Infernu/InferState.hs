@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections   #-}
 {-# LANGUAGE BangPatterns    #-}
 
-module Inferno.InferState
+module Infernu.InferState
        where
 
 import           Control.Monad              (foldM, forM, forM_, liftM2)
@@ -22,9 +22,9 @@ import           Prelude                    hiding (foldr, sequence)
 import qualified Text.Parsec.Pos            as Pos
 
 
-import           Inferno.Pretty
-import           Inferno.Types
-import           Inferno.Log
+import           Infernu.Pretty
+import           Infernu.Types
+import           Infernu.Log
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a

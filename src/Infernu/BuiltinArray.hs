@@ -1,12 +1,12 @@
 {-# LANGUAGE TupleSections #-}
-module Inferno.BuiltinArray
+module Infernu.BuiltinArray
        (arrayRowType)
        where
 
 import           Control.Monad             (foldM, forM)
-import Inferno.Types
-import Inferno.InferState
-import           Inferno.Lib (safeLookup)
+import Infernu.Types
+import Infernu.InferState
+import           Infernu.Lib (safeLookup)
 
 func :: Type -> Type -> Type -> Type
 func this x y = Fix $ TCons TFunc [this, x, y]
