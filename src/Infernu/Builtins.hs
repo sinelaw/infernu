@@ -36,9 +36,6 @@ numRelation = binaryFuncS tNumber tNumber tBoolean
 numOp :: TypeScheme
 numOp = binaryFuncS tNumber tNumber tNumber
 
-boolRelation :: TypeScheme
-boolRelation = binaryFuncS tBoolean tBoolean tBoolean
-
 builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
   ("!",            unaryFunc tBoolean tBoolean),
@@ -61,8 +58,8 @@ builtins = Map.fromList [
   (">=",           numRelation),
   ("===",          TScheme [0, 1, 2] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 2, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, tBoolean]),
   ("!==",          TScheme [0, 1, 2] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 2, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1, tBoolean]),
-  ("&&",           boolRelation),
-  ("||",           boolRelation),
+  ("&&",           TScheme [0, 1] $ Fix $ TCons TFunc [tVar 0, tVar 1, tVar 1, tVar 1]),
+  ("||",           TScheme [0, 1] $ Fix $ TCons TFunc [tVar 0, tVar 1, tVar 1, tVar 1]),
   -- avoid coercions on == and !=
   ("==",           TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean]),
   ("!=",           TScheme [0, 1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 0, tBoolean]),

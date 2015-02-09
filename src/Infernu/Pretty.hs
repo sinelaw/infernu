@@ -132,6 +132,7 @@ prettyType t (TRow list) = "{"
   where (props, r) = flattenRow list
 prettyType n (TAmb v _) = prettyTab n v -- ++ "=(" ++ intercalate "|" (map (prettyTab n') ts') ++ ")"
 
+unAmb :: FType t -> Maybe (TVarName, [t])
 unAmb (TAmb v' ts') = Just (v', ts')
 unAmb _ = Nothing
 
