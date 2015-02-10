@@ -24,6 +24,7 @@ import           Infernu.BuiltinArray (arrayRowType)
 import           Infernu.BuiltinRegex (regexRowType)
 import           Infernu.Decycle
 import           Infernu.InferState
+import qualified Infernu.Pred         as Pred
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types

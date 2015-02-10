@@ -38,7 +38,7 @@ runSubInfer a = do
   return $ runInferWith s a
   
 runInfer :: Infer a -> Either TypeError a
-runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, mainSubst = nullSubst, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }
+runInfer = runInferWith emptyInferState
 
 fresh :: Infer TVarName
 fresh = do
@@ -162,7 +162,8 @@ isRecParamOnly n1 typeId t1 =
              case rlist' of
               TRowEnd _ -> Just []
               -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
-              TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing t') (isRecParamRecList n' rlist'')
+              -- TODO: Can we safely ignore preds here?
+              TRowProp _ (TScheme _ t' _) rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing t') (isRecParamRecList n' rlist'')
               TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
   where recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
 
@@ -184,7 +185,8 @@ replaceRecType typeId newTypeId indexToDrop t1 =
      where go rlist' =
              case rlist' of
               TRowEnd _ -> rlist'
-              TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv $ replaceRecType typeId newTypeId indexToDrop t') (go rlist'')
+              TRowProp p (TScheme qv t' preds) rlist'' -> TRowProp p (TScheme qv (replace' t') (map (fmap replace') preds)) (go rlist'')
+                  where replace' = replaceRecType typeId newTypeId indexToDrop
               TRowRec tid ts -> if typeId == tid
                                 then TRowRec newTypeId $ dropAt indexToDrop ts
                                 else rlist'
@@ -211,7 +213,7 @@ resolveSimpleMutualRecursion n t tid ix =
          newTs = dropAt ix $ ts
          newNamedType = Fix (TCons (TName newTypeId) newTs)
          --updatedNamedType = Fix (TCons (TName tid) newTs)
-         updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars' sType'
+         updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars' sType' (schemePred scheme)
          
      addNamedType newTypeId newNamedType updatedScheme
      -- TODO: we could alternatively update the existing named type, but that will break it's schema (will now take less params?)
@@ -240,8 +242,10 @@ unrollNameByScheme ts qvars t = applySubst subst t
 -- type variables.
 unrollName :: Pos.SourcePos -> TypeId -> [Type] -> Infer Type
 unrollName a tid ts =
-  do (TScheme qvars t) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
-     return $ unrollNameByScheme ts qvars t
+    -- TODO: Is it safe to ignore the scheme preds here?
+    do (TScheme qvars t _) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
+       return $ unrollNameByScheme ts qvars t
+    
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
 -- >>> :{
@@ -277,16 +281,16 @@ applySubstInfer s =
 -- :}
 -- Right Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 1))])
 --
-instantiate :: TypeScheme -> Infer (Type)
-instantiate (TScheme tvarNames t) = do
+instantiate :: TypeScheme -> Infer QualType
+instantiate (TScheme tvarNames t preds) = do
   allocNames <- forM tvarNames $ \tvName -> do
     freshName <- fresh
     return (tvName, freshName)
   forM_ allocNames $ uncurry addVarInstance
   let replaceVar n = fromMaybe n $ lookup n allocNames
-  return $ mapVarNames replaceVar t
+  return $ TQual (mapVarNames replaceVar preds) $ mapVarNames replaceVar t
 
-instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Type)
+instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer QualType
 instantiateVar a n env = do
   varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
@@ -326,7 +330,7 @@ unsafeGeneralize tenv t = do
   s <- getMainSubst
   let t' = applySubst s t
   unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
-  return $ TScheme (Set.toList unboundVars) t'
+  return $ TScheme (Set.toList unboundVars) t' []
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = False
@@ -348,7 +352,7 @@ isExpansive (ENew _ _ _) = True
 
 generalize :: Exp a -> TypeEnv -> Type -> Infer TypeScheme
 generalize exp' env t = if isExpansive exp'
-                        then return $ TScheme [] t
+                        then return $ TScheme [] t []
                         else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName
