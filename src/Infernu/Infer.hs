@@ -34,7 +34,7 @@ import           Infernu.Pretty
 import           Infernu.Lib (safeLookup)
 import           Infernu.Types
 import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
-
+import qualified Infernu.Pred as Pred
 
 
 getQuantificands :: TypeScheme -> [TVarName]
@@ -95,9 +95,9 @@ inferType' env (EVar a n) =
      return (t, EVar (a, t) n)
 inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
-     env' <- foldM (\e (n, t) -> addVarScheme e n $ TScheme [] t) env $ zip argNames argTypes
+     env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
-     let t = Fix $ TCons TFunc $ argTypes ++ [t1]
+     let t = TQual (qualPred t1) $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
@@ -108,17 +108,18 @@ inferType' env (EApp a e1 eArgs) =
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
-     unify a t1 (Fix . TCons TFunc $ tArgs ++ [tvar])
-     return (tvar, EApp (a, tvar) e1' eArgs')
+     unify a (qualType t1) (Fix . TCons TFunc $ (map qualType tArgs) ++ [tvar])
+     -- TODO unify preds!
+     return (qualEmpty tvar, EApp (a, qualEmpty tvar) e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1
      argsTE <- accumInfer env eArgs
      thisT <- Fix . TBody . TVar <$> fresh
      resT <- Fix . TBody . TVar <$> fresh
      let rargsTE = reverse argsTE
-         tArgs = thisT : map fst rargsTE
+         tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
-     unify a t1 (Fix . TCons TFunc $ tArgs ++ [resT])
+     unify a (qualType t1) (Fix . TCons TFunc $ tArgs ++ [resT])
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> fresh
      unify a (Fix . TRow . TRowEnd $ Just rowConstraintVar) thisT
@@ -126,13 +127,14 @@ inferType' env (ENew a e1 eArgs) =
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
      unify a thisT (closeRow resolvedThisT)
      -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
-     return (thisT, ENew (a, thisT) e1' eArgs')
+     -- TODO: unify preds
+     return (qualEmpty thisT, ENew (a, qualEmpty thisT) e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
-     recEnv <- addVarScheme env n $ TScheme [] recType
+     recEnv <- addVarScheme env n $ schemeEmpty recType
      (t1, e1') <- inferType recEnv e1
-     unify a t1 recType
-     t' <- generalize e1 env t1
+     unify a (qualType t1) recType
+     t' <- generalize e1 env (qualType t1)
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
      return (t2, ELet (a, t2) n e1' e2')
@@ -142,7 +144,8 @@ inferType' env (EAssign a n expr1 expr2) =
   do lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
-     unify a lvalueT rvalueT
+     unify a (qualType lvalueT) (qualType rvalueT)
+     -- TODO unify preds
      unifyAllInstances a $ getQuantificands lvalueScheme
      (tRest, expr2') <- inferType env expr2
      return (tRest, EAssign (a, tRest) n expr1' expr2')
@@ -150,8 +153,8 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     let rvalueScheme = TScheme [] rvalueT -- generalize expr1 env rvalueT
-         rank0Unify = unify a objT $ Fix . TRow $ TRowProp n rvalueScheme $ TRowEnd (Just rowTailVar)
+     let rvalueScheme = schemeEmpty rvalueT -- generalize expr1 env rvalueT
+         rank0Unify = unify a (qualType objT) $ Fix . TRow $ TRowProp n rvalueScheme $ TRowEnd (Just rowTailVar)
      case unFix objT of
        TRow trowList ->
          case Map.lookup n . fst $ flattenRow trowList of

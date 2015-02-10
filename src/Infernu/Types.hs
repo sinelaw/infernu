@@ -33,6 +33,7 @@ module Infernu.Types
        , qualEmpty
        , QualType
        , TScheme(..)
+       , schemeEmpty
        , TypeScheme
        , TypeEnv
        , Substable(..)
@@ -364,6 +365,7 @@ data TPred t = TPredEq TVarName t
 data TQual t = TQual { qualPred :: TPred t, qualType :: t }
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
+qualEmpty :: t -> TQual t
 qualEmpty = TQual TPredNothing
             
 type QualType = TQual Type
@@ -371,6 +373,9 @@ type QualType = TQual Type
 data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t, schemePred :: TPred t }
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
+schemeEmpty :: t -> TScheme t
+schemeEmpty t = TScheme [] t TPredNothing
+                
 type TypeScheme = TScheme Type 
 
 instance VarNames t => VarNames (TPred t) where
