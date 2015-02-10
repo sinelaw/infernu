@@ -1,8 +1,10 @@
+{-# LANGUAGE TupleSections #-}
 module Infernu.Pred
-       (toDNF)
+       (unify)
     where 
 
 
+import Data.Maybe (catMaybes)
 import Infernu.Types (TPred(..), TVarName)
 import qualified Data.Map.Lazy             as Map
 import Data.Map.Lazy (Map)
@@ -55,10 +57,20 @@ fromCanon :: CanonPredOr t -> TPred t
 fromCanon (CanonPredOr []) = TPredNothing
 fromCanon (CanonPredOr (p:ps)) = foldr TPredOr (fromCanonAnd p) $ map fromCanonAnd ps
     where fromCanonAnd m = Map.foldrWithKey (\k vs r -> Set.foldr (\v p' -> TPredAnd p' $ TPredEq k v) r vs) TPredNothing m
-    
--- unifyPreds :: Eq t => (t -> t -> Bool) -> CanonPredOr t -> CanonPredOr t -> Maybe (CanonPredOr t)
--- unifyPreds uni (CanonPredOr p1s) (CanonPredOr p2s) =
 
--- unifyAnds :: (t -> t -> Bool) -> CanonPredAnd t -> CanonPredAnd t -> Maybe (CanonPredAnd t)
--- unifyAnds u (CanonPredAnd p1s) (CanonPredAnd p2s) =
+unify :: Ord t => (t -> t -> Bool) -> TPred t -> TPred t -> Maybe (TPred t)
+unify u p1 p2 = fmap fromCanon $ unifyPreds u (toCanon p1) (toCanon p2)
+                
+unifyPreds :: Ord t => (t -> t -> Bool) -> CanonPredOr t -> CanonPredOr t -> Maybe (CanonPredOr t)
+unifyPreds u (CanonPredOr m1s) (CanonPredOr m2s) =
+    case catMaybes [unifyMaps u m1 m2 | m1 <- m1s, m2 <- m2s] of
+        [] -> Nothing
+        ms -> Just $ CanonPredOr ms
+    
+unifyMaps :: Ord t => (t -> t -> Bool) -> Map TVarName (Set t) -> Map TVarName (Set t) -> Maybe (Map TVarName (Set t))
+unifyMaps u m1 m2 = Map.traverseWithKey (\_ (isGood, s) -> if isGood then Just s else Nothing)
+                    $ Map.mergeWithKey (\_ t1 t2 -> Just (unifySets u t1 t2, Set.union t1 t2)) (Map.map (True,)) (Map.map (True,)) m1 m2
+
+unifySets :: Ord t => (t -> t -> Bool) -> Set t -> Set t -> Bool
+unifySets u s1 s2 = foldr (\(x,y) p -> p && (x `u` y)) True [(x,y) | x <- Set.toList s1, y <- Set.toList s2]
     
