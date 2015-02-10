@@ -22,12 +22,19 @@ module Infernu.Types
        , FType(..)
        , TypeError(..)
        , InferState(..)
+       , emptyInferState
        , RowTVar(..)
        , getRowTVar
        , liftRowTVar
        , FlatRowEnd(..)
        , TRowList(..)
+       , TPred(..)
+       , TQual(..)
+       , qualEmpty
+       , QualType
        , TScheme(..)
+       , schemeEmpty
+       , schemeFromQual
        , TypeScheme
        , TypeEnv
        , Substable(..)
@@ -50,6 +57,7 @@ import           Data.Foldable             (Foldable (..), foldr)
 import qualified Data.Map.Lazy             as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
+import           Data.Set                  (Set)
 import           Data.Traversable          (Traversable (..))
 import           Prelude                   hiding (foldr)
 import qualified Text.Parsec.Pos           as Pos
@@ -349,11 +357,47 @@ instance Substable (TRowList Type) where
 
 ----------------------------------------------------------------------
 
-data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t }
+data TPred t = TPredEq TVarName t
+             | TPredOr (TPred t) (TPred t)
+             | TPredAnd (TPred t) (TPred t)
+             | TPredTrue
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
+data TQual t = TQual { qualPred :: TPred t, qualType :: t }
+             deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+qualEmpty :: t -> TQual t
+qualEmpty = TQual TPredTrue
+            
+type QualType = TQual Type
+                
+data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t, schemePred :: TPred t }
+               deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+schemeEmpty :: t -> TScheme t
+schemeEmpty t = TScheme [] t TPredTrue
+
+schemeFromQual :: TQual t -> TScheme t
+schemeFromQual q = TScheme [] (qualType q) (qualPred q)
+                   
 type TypeScheme = TScheme Type 
 
+instance VarNames t => VarNames (TQual t) where
+    freeTypeVars (TQual p t) = freeTypeVars p `Set.union` freeTypeVars t
+    mapVarNames f (TQual p t) = TQual (mapVarNames f p) (mapVarNames f t)
+
+instance Substable t => Substable (TQual t) where
+    applySubst s (TQual p t) = TQual (applySubst s p) (applySubst s t)
+                  
+instance VarNames t => VarNames (TPred t) where
+    freeTypeVars (TPredEq n t) = Set.insert n $ freeTypeVars t
+    freeTypeVars p = foldr (Set.union . freeTypeVars) Set.empty p
+    mapVarNames f (TPredEq n t) = TPredEq (f n) $ mapVarNames f t
+    mapVarNames f p = fmap (mapVarNames f) p
+
+instance Substable t => Substable (TPred t) where
+    applySubst s p = fmap (applySubst s) p
+                  
 -- | VarNames instance for TScheme
 --
 -- >>> freeTypeVars $ TScheme [0, 1] (Fix $ TBody $ TVar 2)
@@ -371,13 +415,13 @@ type TypeScheme = TScheme Type
 -- >>> freeTypeVars $ TScheme [1] (Fix $ TBody $ TNumber)
 -- fromList []
 instance VarNames t => VarNames (TScheme t) where
-  freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
-  mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
+  freeTypeVars (TScheme qvars t preds) = (freeTypeVars t `Set.union` freeTypeVars preds) `Set.difference` Set.fromList qvars
+  mapVarNames f (TScheme qvars t preds) = TScheme (map f qvars) (mapVarNames f t) (mapVarNames f preds)
 
 instance Substable t => Substable (TScheme t) where
   -- | When subsituting on a TScheme, we allow replacing quantified vars!
   -- (i.e. we don't do (foldr Map.delete s qvars) $ applySubst t)
-  applySubst s (TScheme qvars t) = TScheme qvars $ applySubst s t
+  applySubst s (TScheme qvars t preds) = TScheme qvars (applySubst s t) (applySubst s preds)
 
 
 newtype VarId = VarId Int
@@ -395,12 +439,22 @@ data NameSource = NameSource { lastName :: TVarName }
 
 data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
+                             , mainPreds    :: Set (TPred Type)
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TypeScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
                              , namedTypes   :: Map.Map TypeId (Type, TypeScheme) }
                    deriving (Show, Eq)
 
+emptyInferState :: InferState
+emptyInferState = InferState { nameSource = NameSource 0
+                             , mainSubst = nullSubst
+                             , mainPreds = Set.empty
+                             , varSchemes = Map.empty
+                             , varInstances = Map.empty
+                             , namedTypes = Map.empty
+                             }
+    
 -- | VarNames instance for InferState
 -- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, mainSubst = Map.empty, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])], namedTypes = Map.empty }
 -- InferState {nameSource = NameSource {lastName = 0}, mainSubst = fromList [], varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])], namedTypes = fromList []}

@@ -4,6 +4,7 @@ module Infernu.Pretty where
 import           Infernu.Fix     (fixToList)
 import           Infernu.Types
 
+    
 import           Data.Char       (chr, ord)
 import qualified Data.Char       as Char
 import qualified Data.Digits     as Digits
@@ -153,9 +154,20 @@ instance Pretty Type where
              Nothing -> Fix $ fmap (removeAmbs) t'
              Just (v, _) -> Fix $ TBody $ TVar v
 
+instance Pretty t => Pretty (TPred t) where
+    prettyTab n (TPredEq v t) = prettyTab n v ++ " = " ++ prettyTab n t
+    prettyTab n (TPredOr p1 p2) = "(" ++ prettyTab n p1 ++ " | " ++ prettyTab n p2 ++ ")"
+    prettyTab n (TPredAnd p1 p2) = "(" ++ prettyTab n p1 ++ " & " ++ prettyTab n p2 ++ ")"
+    prettyTab _ (TPredTrue) = "True"
 
+instance Pretty t => Pretty [TPred t] where
+    prettyTab n p = intercalate ", " $ map (prettyTab n) p
+
+instance Pretty t => Pretty (TQual t) where
+    prettyTab n (TQual preds t) = prettyTab n preds ++ " => " ++ prettyTab n t
+        
 instance Pretty t => Pretty (TScheme t) where
-  prettyTab n (TScheme vars t) = forall ++ prettyTab n t
+  prettyTab n (TScheme vars t preds) = prettyTab n preds ++ " => " ++ forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
 
 instance (Pretty a, Pretty b) => Pretty (Either a b) where
@@ -180,11 +192,12 @@ instance Pretty VarId where
   prettyTab _ = show
 
 instance Pretty InferState where
-  prettyTab t (InferState ns sub vs vi tn) = "InferState { nameSource: "
-                                             ++ pretty ns ++ newline
-                                             ++ ", subst: " ++ pretty sub ++ newline
-                                             ++ ", varSchemes: " ++ pretty vs ++ newline
-                                             ++ ", varInstances: " ++ pretty vi ++ newline
-                                             ++ ", namedTypes: " ++ pretty tn ++ newline
-                                             ++ "}"
+  prettyTab t (InferState ns sub preds vs vi tn) = "InferState { nameSource: "
+                                                 ++ pretty ns ++ newline
+                                                 ++ ", subst: " ++ pretty sub ++ newline
+                                                 ++ ", preds: " ++ pretty preds ++ newline
+                                                 ++ ", varSchemes: " ++ pretty vs ++ newline
+                                                 ++ ", varInstances: " ++ pretty vi ++ newline
+                                                 ++ ", namedTypes: " ++ pretty tn ++ newline
+                                                 ++ "}"
     where newline = "\n" ++ tab (t+1)

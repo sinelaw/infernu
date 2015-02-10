@@ -13,7 +13,7 @@ import           Infernu.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer                (getAnnotations, runTypeInference, minifyVars)
 import           Infernu.Pretty               (pretty)
-import           Infernu.Types                (Type, TypeError(..))
+import           Infernu.Types                (TypeError(..), QualType)
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -28,12 +28,12 @@ indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
 
 
-checkSource :: String -> Either TypeError [(Pos.SourcePos, Type)]
+checkSource :: String -> Either TypeError [(Pos.SourcePos, QualType)]
 checkSource src = case ES3Parser.parseFromString src of
                    Left parseError -> Left $ TypeError { source = Pos.initialPos "<global>", message = show parseError }
                    Right expr -> fmap getAnnotations $ fmap minifyVars $ runTypeInference $ translate $ ES3.unJavaScript expr
 
-checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, Type)])
+checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, QualType)])
 checkFiles fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   let expr' = translate $ expr
@@ -44,7 +44,7 @@ checkFiles fileNames = do
 #endif
   return res
 
-annotatedSource :: [(Pos.SourcePos, Type)] -> [String] -> String
+annotatedSource :: [(Pos.SourcePos, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos prettyRes indexedSource
   where indexedSource = indexList sourceCode
         prettyRes = (Set.toList . Set.fromList . fmap (second pretty)) xs

@@ -24,6 +24,7 @@ import           Infernu.BuiltinArray (arrayRowType)
 import           Infernu.BuiltinRegex (regexRowType)
 import           Infernu.Decycle
 import           Infernu.InferState
+import qualified Infernu.Pred         as Pred
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
@@ -333,11 +334,16 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
           unifySchemes' = do traceLog ("Unifying props: " ++ pretty tprop1s ++ " ~~ " ++ pretty tprop2s) ()
                              tprop1 <- instantiate tprop1s
                              tprop2 <- instantiate tprop2s
-                             recurse a tprop1 tprop2
+                             -- TODO unify predicates properly (review this) - specificaly (==)
+                             -- should really be unify!
+                             case Pred.unify (==) (qualPred tprop1) (qualPred tprop2) of
+                                 Nothing -> errorAction
+                                 Just pred' -> addPred pred'
+                             recurse a (qualType tprop1) (qualType tprop2)
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 
             case tprop1s of
-             TScheme [] _ -> True
+             TScheme [] _ _ -> True
              _ -> False
       -- TODO should do biased type scheme unification here
       if areEquivalentNamedTypes (crap, tprop1s) (crap, tprop2s)
