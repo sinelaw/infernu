@@ -38,7 +38,7 @@ import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPro
 
 
 getQuantificands :: TypeScheme -> [TVarName]
-getQuantificands (TScheme tvars _) = tvars
+getQuantificands (TScheme tvars _ _) = tvars
 
 getAnnotations :: Exp a -> [a]
 getAnnotations = foldr (:) []
@@ -65,7 +65,7 @@ closeRow t = t
 
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer [(Type, Exp (Pos.SourcePos, Type))]
+accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer [(QualType, Exp (Pos.SourcePos, QualType))]
 accumInfer env =
   do traceLog ("accumInfer: env: " ++ pretty env) ()
      foldM accumInfer' []
@@ -73,14 +73,14 @@ accumInfer env =
              do (t, e) <- inferType env expr
                 return ((t,e):types)
 
-inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (Type, Exp (Pos.SourcePos, Type))
+inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (QualType, Exp (Pos.SourcePos, QualType))
 inferType env expr = do
   traceLog (">> " ++ pretty expr) ()
   (t, e) <- inferType' env expr
   s <- getMainSubst
   return (applySubst s t, fmap (applySubst s) e)
 
-inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (Type, Exp (Pos.SourcePos, Type))
+inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (QualType, Exp (Pos.SourcePos, QualType))
 inferType' _ (ELit a lit) = do
   let t = Fix $ TBody $ case lit of
                     LitNumber _ -> TNumber
@@ -89,7 +89,7 @@ inferType' _ (ELit a lit) = do
                     LitRegex _ _ _ -> TRegex
                     LitUndefined -> TUndefined
                     LitNull -> TNull
-  return (t, ELit (a,t) lit)
+  return (qualEmpty t, ELit (a, qualEmpty t) lit)
 inferType' env (EVar a n) =
   do t <- instantiateVar a n env
      return (t, EVar (a, t) n)

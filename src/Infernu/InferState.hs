@@ -83,6 +83,8 @@ addVarScheme env n scheme = do
   setVarScheme n varId scheme
   return $ Map.insert n varId env
 
+addPred pred = modify $ \is -> is { mainPreds = Set.insert pred $ mainPreds is }
+    
 ----------------------------------------------------------------------
 -- | Adds a pair of equivalent items to an equivalence map.
 --
@@ -185,7 +187,7 @@ replaceRecType typeId newTypeId indexToDrop t1 =
      where go rlist' =
              case rlist' of
               TRowEnd _ -> rlist'
-              TRowProp p (TScheme qv t' preds) rlist'' -> TRowProp p (TScheme qv (replace' t') (map (fmap replace') preds)) (go rlist'')
+              TRowProp p (TScheme qv t' preds) rlist'' -> TRowProp p (TScheme qv (replace' t') (fmap replace' preds)) (go rlist'')
                   where replace' = replaceRecType typeId newTypeId indexToDrop
               TRowRec tid ts -> if typeId == tid
                                 then TRowRec newTypeId $ dropAt indexToDrop ts
@@ -330,7 +332,7 @@ unsafeGeneralize tenv t = do
   s <- getMainSubst
   let t' = applySubst s t
   unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
-  return $ TScheme (Set.toList unboundVars) t' []
+  return $ TScheme (Set.toList unboundVars) t' TPredNothing
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = False
@@ -352,7 +354,7 @@ isExpansive (ENew _ _ _) = True
 
 generalize :: Exp a -> TypeEnv -> Type -> Infer TypeScheme
 generalize exp' env t = if isExpansive exp'
-                        then return $ TScheme [] t []
+                        then return $ TScheme [] t TPredNothing
                         else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName

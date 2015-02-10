@@ -30,6 +30,7 @@ module Infernu.Types
        , TRowList(..)
        , TPred(..)
        , TQual(..)
+       , qualEmpty
        , QualType
        , TScheme(..)
        , TypeScheme
@@ -360,12 +361,14 @@ data TPred t = TPredEq TVarName t
              | TPredNothing
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-data TQual t = TQual [TPred t] t
+data TQual t = TQual { qualPred :: TPred t, qualType :: t }
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
+qualEmpty = TQual TPredNothing
+            
 type QualType = TQual Type
                 
-data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t, schemePred :: [TPred t] }
+data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t, schemePred :: TPred t }
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type TypeScheme = TScheme Type 

@@ -15,7 +15,7 @@ string = Fix $ TBody TString
 -- regex = Fix $ TBody TRegex
 
 ts :: t -> TScheme t
-ts t = TScheme [] t []
+ts t = TScheme [] t TPredNothing
 
 regexProps :: [(String, TypeScheme)]
 regexProps = 
