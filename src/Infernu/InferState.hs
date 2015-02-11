@@ -332,7 +332,7 @@ unsafeGeneralize tenv t = do
   s <- getMainSubst
   let t' = applySubst s t
   unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
-  return $ TScheme (Set.toList unboundVars) t' TPredNothing
+  return $ TScheme (Set.toList unboundVars) t' TPredTrue
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = False
@@ -354,7 +354,7 @@ isExpansive (ENew _ _ _) = True
 
 generalize :: Exp a -> TypeEnv -> Type -> Infer TypeScheme
 generalize exp' env t = if isExpansive exp'
-                        then return $ TScheme [] t TPredNothing
+                        then return $ TScheme [] t TPredTrue
                         else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName

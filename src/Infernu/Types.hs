@@ -359,14 +359,14 @@ instance Substable (TRowList Type) where
 data TPred t = TPredEq TVarName t
              | TPredOr (TPred t) (TPred t)
              | TPredAnd (TPred t) (TPred t)
-             | TPredNothing
+             | TPredTrue
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 data TQual t = TQual { qualPred :: TPred t, qualType :: t }
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 qualEmpty :: t -> TQual t
-qualEmpty = TQual TPredNothing
+qualEmpty = TQual TPredTrue
             
 type QualType = TQual Type
                 
@@ -374,7 +374,7 @@ data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t, schemePred
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 schemeEmpty :: t -> TScheme t
-schemeEmpty t = TScheme [] t TPredNothing
+schemeEmpty t = TScheme [] t TPredTrue
                 
 type TypeScheme = TScheme Type 
 

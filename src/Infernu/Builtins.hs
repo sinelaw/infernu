@@ -7,7 +7,7 @@ import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 
 ts :: [TVarName] -> Type -> TypeScheme
-ts tvs t = TScheme tvs t TPredNothing
+ts tvs t = TScheme tvs t TPredTrue
            
 unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = ts [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2]
