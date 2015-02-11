@@ -11,6 +11,7 @@ import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, modify)
 import           Data.Foldable              (Foldable (..), msum)
 import           Data.Traversable              (Traversable (..))
+import           Data.List              (intercalate)
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
@@ -25,7 +26,8 @@ import qualified Text.Parsec.Pos            as Pos
 import           Infernu.Pretty
 import           Infernu.Types
 import           Infernu.Log
-
+import qualified Infernu.Pred as Pred
+    
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a
 
@@ -83,9 +85,6 @@ addVarScheme env n scheme = do
   setVarScheme n varId scheme
   return $ Map.insert n varId env
 
-addPred :: TPred Type -> Infer ()
-addPred pred' = modify $ \is -> is { mainPreds = Set.insert pred' $ mainPreds is }
-    
 ----------------------------------------------------------------------
 -- | Adds a pair of equivalent items to an equivalence map.
 --
@@ -130,19 +129,19 @@ addNamedType tid t scheme = do
 -- 
 -- >>> let mkNamedType tid ts = Fix $ TCons (TName (TypeId tid)) ts
 --  
--- >>> areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (Fix $ TBody TNumber)) (mkNamedType 1 [], TScheme [] (Fix $ TBody TString))
+-- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TBody TNumber)) (mkNamedType 1 [], schemeEmpty (Fix $ TBody TString))
 -- False
--- >>> areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (mkNamedType 0 [])) (mkNamedType 1 [], TScheme [] (mkNamedType 1 []))
+-- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (mkNamedType 0 [])) (mkNamedType 1 [], schemeEmpty (mkNamedType 1 []))
 -- True
 -- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 0 []]))
---                             (mkNamedType 1 [], TScheme [] (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 1 []]))
+--     areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 0 []]))
+--                             (mkNamedType 1 [], schemeEmpty (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 1 []]))
 -- :}
 -- True
 --  
 -- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (Fix $ TCons TFunc [Fix $ TBody $ TVar 10, mkNamedType 0 [Fix $ TBody $ TVar 10]]))
---                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (Fix $ TCons TFunc [Fix $ TBody $ TVar 11, mkNamedType 1 [Fix $ TBody $ TVar 11]]))
+--     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (Fix $ TCons TFunc [Fix $ TBody $ TVar 10, mkNamedType 0 [Fix $ TBody $ TVar 10]]) TPredTrue)
+--                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (Fix $ TCons TFunc [Fix $ TBody $ TVar 11, mkNamedType 1 [Fix $ TBody $ TVar 11]]) TPredTrue)
 -- :}
 -- True
 areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
@@ -253,7 +252,7 @@ unrollName a tid ts =
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+--     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 --     let tenv = Map.empty
 --     tenv' <- addVarScheme tenv "x" t
 --     applySubstInfer $ Map.singleton 0 (Fix $ TBody TString)
@@ -270,14 +269,14 @@ applySubstInfer s =
 --
 -- For example:
 --
--- >>> runInferWith (InferState { nameSource = NameSource 2, mainSubst = Map.empty, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+-- >>> runInferWith (InferState { nameSource = NameSource 2, mainSubst = Map.empty, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 -- Right Fix (TCons TFunc [Fix (TBody (TVar 3)),Fix (TBody (TVar 1))])
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+--     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 --     let tenv = Map.empty
 --     tenv' <- addVarScheme tenv "x" t
 --     instantiateVar (Pos.initialPos "") "x" tenv'
@@ -305,12 +304,12 @@ instantiateVar a n env = do
 --
 -- Example:
 --
--- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
+-- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty $ qualEmpty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
 -- Right (TScheme {schemeVars = [0,1], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 1))])})
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+--     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 --     tenv <- addVarScheme Map.empty "x" t
 --     generalize (ELit "bla" LitUndefined) tenv (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
 -- :}
@@ -376,3 +375,52 @@ applyMainSubst :: Substable b => b -> Infer b
 applyMainSubst x =
   do s <- getMainSubst
      return $ applySubst s x
+
+
+substVar subst x = let varX = Fix (TBody (TVar x))
+                   in case applySubst subst varX of
+                          Fix (TBody (TVar zx)) -> zx
+                          _ -> x
+
+-- |
+-- >>> substPredType (Map.fromList [(0,Fix $ TBody $ TVar 1)]) (TPredEq 0 (Fix $ TBody $ TString))
+-- TPredEq 1 Fix (TBody TString)
+substPredType :: TSubst -> TPred Type -> TPred Type
+substPredType subst (TPredEq n1 t) = res
+    where n1s = substVar subst n1
+          res = case applySubst subst t of
+                    ts@(Fix (TBody (TVar n2))) -> if n2 == n1s
+                                                  then TPredTrue
+                                                  else TPredEq n1s ts
+                    ts -> TPredEq n1s ts
+substPredType subst (TPredAnd p1 p2) = substPredType subst p1 `Pred.mkAnd` substPredType subst p2
+substPredType subst (TPredOr p1 p2) = substPredType subst p1 `Pred.mkOr` substPredType subst p2
+substPredType subst p = applySubst subst p
+
+verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
+verifyPred a p =
+    do  s <- getMainSubst
+        let p' = substPredType s p
+            tvars = freeTypeVars p'
+            tautologyPred = Set.foldr (\v prev -> Pred.mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
+            currentPred = substPredType s tautologyPred
+
+        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p)) ()
+        traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred) ()
+        case Pred.unify (==) p' currentPred of
+            Just p'' ->
+                do  traceLog ("Verified pred, got: " ++ pretty p'') ()
+                    return p''
+            Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p' ++ " with " ++ pretty currentPred
+        
+unifyPreds a p1 p2 =
+     case Pred.unify (==) p1 p2 of
+         Just pred' -> return pred'
+         Nothing -> throwError a $ "Failed unifying predicates: " ++ pretty p1 ++ ", " ++ pretty p2
+
+unifyPredsL a preds =
+     case foldM (Pred.unify (==)) TPredTrue preds of
+         Just pred' -> return pred'
+         Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map pretty preds)
+     
+    

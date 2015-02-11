@@ -25,7 +25,7 @@ import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 import           Prelude                   hiding (foldr, sequence)
 import qualified Text.Parsec.Pos           as Pos
-import Data.List (intersperse)
+import Data.List (intercalate)
 
 import qualified Infernu.Builtins          as Builtins
 import           Infernu.InferState
@@ -34,7 +34,7 @@ import           Infernu.Pretty
 import           Infernu.Lib (safeLookup)
 import           Infernu.Types
 import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
-
+import qualified Infernu.Pred as Pred
 
 
 getQuantificands :: TypeScheme -> [TVarName]
@@ -51,11 +51,11 @@ closeRowList (TRowEnd _) = TRowEnd Nothing
 -- TODO: Handle TRowRec, by defining a new named type in which all row types within are closed (recursively).
 
 -- | Replaces a top-level open row type with the closed equivalent.
--- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "aa" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
+-- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
 -- "{a: {aa: TNumber, ..b}}"
--- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "aa" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
+-- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
 -- "(this: {a: {aa: TNumber}} -> TString)"
--- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "a.a" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)), Fix $ TBody TString])
+-- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "a.a" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)), Fix $ TBody TString])
 -- "(this: {a: {a.a: TNumber, ..b}, ..c} -> TString)"
 closeRow :: Type -> Type
 closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
@@ -97,20 +97,30 @@ inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
-     let t = TQual (qualPred t1) $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
+     pred <- verifyPred a $ qualPred t1
+     let t = TQual pred $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
      (t1, e1') <- inferType env e1
      traceLog ("EApp: Inferred type for func expr: " ++ pretty t1) ()
      argsTE <- accumInfer env eArgs
-     traceLog ("EApp: Inferred types for func args: " ++ (concat . intersperse ", " $ map pretty argsTE)) ()
+     traceLog ("EApp: Inferred types for func args: " ++ (intercalate ", " $ map pretty argsTE)) ()
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
+         preds = map qualPred $ t1:tArgs
      unify a (qualType t1) (Fix . TCons TFunc $ (map qualType tArgs) ++ [tvar])
-     -- TODO unify preds!
-     return (qualEmpty tvar, EApp (a, qualEmpty tvar) e1' eArgs')
+     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds)) ()
+     tvar' <- case foldM (Pred.unify (==)) TPredTrue preds of
+                 Just pred' ->
+                     do  traceLog ("Verifying pred: " ++ pretty pred' ++ " with type: " ++ pretty tvar) ()
+                         pred'' <- verifyPred a pred'
+                         tvarSubsted <- applyMainSubst tvar
+                         return $ TQual pred'' tvarSubsted
+                 Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map (pretty . qualPred) tArgs)
+     traceLog ("Inferred func application: " ++ pretty tvar') ()
+     return (tvar', EApp (a, tvar') e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1
      argsTE <- accumInfer env eArgs
@@ -119,6 +129,7 @@ inferType' env (ENew a e1 eArgs) =
      let rargsTE = reverse argsTE
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
+         preds = map qualPred $ t1:(map fst argsTE)
      unify a (qualType t1) (Fix . TCons TFunc $ tArgs ++ [resT])
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> fresh
@@ -127,8 +138,9 @@ inferType' env (ENew a e1 eArgs) =
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
      unify a thisT (closeRow resolvedThisT)
      -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
-     -- TODO: unify preds
-     return (qualEmpty thisT, ENew (a, qualEmpty thisT) e1' eArgs')
+     preds' <- unifyPredsL a preds
+     let thisT' = TQual preds' thisT
+     return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme env n $ schemeEmpty recType
@@ -145,10 +157,11 @@ inferType' env (EAssign a n expr1 expr2) =
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
      unify a (qualType lvalueT) (qualType rvalueT)
-     -- TODO unify preds
      unifyAllInstances a $ getQuantificands lvalueScheme
      (tRest, expr2') <- inferType env expr2
-     return (tRest, EAssign (a, tRest) n expr1' expr2')
+     preds <- unifyPredsL a $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
+     tRest' <- (flip TQual $ qualType tRest) <$> verifyPred a preds
+     return (tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
@@ -171,17 +184,16 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
      let elemType = Fix . TBody . TVar $ elemTVarName
-     -- TODO unify predicates
      unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
      (tId, eIdx') <- inferType env eIdx
-     -- TODO unify predicates
      unify a (qualType tId) $ Fix $ TBody TNumber
      (tExpr1, expr1') <- inferType env expr1
-     -- TODO unify predicates
      unify a (qualType tExpr1) elemType
      unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
-     return (tExpr2 , EIndexAssign (a, tExpr2)  eArr' eIdx' expr1' expr2')
+     preds <- unifyPredsL a $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
+     tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
+     return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
   do tv <- Fix . TBody . TVar <$> fresh
      te <- accumInfer env exprs

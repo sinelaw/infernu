@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 module Infernu.Pred
-       (unify)
+       (unify, mkAnd, mkOr)
     where 
 
 
@@ -31,22 +31,22 @@ toDNF (TPredAnd exp1 exp2) = if exp1 == exp2
                              then toDNF exp1
                              else toDNF exp1 `dist` toDNF exp2
     where
-        dist (TPredOr e11 e12) e2 = (e11 `dist` e2) `or'` (e12 `dist` e2)
-        dist e1 (TPredOr e21 e22) = (e1 `dist` e21) `or'` (e1 `dist` e22)
-        dist e1 e2                = if e1 == e2 then e1 else e1 `and'` e2
-toDNF (TPredOr exp1 exp2) = toDNF exp1 `or'` toDNF exp2
+        dist (TPredOr e11 e12) e2 = (e11 `dist` e2) `mkOr` (e12 `dist` e2)
+        dist e1 (TPredOr e21 e22) = (e1 `dist` e21) `mkOr` (e1 `dist` e22)
+        dist e1 e2                = if e1 == e2 then e1 else e1 `mkAnd` e2
+toDNF (TPredOr exp1 exp2) = toDNF exp1 `mkOr` toDNF exp2
 toDNF expr                    = expr
 
-and' :: Eq t => TPred t -> TPred t -> TPred t
-and' TPredTrue y = y
-and' x TPredTrue = x
-and' x y = if x == y then x else TPredAnd x y
+mkAnd :: Eq t => TPred t -> TPred t -> TPred t
+mkAnd TPredTrue y = y
+mkAnd x TPredTrue = x
+mkAnd x y = if x == y then x else TPredAnd x y
 
                                  
-or' :: Eq t => TPred t -> TPred t -> TPred t
-or' TPredTrue y = y
-or' x TPredTrue = x
-or' x y = if x == y then x else TPredOr x y
+mkOr :: Eq t => TPred t -> TPred t -> TPred t
+mkOr TPredTrue y = y
+mkOr x TPredTrue = x
+mkOr x y = if x == y then x else TPredOr x y
 
 -- | Converts a predicate to a list of sums of products
 --                  
@@ -67,8 +67,8 @@ toCanon = CanonPredOr . toCanonOr' . toDNF
 -- TPredOr (TPredAnd (TPredEq 1 'd') (TPredEq 0 'a')) (TPredOr (TPredAnd (TPredEq 1 'b') (TPredEq 0 'c')) (TPredOr (TPredAnd (TPredEq 1 'd') (TPredEq 1 'b')) (TPredAnd (TPredEq 0 'c') (TPredEq 0 'a'))))
 fromCanon :: Eq t => CanonPredOr t -> TPred t
 fromCanon (CanonPredOr []) = TPredTrue
-fromCanon (CanonPredOr (p:ps)) = foldr or' (fromCanonAnd p) $ map fromCanonAnd ps
-    where fromCanonAnd m = Map.foldrWithKey (\k vs r -> Set.foldr (\v p' -> and' p' $ TPredEq k v) r vs) TPredTrue m
+fromCanon (CanonPredOr (p:ps)) = foldr mkOr (fromCanonAnd p) $ map fromCanonAnd ps
+    where fromCanonAnd m = Map.foldrWithKey (\k vs r -> Set.foldr (\v p' -> mkAnd p' $ TPredEq k v) r vs) TPredTrue m
 
 -- | Main unification function: checks if two predicates can be combined in a conjunction (i.e. if they can ANDed)          
 -- >>> unify (==) (TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')
