@@ -44,7 +44,7 @@ builtins = Map.fromList [
   ("!",            unaryFunc tBoolean tBoolean),
   ("~",            unaryFunc tNumber  tNumber),
   ("typeof",       ts [0,1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, tString]),
-  ("+",            ts [0,1] $ Fix $ TAmb 0 [binarySimpleFunc (tVar 1) tNumber, binarySimpleFunc (tVar 1) tString]),
+  ("+",            TScheme [0,1] (binarySimpleFunc (tVar 0) (tVar 1)) (TPredOr (TPredEq 1 $ Fix $ TBody $ TString) (TPredEq 1 $ Fix $ TBody $ TNumber))),
   ("-",            numOp),
   ("*",            numOp),
   ("/",            numOp),

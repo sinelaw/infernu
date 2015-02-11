@@ -391,9 +391,13 @@ instance Substable t => Substable (TQual t) where
                   
 instance VarNames t => VarNames (TPred t) where
     freeTypeVars (TPredEq n t) = Set.insert n $ freeTypeVars t
-    freeTypeVars p = foldr (Set.union . freeTypeVars) Set.empty p
+    freeTypeVars (TPredAnd p1 p2) = freeTypeVars p1 `Set.union` freeTypeVars p2
+    freeTypeVars (TPredOr p1 p2) = freeTypeVars p1 `Set.union` freeTypeVars p2
+    freeTypeVars TPredTrue = Set.empty
     mapVarNames f (TPredEq n t) = TPredEq (f n) $ mapVarNames f t
-    mapVarNames f p = fmap (mapVarNames f) p
+    mapVarNames f (TPredAnd p1 p2) = TPredAnd (mapVarNames f p1) (mapVarNames f p2)
+    mapVarNames f (TPredOr p1 p2) = TPredOr (mapVarNames f p1) (mapVarNames f p2)
+    mapVarNames f TPredTrue = TPredTrue
 
 instance Substable t => Substable (TPred t) where
     applySubst s p = fmap (applySubst s) p

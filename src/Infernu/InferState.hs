@@ -25,7 +25,8 @@ import qualified Text.Parsec.Pos            as Pos
 import           Infernu.Pretty
 import           Infernu.Types
 import           Infernu.Log
-
+import qualified Infernu.Pred as Pred
+    
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a
 
@@ -376,3 +377,13 @@ applyMainSubst :: Substable b => b -> Infer b
 applyMainSubst x =
   do s <- getMainSubst
      return $ applySubst s x
+
+verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
+verifyPred a p =
+    do  let tvars = freeTypeVars p
+            tautologyPred = Set.foldr (\v prev -> TPredAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
+        currentPred <- applyMainSubst tautologyPred
+        case Pred.unify (==) p currentPred of
+            Just p' -> return p'
+            Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p ++ " with " ++ pretty currentPred
+        

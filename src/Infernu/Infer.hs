@@ -25,7 +25,7 @@ import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 import           Prelude                   hiding (foldr, sequence)
 import qualified Text.Parsec.Pos           as Pos
-import Data.List (intersperse)
+import Data.List (intercalate)
 
 import qualified Infernu.Builtins          as Builtins
 import           Infernu.InferState
@@ -34,7 +34,7 @@ import           Infernu.Pretty
 import           Infernu.Lib (safeLookup)
 import           Infernu.Types
 import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
-
+import qualified Infernu.Pred as Pred
 
 
 getQuantificands :: TypeScheme -> [TVarName]
@@ -104,13 +104,22 @@ inferType' env (EApp a e1 eArgs) =
      (t1, e1') <- inferType env e1
      traceLog ("EApp: Inferred type for func expr: " ++ pretty t1) ()
      argsTE <- accumInfer env eArgs
-     traceLog ("EApp: Inferred types for func args: " ++ (concat . intersperse ", " $ map pretty argsTE)) ()
+     traceLog ("EApp: Inferred types for func args: " ++ (intercalate ", " $ map pretty argsTE)) ()
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
+         preds = map qualPred $ t1:tArgs
+         pred = foldM (Pred.unify (==)) TPredTrue preds
+     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds)) ()
+     traceLog ("Inferred unified pred: " ++ pretty pred) ()
      unify a (qualType t1) (Fix . TCons TFunc $ (map qualType tArgs) ++ [tvar])
-     -- TODO unify preds!
-     return (qualEmpty tvar, EApp (a, qualEmpty tvar) e1' eArgs')
+     tvar' <- case pred of
+                 Just pred' ->
+                     do  traceLog ("Verifying pred: " ++ pretty pred') ()
+                         pred'' <- verifyPred a pred'
+                         return $ TQual pred'' tvar
+                 Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map (pretty . qualPred) tArgs)
+     return (tvar', EApp (a, tvar') e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1
      argsTE <- accumInfer env eArgs
@@ -119,6 +128,7 @@ inferType' env (ENew a e1 eArgs) =
      let rargsTE = reverse argsTE
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
+         preds = map qualPred $ t1:(map fst argsTE)
      unify a (qualType t1) (Fix . TCons TFunc $ tArgs ++ [resT])
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> fresh
@@ -128,7 +138,11 @@ inferType' env (ENew a e1 eArgs) =
      unify a thisT (closeRow resolvedThisT)
      -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
      -- TODO: unify preds
-     return (qualEmpty thisT, ENew (a, qualEmpty thisT) e1' eArgs')
+     thisT' <- case foldM (Pred.unify (==)) TPredTrue preds of
+                 Just pred' -> return $ TQual pred' thisT
+                 Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map pretty preds)
+     
+     return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme env n $ schemeEmpty recType
