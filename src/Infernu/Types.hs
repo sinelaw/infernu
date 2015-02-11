@@ -34,6 +34,7 @@ module Infernu.Types
        , QualType
        , TScheme(..)
        , schemeEmpty
+       , schemeFromQual
        , TypeScheme
        , TypeEnv
        , Substable(..)
@@ -375,9 +376,19 @@ data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t, schemePred
 
 schemeEmpty :: t -> TScheme t
 schemeEmpty t = TScheme [] t TPredTrue
-                
+
+schemeFromQual :: TQual t -> TScheme t
+schemeFromQual q = TScheme [] (qualType q) (qualPred q)
+                   
 type TypeScheme = TScheme Type 
 
+instance VarNames t => VarNames (TQual t) where
+    freeTypeVars (TQual p t) = freeTypeVars p `Set.union` freeTypeVars t
+    mapVarNames f (TQual p t) = TQual (mapVarNames f p) (mapVarNames f t)
+
+instance Substable t => Substable (TQual t) where
+    applySubst s (TQual p t) = TQual (applySubst s p) (applySubst s t)
+                  
 instance VarNames t => VarNames (TPred t) where
     freeTypeVars (TPredEq n t) = Set.insert n $ freeTypeVars t
     freeTypeVars p = foldr (Set.union . freeTypeVars) Set.empty p

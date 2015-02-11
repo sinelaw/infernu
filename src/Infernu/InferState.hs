@@ -83,7 +83,8 @@ addVarScheme env n scheme = do
   setVarScheme n varId scheme
   return $ Map.insert n varId env
 
-addPred pred = modify $ \is -> is { mainPreds = Set.insert pred $ mainPreds is }
+addPred :: TPred Type -> Infer ()
+addPred pred' = modify $ \is -> is { mainPreds = Set.insert pred' $ mainPreds is }
     
 ----------------------------------------------------------------------
 -- | Adds a pair of equivalent items to an equivalence map.
@@ -198,7 +199,7 @@ allocNamedType n t =
   do typeId <- TypeId <$> fresh
      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          target = replaceFix (TBody (TVar n)) namedType t
-     scheme <- unsafeGeneralize Map.empty target
+     scheme <- unsafeGeneralize Map.empty $ qualEmpty target
      currentNamedTypes <- filter (areEquivalentNamedTypes (Fix namedType, scheme)) . map snd . Map.toList . namedTypes <$> get
      case currentNamedTypes of
       [] -> do addNamedType typeId (Fix namedType) scheme
@@ -327,12 +328,12 @@ instantiateVar a n env = do
 -- Right (TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 0))])})
 --
 -- TODO add tests for monotypes
-unsafeGeneralize :: TypeEnv -> Type -> Infer TypeScheme
+unsafeGeneralize :: TypeEnv -> QualType -> Infer TypeScheme
 unsafeGeneralize tenv t = do
   s <- getMainSubst
   let t' = applySubst s t
   unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
-  return $ TScheme (Set.toList unboundVars) t' TPredTrue
+  return $ TScheme (Set.toList unboundVars) (qualType t') (qualPred t')
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = False
@@ -352,9 +353,9 @@ isExpansive (EIndex _ a b)  = any isExpansive [a, b]
 isExpansive (ENew _ _ _) = True
 
 
-generalize :: Exp a -> TypeEnv -> Type -> Infer TypeScheme
+generalize :: Exp a -> TypeEnv -> QualType -> Infer TypeScheme
 generalize exp' env t = if isExpansive exp'
-                        then return $ TScheme [] t TPredTrue
+                        then return $ TScheme [] (qualType t) (qualPred t)
                         else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName

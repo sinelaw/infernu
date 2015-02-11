@@ -34,7 +34,7 @@ import           Infernu.Pretty
 import           Infernu.Lib (safeLookup)
 import           Infernu.Types
 import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
-import qualified Infernu.Pred as Pred
+
 
 
 getQuantificands :: TypeScheme -> [TVarName]
@@ -134,7 +134,7 @@ inferType' env (ELet a n e1 e2) =
      recEnv <- addVarScheme env n $ schemeEmpty recType
      (t1, e1') <- inferType recEnv e1
      unify a (qualType t1) recType
-     t' <- generalize e1 env (qualType t1)
+     t' <- generalize e1 env t1
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
      return (t2, ELet (a, t2) n e1' e2')
@@ -153,9 +153,9 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     let rvalueScheme = schemeEmpty rvalueT -- generalize expr1 env rvalueT
+     let rvalueScheme = schemeFromQual rvalueT -- generalize expr1 env rvalueT
          rank0Unify = unify a (qualType objT) $ Fix . TRow $ TRowProp n rvalueScheme $ TRowEnd (Just rowTailVar)
-     case unFix objT of
+     case unFix (qualType objT) of
        TRow trowList ->
          case Map.lookup n . fst $ flattenRow trowList of
           -- lvalue is known to be a property with some scheme
@@ -171,24 +171,27 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
      let elemType = Fix . TBody . TVar $ elemTVarName
-     unify a tArr $ Fix $ TCons TArray [elemType]
+     -- TODO unify predicates
+     unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
      (tId, eIdx') <- inferType env eIdx
-     unify a tId $ Fix $ TBody TNumber
+     -- TODO unify predicates
+     unify a (qualType tId) $ Fix $ TBody TNumber
      (tExpr1, expr1') <- inferType env expr1
-     unify a tExpr1 elemType
+     -- TODO unify predicates
+     unify a (qualType tExpr1) elemType
      unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
      return (tExpr2 , EIndexAssign (a, tExpr2)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
   do tv <- Fix . TBody . TVar <$> fresh
      te <- accumInfer env exprs
-     let types = map fst te
+     let types = map (qualType . fst) te
      unifyl unify a $ zip (tv:types) types
-     let t = Fix $ TCons TArray [tv]
+     let t = qualEmpty $ Fix $ TCons TArray [tv]
      return (t, EArray (a,t) $ map snd te)
 inferType' env (ETuple a exprs) =
   do te <- accumInfer env exprs
-     let t = Fix . TCons TTuple . reverse $ map fst te
+     let t = qualEmpty . Fix . TCons TTuple . reverse $ map (qualType . fst) te
      return (t, ETuple (a,t) $ map snd te)
 inferType' env (ERow a isOpen propExprs) =
   do te <- accumInfer env $ map snd propExprs
@@ -197,32 +200,34 @@ inferType' env (ERow a isOpen propExprs) =
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          accumRowProp' row ((propName, propExpr), propType) =
            do ts <- generalize propExpr env propType
-              return $ TRowProp propName ts row
-     rowType <- Fix . TRow <$> foldM  accumRowProp' rowEnd' propNamesTypes
+              return $ TRowProp propName (ts) row
+     rowType <- qualEmpty . Fix . TRow <$> foldM  accumRowProp' rowEnd' propNamesTypes
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (EIfThenElse a ePred eThen eElse) =
   do (tp, ePred') <- inferType env ePred
-     unify a (Fix $ TBody TBoolean) tp
+     unify a (Fix $ TBody TBoolean) (qualType tp)
      (tThen, eThen') <- inferType env eThen
      (tElse, eElse') <- inferType env eElse
-     unify a tThen tElse
+     unify a (qualType tThen) (qualType tElse)
      return (tThen, EIfThenElse (a, tThen) ePred' eThen' eElse')
 inferType' env (EProp a eObj propName) =
   do (tObj, eObj') <- inferType env eObj
      rowVar <- RowTVar <$> fresh
-     propTypeScheme <- case unFix tObj of
+     propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> fresh
+         --case unFix (qualType tObj) of
 --                  TRow tRowList -> --TODO
-                  _ -> TScheme [] . Fix . TBody . TVar <$> fresh
-     unify a (Fix . TRow $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)) tObj
+--                  _ -> schemeEmpty . Fix . TBody . TVar <$> fresh
+     unify a (Fix . TRow $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)) (qualType tObj)
      propType <- instantiate propTypeScheme
      return (propType, EProp (a,propType) eObj' propName)
 inferType' env (EIndex a eArr eIdx) =
   do (tArr, eArr') <- inferType env eArr
      elemType <- Fix . TBody . TVar <$> fresh
-     unify a (Fix $ TCons TArray [elemType]) tArr
+     unify a (Fix $ TCons TArray [elemType]) (qualType tArr)
      (tId, eIdx') <- inferType env eIdx
-     unify a (Fix $ TBody TNumber) tId
-     return (elemType, EIndex (a, elemType)  eArr' eIdx')
+     unify a (Fix $ TBody TNumber) (qualType tId)
+     let elemType' = qualEmpty elemType
+     return (elemType', EIndex (a, elemType')  eArr' eIdx')
 
 unifyAllInstances :: Pos.SourcePos -> [TVarName] -> Infer ()
 unifyAllInstances a tvs = do
@@ -236,7 +241,7 @@ unifyAllInstances a tvs = do
 createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
     where allTVars :: TypeScheme -> Set TVarName
-          allTVars (TScheme qvars t) = freeTypeVars t `Set.union` (Set.fromList qvars)
+          allTVars (TScheme qvars t pred) = freeTypeVars t `Set.union` (Set.fromList qvars) `Set.union` freeTypeVars pred
 
           addVarScheme' :: Map EVarName VarId -> (EVarName, TypeScheme) -> Infer (Map EVarName VarId)
           addVarScheme' m (name, tscheme) =
@@ -244,7 +249,7 @@ createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
                addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 
-typeInference :: Map EVarName TypeScheme -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, Type))
+typeInference :: Map EVarName TypeScheme -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, QualType))
 typeInference builtins e =
   do env <- createEnv builtins
      (_t, e') <- inferType env e
@@ -365,6 +370,6 @@ test e = case runTypeInference e of
           Right expr -> pretty $ snd . head . getAnnotations . minifyVars $ expr
 
 
-runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, Type))
+runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, QualType))
 runTypeInference e = runInfer $ typeInference Builtins.builtins e
 

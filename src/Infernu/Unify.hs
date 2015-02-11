@@ -338,7 +338,7 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
                              -- should really be unify!
                              case Pred.unify (==) (qualPred tprop1) (qualPred tprop2) of
                                  Nothing -> errorAction
-                                 Just pred -> addPred pred
+                                 Just pred' -> addPred pred'
                              recurse a (qualType tprop1) (qualType tprop2)
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 

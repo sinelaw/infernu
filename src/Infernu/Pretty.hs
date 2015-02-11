@@ -158,6 +158,7 @@ instance Pretty t => Pretty (TPred t) where
     prettyTab n (TPredEq v t) = prettyTab n v ++ " = " ++ prettyTab n t
     prettyTab n (TPredOr p1 p2) = "(" ++ prettyTab n p1 ++ " | " ++ prettyTab n p2 ++ ")"
     prettyTab n (TPredAnd p1 p2) = "(" ++ prettyTab n p1 ++ " & " ++ prettyTab n p2 ++ ")"
+    prettyTab _ (TPredTrue) = "True"
 
 instance Pretty t => Pretty [TPred t] where
     prettyTab n p = intercalate ", " $ map (prettyTab n) p
