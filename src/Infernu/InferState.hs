@@ -19,7 +19,7 @@ import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
-import           Prelude                    hiding (foldr, sequence)
+import           Prelude                    hiding (foldr, sequence, mapM)
 import qualified Text.Parsec.Pos            as Pos
 
 
@@ -412,22 +412,22 @@ verifyPred a p =
                     return p''
             Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p' ++ " with " ++ pretty currentPred
         
-unifyPreds :: (Pretty t, Ord t)
-              => Pos.SourcePos
-              -> TPred t -> TPred t
-              -> Infer (TPred t)
-unifyPreds a p1 p2 =
-     case Pred.unify (==) p1 p2 of
-         Just pred' -> return pred'
-         Nothing -> throwError a $ "Failed unifying predicates: " ++ pretty p1 ++ ", " ++ pretty p2
+-- unifyPreds :: (Pretty t, Ord t)
+--               => Pos.SourcePos
+--               -> TPred t -> TPred t
+--               -> Infer (TPred t)
+-- unifyPreds a p1 p2 =
+--      case Pred.unify (==) p1 p2 of
+--          Just pred' -> return pred'
+--          Nothing -> throwError a $ "Failed unifying predicates: " ++ pretty p1 ++ ", " ++ pretty p2
 
-unifyPredsL :: (Pretty t, Ord t)
-               => Pos.SourcePos
-               -> [TPred t]
-               -> Infer (TPred t)
+unifyPredsL :: Pos.SourcePos
+               -> [TPred Type]
+               -> Infer (TPred Type)
 unifyPredsL a preds =
-     case foldM (Pred.unify (==)) TPredTrue preds of
-         Just pred' -> return pred'
-         Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map pretty preds)
+    do preds' <- mapM (verifyPred a) preds
+       case foldM (Pred.unify (==)) TPredTrue preds' of
+           Just pred' -> return pred'
+           Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map pretty preds)
      
     
