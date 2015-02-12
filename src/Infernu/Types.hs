@@ -57,7 +57,7 @@ import           Data.Foldable             (Foldable (..), foldr)
 import qualified Data.Map.Lazy             as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
-import           Data.Set                  (Set)
+
 import           Data.Traversable          (Traversable (..))
 import           Prelude                   hiding (foldr)
 import qualified Text.Parsec.Pos           as Pos
@@ -139,7 +139,6 @@ data TRowList t = TRowProp EPropName (TScheme t) (TRowList t)
 data FType t = TBody TBody
              | TCons TConsName [t]
              | TRow (TRowList t)
-             | TAmb TVarName [t]
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type Type = Fix FType
@@ -219,12 +218,10 @@ instance VarNames t => VarNames (TRowList t) where
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
   freeTypeVars (Fix (TRow trlist)) = freeTypeVars trlist
-  freeTypeVars (Fix (TAmb n ts)) = Set.insert n $ freeTypeVars ts
   freeTypeVars (Fix t) = freeTypeVars' t
 
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
   mapVarNames f (Fix (TRow trlist)) = Fix $ TRow $ mapVarNames f trlist
-  mapVarNames f (Fix (TAmb n ts)) = Fix $ TAmb (f n) $ mapVarNames f ts
   mapVarNames f (Fix t) = Fix $ mapVarNames' f t
 
 instance VarNames (FType (Fix FType)) where
@@ -310,7 +307,6 @@ instance Substable Type where
     case t of
      TBody (TVar n) -> substT' n t
      TRow r -> Fix $ TRow $ applySubst s r
-     TAmb n ts -> substT' n . TAmb n $ map (applySubst s) ts
      _ -> if ft `elem` (Map.elems s)
           then ft
           else Fix $ fmap (applySubst s) t
@@ -397,13 +393,13 @@ instance VarNames t => VarNames (TPred t) where
     mapVarNames f (TPredEq n t) = TPredEq (f n) $ mapVarNames f t
     mapVarNames f (TPredAnd p1 p2) = TPredAnd (mapVarNames f p1) (mapVarNames f p2)
     mapVarNames f (TPredOr p1 p2) = TPredOr (mapVarNames f p1) (mapVarNames f p2)
-    mapVarNames f TPredTrue = TPredTrue
+    mapVarNames _ TPredTrue = TPredTrue
 
 instance Substable t => Substable (TPred t) where
     applySubst s (TPredEq n t) = TPredEq n $ applySubst s t
     applySubst s (TPredAnd p1 p2) = applySubst s p1 `TPredAnd` applySubst s p2
     applySubst s (TPredOr p1 p2) = applySubst s p1 `TPredOr` applySubst s p2
-    applySubst s TPredTrue = TPredTrue
+    applySubst _ TPredTrue = TPredTrue
 
                      
 -- | VarNames instance for TScheme

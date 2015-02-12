@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Infernu.Pretty where
 
-import           Infernu.Fix     (fixToList)
+
 import           Infernu.Types
 
     
@@ -10,7 +10,7 @@ import qualified Data.Char       as Char
 import qualified Data.Digits     as Digits
 import           Data.List       (intercalate)
 import qualified Data.Map.Lazy   as Map
-import           Data.Maybe      (catMaybes)
+
 import qualified Data.Set        as Set
 import qualified Text.Parsec.Pos as Pos
 
@@ -131,28 +131,10 @@ prettyType t (TRow list) = "{"
                              )
                           ++ "}"
   where (props, r) = flattenRow list
-prettyType n (TAmb v _) = prettyTab n v -- ++ "=(" ++ intercalate "|" (map (prettyTab n') ts') ++ ")"
-
-unAmb :: FType t -> Maybe (TVarName, [t])
-unAmb (TAmb v' ts') = Just (v', ts')
-unAmb _ = Nothing
-
-extractAmbs :: FType (Fix FType) -> [(TVarName, [Fix FType])]
-extractAmbs t = catMaybes . map (unAmb . unFix) . Set.toList . Set.fromList . fixToList $ Fix t
-
-prettyAmbs :: FType (Fix FType) -> String
-prettyAmbs t = intercalate ", " $ map (\(n,ts) -> pretty n ++ " = (" ++ (intercalate " | " (map pretty ts)) ++ ")") $ extractAmbs t
 
 --instance Pretty t => Pretty (Fix t) where
 instance Pretty Type where
-  prettyTab n (Fix t) = constraints ++ (prettyType n $ unFix $ removeAmbs $ Fix t)
-    where constraints = case prettyAmbs t of
-                         "" -> ""
-                         constrStr -> constrStr ++ " => "
-          removeAmbs (Fix t') =
-            case unAmb t' of
-             Nothing -> Fix $ fmap (removeAmbs) t'
-             Just (v, _) -> Fix $ TBody $ TVar v
+  prettyTab n (Fix t) = prettyType n t
 
 instance Pretty t => Pretty (TPred t) where
     prettyTab n (TPredEq v t) = prettyTab n v ++ " = " ++ prettyTab n t

@@ -158,7 +158,6 @@ isRecParamOnly n1 typeId t1 =
    TBody _ -> Just []
    TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
-   TAmb _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
    TRow rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
              case rlist' of
@@ -182,7 +181,6 @@ replaceRecType typeId newTypeId indexToDrop t1 =
                                   then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
                                   else t1
    TCons n subTs -> Fix $ TCons n $ map (replaceRecType typeId newTypeId indexToDrop) subTs
-   TAmb n subTs -> Fix $ TAmb n $ map (replaceRecType typeId newTypeId indexToDrop) subTs
    TRow rlist -> Fix $ TRow $ go rlist
      where go rlist' =
              case rlist' of
@@ -377,6 +375,7 @@ applyMainSubst x =
      return $ applySubst s x
 
 
+substVar :: TSubst -> TVarName -> TVarName
 substVar subst x = let varX = Fix (TBody (TVar x))
                    in case applySubst subst varX of
                           Fix (TBody (TVar zx)) -> zx
@@ -413,11 +412,19 @@ verifyPred a p =
                     return p''
             Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p' ++ " with " ++ pretty currentPred
         
+unifyPreds :: (Pretty t, Ord t)
+              => Pos.SourcePos
+              -> TPred t -> TPred t
+              -> Infer (TPred t)
 unifyPreds a p1 p2 =
      case Pred.unify (==) p1 p2 of
          Just pred' -> return pred'
          Nothing -> throwError a $ "Failed unifying predicates: " ++ pretty p1 ++ ", " ++ pretty p2
 
+unifyPredsL :: (Pretty t, Ord t)
+               => Pos.SourcePos
+               -> [TPred t]
+               -> Infer (TPred t)
 unifyPredsL a preds =
      case foldM (Pred.unify (==)) TPredTrue preds of
          Just pred' -> return pred'

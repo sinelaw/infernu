@@ -97,8 +97,8 @@ inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
-     pred <- verifyPred a $ qualPred t1
-     let t = TQual pred $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
+     pred' <- verifyPred a $ qualPred t1
+     let t = TQual pred' $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
@@ -253,7 +253,7 @@ unifyAllInstances a tvs = do
 createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
     where allTVars :: TypeScheme -> Set TVarName
-          allTVars (TScheme qvars t pred) = freeTypeVars t `Set.union` (Set.fromList qvars) `Set.union` freeTypeVars pred
+          allTVars (TScheme qvars t pred') = freeTypeVars t `Set.union` (Set.fromList qvars) `Set.union` freeTypeVars pred'
 
           addVarScheme' :: Map EVarName VarId -> (EVarName, TypeScheme) -> Infer (Map EVarName VarId)
           addVarScheme' m (name, tscheme) =
