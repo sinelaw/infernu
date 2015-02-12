@@ -186,13 +186,13 @@ instance VarNames t => VarNames (Exp (a, t)) where
 
 -- | VarNames instance for TRowList
 --
--- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
+-- >>> freeTypeVars (TRowProp "x" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
 -- fromList [1]
--- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody $ TVar 2) (TRowEnd Nothing))
+-- >>> freeTypeVars (TRowProp "x" (schemeEmpty $ Fix $ TBody $ TVar 2) (TRowEnd Nothing))
 -- fromList [2]
--- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody $ TVar 2) (TRowEnd $ Just $ RowTVar 1))
+-- >>> freeTypeVars (TRowProp "x" (schemeEmpty $ Fix $ TBody $ TVar 2) (TRowEnd $ Just $ RowTVar 1))
 -- fromList [1,2]
--- >>> freeTypeVars (TRowProp "x" (TScheme [] $ Fix $ TBody $ TVar 2) (TRowProp "y" (TScheme [] $ Fix $ TBody $ TVar 3) (TRowEnd $ Just $ RowTVar 1)))
+-- >>> freeTypeVars (TRowProp "x" (schemeEmpty $ Fix $ TBody $ TVar 2) (TRowProp "y" (schemeEmpty $ Fix $ TBody $ TVar 3) (TRowEnd $ Just $ RowTVar 1)))
 -- fromList [1,2,3]
 instance VarNames t => VarNames (TRowList t) where
   freeTypeVars (TRowEnd (Just (RowTVar n))) = Set.singleton n
@@ -302,7 +302,7 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- Fix (TRow (TRowEnd Nothing))
 -- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 0)
 -- Fix (TRow (TRowEnd Nothing))
--- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (TScheme [] $ Fix $ TBody TString) (TRowEnd $ Just $ RowTVar 0))
+-- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (schemeEmpty $ Fix $ TBody TString) (TRowEnd $ Just $ RowTVar 0))
 -- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = Fix (TBody TString)}) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
@@ -401,22 +401,23 @@ instance VarNames t => VarNames (TPred t) where
 
 instance Substable t => Substable (TPred t) where
     applySubst s p = fmap (applySubst s) p
-                  
+
+                     
 -- | VarNames instance for TScheme
---
--- >>> freeTypeVars $ TScheme [0, 1] (Fix $ TBody $ TVar 2)
+-- >>> let sc v t = TScheme v t TPredTrue
+-- >>> freeTypeVars $ sc [0, 1] (Fix $ TBody $ TVar 2)
 -- fromList [2]
--- >>> freeTypeVars $ TScheme [0, 1] (Fix $ TBody $ TVar 1)
+-- >>> freeTypeVars $ sc [0, 1] (Fix $ TBody $ TVar 1)
 -- fromList []
--- >>> freeTypeVars $ TScheme [0] (Fix $ TBody $ TVar 1)
+-- >>> freeTypeVars $ sc [0] (Fix $ TBody $ TVar 1)
 -- fromList [1]
--- >>> freeTypeVars $ TScheme [0] (Fix $ TBody $ TVar 0)
+-- >>> freeTypeVars $ sc [0] (Fix $ TBody $ TVar 0)
 -- fromList []
--- >>> freeTypeVars $ TScheme [] (Fix $ TBody $ TVar 1)
+-- >>> freeTypeVars $ schemeEmpty (Fix $ TBody $ TVar 1)
 -- fromList [1]
--- >>> freeTypeVars $ TScheme [] (Fix $ TBody $ TNumber)
+-- >>> freeTypeVars $ schemeEmpty (Fix $ TBody $ TNumber)
 -- fromList []
--- >>> freeTypeVars $ TScheme [1] (Fix $ TBody $ TNumber)
+-- >>> freeTypeVars $ sc [1] (Fix $ TBody $ TNumber)
 -- fromList []
 instance VarNames t => VarNames (TScheme t) where
   freeTypeVars (TScheme qvars t preds) = (freeTypeVars t `Set.union` freeTypeVars preds) `Set.difference` Set.fromList qvars
@@ -443,7 +444,6 @@ data NameSource = NameSource { lastName :: TVarName }
 
 data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
-                             , mainPreds    :: Set (TPred Type)
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TypeScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
@@ -453,7 +453,6 @@ data InferState = InferState { nameSource   :: NameSource
 emptyInferState :: InferState
 emptyInferState = InferState { nameSource = NameSource 0
                              , mainSubst = nullSubst
-                             , mainPreds = Set.empty
                              , varSchemes = Map.empty
                              , varInstances = Map.empty
                              , namedTypes = Map.empty

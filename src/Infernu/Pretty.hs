@@ -163,11 +163,17 @@ instance Pretty t => Pretty (TPred t) where
 instance Pretty t => Pretty [TPred t] where
     prettyTab n p = intercalate ", " $ map (prettyTab n) p
 
+predsStr :: Pretty t => Int -> TPred t -> String
+predsStr n preds =
+    case preds of
+        TPredTrue -> ""
+        p -> prettyTab n p ++ " => "
+
 instance Pretty t => Pretty (TQual t) where
-    prettyTab n (TQual preds t) = prettyTab n preds ++ " => " ++ prettyTab n t
+    prettyTab n (TQual preds t) = predsStr n preds ++ prettyTab n t
         
 instance Pretty t => Pretty (TScheme t) where
-  prettyTab n (TScheme vars t preds) = prettyTab n preds ++ " => " ++ forall ++ prettyTab n t
+  prettyTab n (TScheme vars t preds) = predsStr n preds ++ forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
 
 instance (Pretty a, Pretty b) => Pretty (Either a b) where
@@ -192,12 +198,11 @@ instance Pretty VarId where
   prettyTab _ = show
 
 instance Pretty InferState where
-  prettyTab t (InferState ns sub preds vs vi tn) = "InferState { nameSource: "
-                                                 ++ pretty ns ++ newline
-                                                 ++ ", subst: " ++ pretty sub ++ newline
-                                                 ++ ", preds: " ++ pretty preds ++ newline
-                                                 ++ ", varSchemes: " ++ pretty vs ++ newline
-                                                 ++ ", varInstances: " ++ pretty vi ++ newline
-                                                 ++ ", namedTypes: " ++ pretty tn ++ newline
-                                                 ++ "}"
+  prettyTab t (InferState ns sub vs vi tn) = "InferState { nameSource: "
+                                             ++ pretty ns ++ newline
+                                             ++ ", subst: " ++ pretty sub ++ newline
+                                             ++ ", varSchemes: " ++ pretty vs ++ newline
+                                             ++ ", varInstances: " ++ pretty vi ++ newline
+                                             ++ ", namedTypes: " ++ pretty tn ++ newline
+                                             ++ "}"
     where newline = "\n" ++ tab (t+1)

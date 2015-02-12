@@ -51,11 +51,11 @@ closeRowList (TRowEnd _) = TRowEnd Nothing
 -- TODO: Handle TRowRec, by defining a new named type in which all row types within are closed (recursively).
 
 -- | Replaces a top-level open row type with the closed equivalent.
--- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "aa" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
+-- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
 -- "{a: {aa: TNumber, ..b}}"
--- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "aa" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
+-- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd Nothing)) (TRowEnd Nothing), Fix $ TBody TString])
 -- "(this: {a: {aa: TNumber}} -> TString)"
--- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (TScheme [] $ Fix $ TRow $ TRowProp "a.a" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)), Fix $ TBody TString])
+-- >>> pretty $ closeRow (Fix $ TCons TFunc [Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "a.a" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)), Fix $ TBody TString])
 -- "(this: {a: {a.a: TNumber, ..b}, ..c} -> TString)"
 closeRow :: Type -> Type
 closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
@@ -109,16 +109,15 @@ inferType' env (EApp a e1 eArgs) =
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = map qualPred $ t1:tArgs
-         pred = foldM (Pred.unify (==)) TPredTrue preds
-     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds)) ()
-     traceLog ("Inferred unified pred: " ++ pretty pred) ()
      unify a (qualType t1) (Fix . TCons TFunc $ (map qualType tArgs) ++ [tvar])
-     tvar' <- case pred of
+     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds)) ()
+     tvar' <- case foldM (Pred.unify (==)) TPredTrue preds of
                  Just pred' ->
                      do  traceLog ("Verifying pred: " ++ pretty pred') ()
                          pred'' <- verifyPred a pred'
                          return $ TQual pred'' tvar
                  Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map (pretty . qualPred) tArgs)
+     traceLog ("Inferred func application: " ++ pretty tvar') ()
      return (tvar', EApp (a, tvar') e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1

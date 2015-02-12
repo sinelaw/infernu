@@ -66,10 +66,10 @@ unify a t1 t2 = decycledUnify a t1 t2
 -- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 1)
 -- Right (fromList [(0,Fix (TRow (TRowEnd (Just (RowTVar 1)))))])
 --
--- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowProp "x" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
--- Right (fromList [(0,Fix (TRow (TRowProp "x" (TScheme {schemeVars = [], schemeType = Fix (TBody TNumber)}) (TRowEnd (Just (RowTVar 1))))))])
+-- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowProp "x" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
+-- Right (fromList [(0,Fix (TRow (TRowProp "x" (TScheme {schemeVars = [], schemeType = Fix (TBody TNumber), schemePred = TPredTrue}) (TRowEnd (Just (RowTVar 1))))))])
 --
--- >>> let row1 z = (Fix $ TRow $ TRowProp "x" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd z))
+-- >>> let row1 z = (Fix $ TRow $ TRowProp "x" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd z))
 -- >>> let sCloseRow = fromRight $ u (row1 $ Just $ RowTVar 1) (row1 Nothing)
 -- >>> pretty $ applySubst sCloseRow (row1 $ Just $ RowTVar 1)
 -- "{x: TNumber}"
@@ -78,7 +78,7 @@ unify a t1 t2 = decycledUnify a t1 t2
 --
 -- >>> let tvar0 = Fix $ TBody $ TVar 0
 -- >>> let tvar3 = Fix $ TBody $ TVar 3
--- >>> let recRow = Fix $ TRow $ TRowProp "x" (TScheme [] tvar0) $ TRowProp "y" (TScheme [] tvar3) (TRowEnd $ Just $ RowTVar 2)
+-- >>> let recRow = Fix $ TRow $ TRowProp "x" (schemeEmpty tvar0) $ TRowProp "y" (schemeEmpty tvar3) (TRowEnd $ Just $ RowTVar 2)
 -- >>> let s = fromRight $ u tvar0 recRow
 -- >>> s
 -- fromList [(0,Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]))]
@@ -112,7 +112,7 @@ unify a t1 t2 = decycledUnify a t1 t2
 --     du tvar0 recRow
 --     let tvar4 = Fix . TBody . TVar $ 4
 --         tvar5 = Fix . TBody . TVar $ 5
---     s2 <- du recRow (Fix $ TRow $ TRowProp "x" (TScheme [] tvar4) $ TRowProp "y" (TScheme [] tvar5) (TRowEnd Nothing))
+--     s2 <- du recRow (Fix $ TRow $ TRowProp "x" (schemeEmpty tvar4) $ TRowProp "y" (schemeEmpty tvar5) (TRowEnd Nothing))
 --     return $ applySubst s2 recRow
 -- :}
 -- "{x: <Named Type: mu 'B'. {} f>, y: f}"
@@ -121,7 +121,7 @@ unify a t1 t2 = decycledUnify a t1 t2
 -- >>> :{
 -- pretty $ runInfer $ do
 --     s1 <- du tvar0 rec2
---     return $ applySubst s1 rec2
+--     return $ applySubst s1 $ qualEmpty rec2
 -- :}
 -- "(this: {x: <Named Type: mu 'B'. c d>, y: d, ..c} -> TNumber)"
 --
@@ -129,7 +129,7 @@ unify a t1 t2 = decycledUnify a t1 t2
 -- runInfer $ do
 --     s1 <- du tvar0 rec2
 --     s2 <- du tvar0 rec2
---     return $ (applySubst s1 rec2 == applySubst s2 rec2)
+--     return $ (applySubst s1 (qualEmpty rec2) == applySubst s2 (qualEmpty rec2))
 -- :}
 -- Right True
 --
@@ -139,14 +139,14 @@ unify a t1 t2 = decycledUnify a t1 t2
 -- >>> :{
 -- pretty $ runInfer $ do
 --     s1 <- du tvar0 rec2
---     generalize (ELit "bla" LitUndefined) Map.empty $ applySubst s1 rec2
+--     generalize (ELit "bla" LitUndefined) Map.empty $ applySubst s1 $ qualEmpty rec2
 -- :}
 -- "forall c d. (this: {x: <Named Type: mu 'B'. c d>, y: d, ..c} -> TNumber)"
 --
 -- >>> :{
 -- putStrLn $ fromRight $ runInfer $ do
 --     s1 <- du tvar0 rec2
---     tscheme <- generalize (ELit "bla" LitUndefined) Map.empty $ applySubst s1 rec2
+--     tscheme <- generalize (ELit "bla" LitUndefined) Map.empty $ applySubst s1 $ qualEmpty rec2
 --     Control.Monad.forM_ [1,2..10] $ const fresh
 --     t1 <- instantiate tscheme
 --     t2 <- instantiate tscheme
@@ -180,7 +180,9 @@ unify'' (Just recurse) a t1 t2 =
      s <- getMainSubst
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
+     traceLog ("unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
      unify' recurse a t1' t2'
+     getMainSubst >>= \s -> traceLog ("main subst after unification: " ++ pretty s) ()
 
 unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
@@ -338,7 +340,7 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
                              -- should really be unify!
                              case Pred.unify (==) (qualPred tprop1) (qualPred tprop2) of
                                  Nothing -> errorAction
-                                 Just pred' -> addPred pred'
+                                 Just pred' -> return () -- TODO do something with pred'
                              recurse a (qualType tprop1) (qualType tprop2)
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 

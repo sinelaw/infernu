@@ -84,9 +84,6 @@ addVarScheme env n scheme = do
   setVarScheme n varId scheme
   return $ Map.insert n varId env
 
-addPred :: TPred Type -> Infer ()
-addPred pred' = modify $ \is -> is { mainPreds = Set.insert pred' $ mainPreds is }
-    
 ----------------------------------------------------------------------
 -- | Adds a pair of equivalent items to an equivalence map.
 --
@@ -131,19 +128,19 @@ addNamedType tid t scheme = do
 -- 
 -- >>> let mkNamedType tid ts = Fix $ TCons (TName (TypeId tid)) ts
 --  
--- >>> areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (Fix $ TBody TNumber)) (mkNamedType 1 [], TScheme [] (Fix $ TBody TString))
+-- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TBody TNumber)) (mkNamedType 1 [], schemeEmpty (Fix $ TBody TString))
 -- False
--- >>> areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (mkNamedType 0 [])) (mkNamedType 1 [], TScheme [] (mkNamedType 1 []))
+-- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (mkNamedType 0 [])) (mkNamedType 1 [], schemeEmpty (mkNamedType 1 []))
 -- True
 -- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [], TScheme [] (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 0 []]))
---                             (mkNamedType 1 [], TScheme [] (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 1 []]))
+--     areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 0 []]))
+--                             (mkNamedType 1 [], schemeEmpty (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 1 []]))
 -- :}
 -- True
 --  
 -- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (Fix $ TCons TFunc [Fix $ TBody $ TVar 10, mkNamedType 0 [Fix $ TBody $ TVar 10]]))
---                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (Fix $ TCons TFunc [Fix $ TBody $ TVar 11, mkNamedType 1 [Fix $ TBody $ TVar 11]]))
+--     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (Fix $ TCons TFunc [Fix $ TBody $ TVar 10, mkNamedType 0 [Fix $ TBody $ TVar 10]]) TPredTrue)
+--                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (Fix $ TCons TFunc [Fix $ TBody $ TVar 11, mkNamedType 1 [Fix $ TBody $ TVar 11]]) TPredTrue)
 -- :}
 -- True
 areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
@@ -254,7 +251,7 @@ unrollName a tid ts =
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+--     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 --     let tenv = Map.empty
 --     tenv' <- addVarScheme tenv "x" t
 --     applySubstInfer $ Map.singleton 0 (Fix $ TBody TString)
@@ -271,14 +268,14 @@ applySubstInfer s =
 --
 -- For example:
 --
--- >>> runInferWith (InferState { nameSource = NameSource 2, mainSubst = Map.empty, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+-- >>> runInferWith (InferState { nameSource = NameSource 2, mainSubst = Map.empty, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 -- Right Fix (TCons TFunc [Fix (TBody (TVar 3)),Fix (TBody (TVar 1))])
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+--     let t = TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 --     let tenv = Map.empty
 --     tenv' <- addVarScheme tenv "x" t
 --     instantiateVar (Pos.initialPos "") "x" tenv'
@@ -306,12 +303,12 @@ instantiateVar a n env = do
 --
 -- Example:
 --
--- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
+-- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty $ qualEmpty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
 -- Right (TScheme {schemeVars = [0,1], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 1))])})
 --
 -- >>> :{
 -- runInfer $ do
---     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)])
+--     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 --     tenv <- addVarScheme Map.empty "x" t
 --     generalize (ELit "bla" LitUndefined) tenv (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
 -- :}
@@ -380,10 +377,26 @@ applyMainSubst x =
 
 verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
 verifyPred a p =
-    do  let tvars = freeTypeVars p
-            tautologyPred = Set.foldr (\v prev -> TPredAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
-        currentPred <- applyMainSubst tautologyPred
-        case Pred.unify (==) p currentPred of
-            Just p' -> return p'
-            Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p ++ " with " ++ pretty currentPred
+    do  s <- getMainSubst
+        let 
+            substPredType subst (TPredEq n1 (Fix (TBody (TVar n2)))) = substPred n1 n2
+                where substPred x y = let varX = Fix (TBody (TVar x))
+                                          varY = Fix (TBody (TVar y))
+                                      in case (applySubst s varX, applySubst s varY) of
+                                             (_, Fix (TBody (TVar z))) -> TPredTrue
+                                             (Fix (TBody (TVar z)), t) -> TPredEq z t
+            substPredType subst x = applySubst subst x
+
+            p' = substPredType s p
+            tvars = freeTypeVars p'
+            tautologyPred = Set.foldr (\v prev -> Pred.mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
+            currentPred = substPredType s tautologyPred
+
+        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ applySubst s p)) ()
+        traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred) ()
+        case Pred.unify (==) p' currentPred of
+            Just p'' ->
+                do  traceLog ("Verified pred, got: " ++ pretty p'') ()
+                    return p''
+            Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p' ++ " with " ++ pretty currentPred
         
