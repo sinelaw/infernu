@@ -5,16 +5,16 @@ module Infernu.Unify
        (unify, unifyAll, unifyl, unifyRowPropertyBiased)
        where
 
-import           Control.Monad        (forM_, when, forM)
+import           Control.Monad        (forM_, when)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
-import           Data.Traversable     (Traversable (..), sequence)
-import           Data.Foldable        (Foldable (..))
+import           Data.Traversable     (Traversable (..))
+
 
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
 import           Data.Maybe           (mapMaybe)
-import           Data.Either          (rights)
+
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
 import           Prelude              hiding (foldr, foldl, mapM, sequence)
@@ -28,7 +28,7 @@ import qualified Infernu.Pred         as Pred
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Lib (matchZip, flipMap, splatMap)
+import           Infernu.Lib (matchZip)
 
 
 ----------------------------------------------------------------------
@@ -182,7 +182,6 @@ unify'' (Just recurse) a t1 t2 =
          t2' = unFix $ applySubst s t2
      traceLog ("unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
      unify' recurse a t1' t2'
-     getMainSubst >>= \s -> traceLog ("main subst after unification: " ++ pretty s) ()
 
 unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
@@ -194,9 +193,6 @@ unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> I
 -- | Type variables
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
-
-unify' r a (TAmb n ambTs) t2 = unifyAmb r a True n ambTs t2
-unify' r a t1 (TAmb n ambTs) = unifyAmb r a False n ambTs t1
 
 -- | undefined
 unify' _ _ (TBody TUndefined) _ = return () -- TODO verify this is ok. undefined being treated as "bottom" type here.
@@ -262,49 +258,6 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
 
-unifyAmb
-  :: UnifyF
-     -> Pos.SourcePos
-     -> Bool
-     -> TVarName
-     -> [Type]
-     -> FType Type
-     -> Infer ()
-unifyAmb r a leftBiased n ambTs t2 = do
-  let innerUnify' ambT = if leftBiased
-                         then r a ambT (Fix t2)
-                         else r a (Fix t2) ambT
-      t1 = TAmb n ambTs
-      errorAction = if leftBiased
-                    then unificationError a t1 t2
-                    else unificationError a t2 t1
-  res <- forM ambTs $ \ambT ->  runSubInfer $ do innerUnify' ambT
-                                                 s <- getMainSubst
-                                                 return (ambT, s)
-  case rights res of
-   [] -> errorAction
-   [(ambT, subst)] -> do applySubstInfer subst
-                         varBind a n $ applySubst subst ambT
-   resTs -> do let -- Step 1: For each optional subst of the ambigious type, collect all the sets of variables that map to the same type
-                   inverseSubsts :: [Map Type (Set TVarName)]
-                   inverseSubsts = map flipMap $ map (\(t,s) -> Map.filterWithKey (\k _ -> not $ k `Set.member` freeTypeVars t) s) resTs
-                   -- Step 2: For each set of type variables, make a list of types they could map to (the ambiguity for this set)
-                   typesPerSet :: Map (Set TVarName) [Type]
-                   typesPerSet = foldr foldInverseSubsts Map.empty inverseSubsts
-                     where foldInverseSubsts :: Map Type (Set TVarName) -> Map (Set TVarName) [Type] -> Map (Set TVarName) [Type]
-                           foldInverseSubsts typeMap resMap = Map.foldrWithKey (\t -> Map.alter (Just . (t:) . maybe [] id)) resMap typeMap
-                   -- TODO: Assert that all values in ambigsPerSet have the same length.
-                   -- Step 3: Create an ambigious type from each fo the [Type] lists
-                   ambigTypesPerSet :: Infer (Map (Set TVarName) Type)
-                   ambigTypesPerSet = sequence $ Map.map (\ts -> fresh >>= \n' -> return $ Fix $ TAmb n' ts) typesPerSet
-
-               traceLog ("resTs: " ++ pretty resTs) ()
-               traceLog ("inverseSubsts: " ++ show inverseSubsts) ()
-               traceLog ("typesPerSet: " ++ show typesPerSet) ()
-               subst <- splatMap <$> ambigTypesPerSet
-               traceLog ("TAmb subst:" ++ pretty subst) ()
-               applySubstInfer subst
---               varBind a n $ applySubst subst $ Fix $ TAmb n' $ types
 
 unifyTryMakeRow :: UnifyF -> Pos.SourcePos -> Bool -> TRowList Type -> FType Type -> Infer ()
 unifyTryMakeRow r a leftBiased tRowList t2 =
@@ -340,7 +293,7 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
                              -- should really be unify!
                              case Pred.unify (==) (qualPred tprop1) (qualPred tprop2) of
                                  Nothing -> errorAction
-                                 Just pred' -> return () -- TODO do something with pred'
+                                 Just _ -> return () -- TODO do something with pred'
                              recurse a (qualType tprop1) (qualType tprop2)
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 
