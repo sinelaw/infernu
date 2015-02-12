@@ -11,6 +11,7 @@ import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, modify)
 import           Data.Foldable              (Foldable (..), msum)
 import           Data.Traversable              (Traversable (..))
+import           Data.List              (intercalate)
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
@@ -375,24 +376,36 @@ applyMainSubst x =
   do s <- getMainSubst
      return $ applySubst s x
 
+
+substVar subst x = let varX = Fix (TBody (TVar x))
+                   in case applySubst subst varX of
+                          Fix (TBody (TVar zx)) -> zx
+                          _ -> x
+
+-- |
+-- >>> substPredType (Map.fromList [(0,Fix $ TBody $ TVar 1)]) (TPredEq 0 (Fix $ TBody $ TString))
+-- TPredEq 1 Fix (TBody TString)
+substPredType :: TSubst -> TPred Type -> TPred Type
+substPredType subst (TPredEq n1 t) = res
+    where n1s = substVar subst n1
+          res = case applySubst subst t of
+                    ts@(Fix (TBody (TVar n2))) -> if n2 == n1s
+                                                  then TPredTrue
+                                                  else TPredEq n1s ts
+                    ts -> TPredEq n1s ts
+substPredType subst (TPredAnd p1 p2) = substPredType subst p1 `Pred.mkAnd` substPredType subst p2
+substPredType subst (TPredOr p1 p2) = substPredType subst p1 `Pred.mkOr` substPredType subst p2
+substPredType subst p = applySubst subst p
+
 verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
 verifyPred a p =
     do  s <- getMainSubst
-        let 
-            substPredType subst (TPredEq n1 (Fix (TBody (TVar n2)))) = substPred n1 n2
-                where substPred x y = let varX = Fix (TBody (TVar x))
-                                          varY = Fix (TBody (TVar y))
-                                      in case (applySubst s varX, applySubst s varY) of
-                                             (_, Fix (TBody (TVar z))) -> TPredTrue
-                                             (Fix (TBody (TVar z)), t) -> TPredEq z t
-            substPredType subst x = applySubst subst x
-
-            p' = substPredType s p
+        let p' = substPredType s p
             tvars = freeTypeVars p'
             tautologyPred = Set.foldr (\v prev -> Pred.mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
             currentPred = substPredType s tautologyPred
 
-        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ applySubst s p)) ()
+        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p)) ()
         traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred) ()
         case Pred.unify (==) p' currentPred of
             Just p'' ->
@@ -400,3 +413,14 @@ verifyPred a p =
                     return p''
             Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p' ++ " with " ++ pretty currentPred
         
+unifyPreds a p1 p2 =
+     case Pred.unify (==) p1 p2 of
+         Just pred' -> return pred'
+         Nothing -> throwError a $ "Failed unifying predicates: " ++ pretty p1 ++ ", " ++ pretty p2
+
+unifyPredsL a preds =
+     case foldM (Pred.unify (==)) TPredTrue preds of
+         Just pred' -> return pred'
+         Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map pretty preds)
+     
+    

@@ -400,7 +400,10 @@ instance VarNames t => VarNames (TPred t) where
     mapVarNames f TPredTrue = TPredTrue
 
 instance Substable t => Substable (TPred t) where
-    applySubst s p = fmap (applySubst s) p
+    applySubst s (TPredEq n t) = TPredEq n $ applySubst s t
+    applySubst s (TPredAnd p1 p2) = applySubst s p1 `TPredAnd` applySubst s p2
+    applySubst s (TPredOr p1 p2) = applySubst s p1 `TPredOr` applySubst s p2
+    applySubst s TPredTrue = TPredTrue
 
                      
 -- | VarNames instance for TScheme

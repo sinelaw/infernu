@@ -97,7 +97,8 @@ inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
-     let t = TQual (qualPred t1) $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
+     pred <- verifyPred a $ qualPred t1
+     let t = TQual pred $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
@@ -113,9 +114,10 @@ inferType' env (EApp a e1 eArgs) =
      traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds)) ()
      tvar' <- case foldM (Pred.unify (==)) TPredTrue preds of
                  Just pred' ->
-                     do  traceLog ("Verifying pred: " ++ pretty pred') ()
+                     do  traceLog ("Verifying pred: " ++ pretty pred' ++ " with type: " ++ pretty tvar) ()
                          pred'' <- verifyPred a pred'
-                         return $ TQual pred'' tvar
+                         tvarSubsted <- applyMainSubst tvar
+                         return $ TQual pred'' tvarSubsted
                  Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map (pretty . qualPred) tArgs)
      traceLog ("Inferred func application: " ++ pretty tvar') ()
      return (tvar', EApp (a, tvar') e1' eArgs')
@@ -136,11 +138,8 @@ inferType' env (ENew a e1 eArgs) =
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
      unify a thisT (closeRow resolvedThisT)
      -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
-     -- TODO: unify preds
-     thisT' <- case foldM (Pred.unify (==)) TPredTrue preds of
-                 Just pred' -> return $ TQual pred' thisT
-                 Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map pretty preds)
-     
+     preds' <- unifyPredsL a preds
+     let thisT' = TQual preds' thisT
      return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
@@ -158,10 +157,11 @@ inferType' env (EAssign a n expr1 expr2) =
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
      unify a (qualType lvalueT) (qualType rvalueT)
-     -- TODO unify preds
      unifyAllInstances a $ getQuantificands lvalueScheme
      (tRest, expr2') <- inferType env expr2
-     return (tRest, EAssign (a, tRest) n expr1' expr2')
+     preds <- unifyPredsL a $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
+     tRest' <- (flip TQual $ qualType tRest) <$> verifyPred a preds
+     return (tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
@@ -184,17 +184,16 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
      let elemType = Fix . TBody . TVar $ elemTVarName
-     -- TODO unify predicates
      unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
      (tId, eIdx') <- inferType env eIdx
-     -- TODO unify predicates
      unify a (qualType tId) $ Fix $ TBody TNumber
      (tExpr1, expr1') <- inferType env expr1
-     -- TODO unify predicates
      unify a (qualType tExpr1) elemType
      unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
-     return (tExpr2 , EIndexAssign (a, tExpr2)  eArr' eIdx' expr1' expr2')
+     preds <- unifyPredsL a $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
+     tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
+     return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
   do tv <- Fix . TBody . TVar <$> fresh
      te <- accumInfer env exprs
