@@ -183,15 +183,20 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
+     arrTVarName <- fresh
+     idxTVarName <- fresh
      let elemType = Fix . TBody . TVar $ elemTVarName
-     unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
+--     unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
+     unify a (qualType tArr) $ Fix $ TBody $ TVar $ arrTVarName
      (tId, eIdx') <- inferType env eIdx
-     unify a (qualType tId) $ Fix $ TBody TNumber
+     unify a (qualType tId) $ Fix $ TBody $ TVar $ idxTVarName
      (tExpr1, expr1') <- inferType env expr1
      unify a (qualType tExpr1) elemType
      unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
-     preds <- unifyPredsL a $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
+     let curPred = (TPredEq arrTVarName (Fix $ TCons TArray [elemType])
+                    `Pred.mkAnd` TPredEq idxTVarName (Fix $ TBody TNumber))
+     preds <- unifyPredsL a $ (curPred:) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
      tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
      return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
