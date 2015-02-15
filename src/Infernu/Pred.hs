@@ -3,11 +3,12 @@ module Infernu.Pred
        (unify, mkAnd, mkOr)
     where
 
-
 import           Data.Traversable (sequenceA)
+import Control.Applicative (Applicative(..), (<$>), (*>))
+import Data.Foldable(sequenceA_)
 import           Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as Map
-import           Data.Maybe    (catMaybes)
+
 import           Data.Set      (Set)
 import qualified Data.Set      as Set
 import           Infernu.Types (TPred (..), TVarName)
@@ -83,29 +84,18 @@ unifyPreds :: (Applicative f, Ord t) => (t -> t -> f ()) -> CanonPredOr t -> Can
 unifyPreds u (CanonPredOr m1s) (CanonPredOr m2s) =
     CanonPredOr <$> sequenceA [unifyMaps u m1 m2 | m1 <- m1s, m2 <- m2s]
 
--- TODO: REfactor    
--- Map a   mismatching keys -> survive the key as is
---     b   matching keys -> unify the values, fail delete keys
---     
--- typevar => Type          typevar => Type 
---       a => Number   &    a = Int
---       b => String   &    b = Number
---       c => Number
-
+-- TODO: Refactor    
 -- Get rid of Set - do the unification at the toCanon level
 -- Use newtypes
 -- Use effectful unifyWith (using pure to lift pure values in the map to f a)
-      
 --    (╯°□°）╯︵ ┻━┻
-unifyMaps ::
-    (Applicative f, Ord t, Ord k)
-    => (t -> t -> f ())
-    -> Map k (Set t)
-    -> Map k (Set t)
-    -> f (Map k (Set t))
-unifyMaps u m1 m2 = 
-unifyMaps u m1 m2 = Map.traverseWithKey (\_ (isGood, s) -> if isGood then Just s else Nothing)
-                    $ Map.mergeWithKey (\_ t1 t2 -> Just (unifySets u t1 t2, Set.union t1 t2)) (Map.map (True,)) (Map.map (True,)) m1 m2
+unifyMaps
+  :: (Applicative f, Ord a, Ord k) =>
+     (a -> a -> f ())
+     -> Map k (Set a)
+     -> Map k (Set a)
+     -> f (Map k (Set a))
+unifyMaps u m1 m2 = sequenceA $ Map.mergeWithKey (\_ t1 t2 -> Just (unifySets u t1 t2 *> (pure $ Set.union t1 t2))) (Map.map pure) (Map.map pure) m1 m2
 
 unifySets :: (Applicative f, Ord t) => (t -> t -> f ()) -> Set t -> Set t -> f ()
 unifySets u s1 s2 = sequenceA_ [x `u` y | x <- Set.toList s1, y <- Set.toList s2]

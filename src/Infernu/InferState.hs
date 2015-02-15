@@ -5,7 +5,7 @@
 module Infernu.InferState
        where
 
-import           Control.Monad              (foldM, forM, forM_, liftM2)
+import           Control.Monad              (foldM, forM, forM_, liftM2, when)
 import           Control.Monad.Trans        (lift)
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, modify)
@@ -396,38 +396,3 @@ substPredType subst (TPredAnd p1 p2) = substPredType subst p1 `Pred.mkAnd` subst
 substPredType subst (TPredOr p1 p2) = substPredType subst p1 `Pred.mkOr` substPredType subst p2
 substPredType subst p = applySubst subst p
 
-verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
-verifyPred a p =
-    do  s <- getMainSubst
-        let p' = substPredType s p
-            tvars = freeTypeVars p'
-            tautologyPred = Set.foldr (\v prev -> Pred.mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
-            currentPred = substPredType s tautologyPred
-
-        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p)) ()
-        traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred) ()
-        case Pred.unify (==) p' currentPred of
-            Just p'' ->
-                do  traceLog ("Verified pred, got: " ++ pretty p'') ()
-                    return p''
-            Nothing -> throwError a $ "Failed to unify predicates: " ++ pretty p' ++ " with " ++ pretty currentPred
-        
--- unifyPreds :: (Pretty t, Ord t)
---               => Pos.SourcePos
---               -> TPred t -> TPred t
---               -> Infer (TPred t)
--- unifyPreds a p1 p2 =
---      case Pred.unify (==) p1 p2 of
---          Just pred' -> return pred'
---          Nothing -> throwError a $ "Failed unifying predicates: " ++ pretty p1 ++ ", " ++ pretty p2
-
-unifyPredsL :: Pos.SourcePos
-               -> [TPred Type]
-               -> Infer (TPred Type)
-unifyPredsL a preds =
-    do preds' <- mapM (verifyPred a) preds
-       case foldM (Pred.unify (==)) TPredTrue preds' of
-           Just pred' -> return pred'
-           Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map pretty preds)
-     
-    

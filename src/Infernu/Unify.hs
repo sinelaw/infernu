@@ -2,10 +2,10 @@
 {-# LANGUAGE TupleSections #-}
 
 module Infernu.Unify
-       (unify, unifyAll, unifyl, unifyRowPropertyBiased)
+       (unify, unifyAll, unifyl, unifyRowPropertyBiased, verifyPred, unifyPredsL)
        where
 
-import           Control.Monad        (forM_, when)
+import           Control.Monad        (forM_, when, foldM)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
 import           Data.Traversable     (Traversable (..))
@@ -290,10 +290,9 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
                              tprop1 <- instantiate tprop1s
                              tprop2 <- instantiate tprop2s
                              -- TODO unify predicates properly (review this) - specificaly (==)
-                             -- should really be unify!
-                             case Pred.unify (==) (qualPred tprop1) (qualPred tprop2) of
-                                 Nothing -> errorAction
-                                 Just _ -> return () -- TODO do something with pred'
+                             -- should prevent cycles!
+--                             Pred.unify (unify a) (qualPred tprop1) (qualPred tprop2)
+                             -- TODO do something with pred'
                              recurse a (qualType tprop1) (qualType tprop2)
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 
@@ -384,3 +383,26 @@ dropLast (x:xs) = x : dropLast xs
 
 unifyAll :: Pos.SourcePos -> [Type] -> Infer ()
 unifyAll a ts = unifyl decycledUnify a $ zip (dropLast ts) (drop 1 ts)
+
+
+verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
+verifyPred a p =
+    do  s <- getMainSubst
+        let p' = substPredType s p
+            tvars = freeTypeVars p'
+            tautologyPred = Set.foldr (\v prev -> Pred.mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
+            currentPred = substPredType s tautologyPred
+
+        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p)) ()
+        traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred) ()
+        Pred.unify (unify a) p' currentPred
+        
+            
+unifyPredsL :: Pos.SourcePos
+               -> [TPred Type]
+               -> Infer (TPred Type)
+unifyPredsL a preds =
+    do preds' <- mapM (verifyPred a) preds
+       foldM (Pred.unify $ unify a) TPredTrue preds'
+     
+    
