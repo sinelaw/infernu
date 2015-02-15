@@ -33,7 +33,7 @@ import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Lib (safeLookup)
 import           Infernu.Types
-import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased)
+import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased, verifyPred, unifyPredsL)
 import qualified Infernu.Pred as Pred
 
 
@@ -112,13 +112,11 @@ inferType' env (EApp a e1 eArgs) =
          preds = map qualPred $ t1:tArgs
      unify a (qualType t1) (Fix . TCons TFunc $ (map qualType tArgs) ++ [tvar])
      traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds)) ()
-     tvar' <- case foldM (Pred.unify (==)) TPredTrue preds of
-                 Just pred' ->
-                     do  traceLog ("Verifying pred: " ++ pretty pred' ++ " with type: " ++ pretty tvar) ()
-                         pred'' <- verifyPred a pred'
-                         tvarSubsted <- applyMainSubst tvar
-                         return $ TQual pred'' tvarSubsted
-                 Nothing -> throwError a $ "Failed unifying predicates: " ++ intercalate ", " (map (pretty . qualPred) tArgs)
+     tvar' <- do  pred' <- foldM (Pred.unify (unify a)) TPredTrue preds
+                  traceLog ("Verifying pred: " ++ pretty pred' ++ " with type: " ++ pretty tvar) ()
+                  pred'' <- verifyPred a pred'
+                  tvarSubsted <- applyMainSubst tvar
+                  return $ TQual pred'' tvarSubsted
      traceLog ("Inferred func application: " ++ pretty tvar') ()
      return (tvar', EApp (a, tvar') e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
