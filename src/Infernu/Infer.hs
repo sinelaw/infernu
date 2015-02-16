@@ -188,6 +188,7 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      unify a (qualType tId) $ Fix $ TBody $ TVar $ idxTVarName
      (tExpr1, expr1') <- inferType env expr1
      unify a (qualType tExpr1) elemType
+     -- TODO: BUG here, because elemTVarName never has any var instances due to the predicates usage here.
      unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
      let curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
