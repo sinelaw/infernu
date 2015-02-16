@@ -104,16 +104,16 @@ addVarScheme env n scheme = do
 -- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(3,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])]
 -- >>> addEquivalence 3 1 m1
 -- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(3,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])]
-addEquivalence :: TVarName -> TVarName -> Map TVarName (Set (Type)) -> Map TVarName (Set (Type))
+addEquivalence :: TVarName -> TVarName -> Map TVarName (Set QualType) -> Map TVarName (Set QualType)
 addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
-    where updatedSet :: Set Type
-          updatedSet = Set.insert (Fix $ TBody $ TVar x) . Set.insert (Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
+    where updatedSet :: Set QualType
+          updatedSet = Set.insert (qualEmpty $ Fix $ TBody $ TVar x) . Set.insert (qualEmpty $ Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
           getSet item = fromMaybe Set.empty $ Map.lookup item m
           setTVars :: [TVarName]
           setTVars = mapVarNames' $ Set.toList updatedSet
-          mapVarNames' :: [Type] -> [TVarName]
+          mapVarNames' :: [QualType] -> [TVarName]
           mapVarNames' [] = []
-          mapVarNames' (Fix (TBody (TVar n)) : ts) = n : mapVarNames' ts
+          mapVarNames' (TQual pred (Fix (TBody (TVar n))) : ts) = n : mapVarNames' ts
           mapVarNames' (_:ts) = mapVarNames' ts
 
 
@@ -371,7 +371,7 @@ minifyVarsFunc xs n = fromMaybe n $ Map.lookup n vars
 minifyVars :: (VarNames a) => a -> a
 minifyVars xs = mapVarNames (minifyVarsFunc xs) xs
 
-getVarInstances :: Infer (Map.Map TVarName (Set.Set (Type)))
+getVarInstances :: Infer (Map.Map TVarName (Set.Set QualType))
 getVarInstances = varInstances <$> get
 
 
