@@ -48,4 +48,3 @@ annotatedSource :: [(Pos.SourcePos, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos prettyRes indexedSource
   where indexedSource = indexList sourceCode
         prettyRes = (Set.toList . Set.fromList . fmap (second pretty)) xs
-

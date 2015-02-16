@@ -67,7 +67,7 @@ closeRow t = t
 -- For efficiency reasons, types list is returned in reverse order.
 accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer [(QualType, Exp (Pos.SourcePos, QualType))]
 accumInfer env =
-  do traceLog ("accumInfer: env: " ++ pretty env) ()
+  do traceLog ("accumInfer: env: " ++ pretty env)
      foldM accumInfer' []
      where accumInfer' types expr =
              do (t, e) <- inferType env expr
@@ -75,7 +75,7 @@ accumInfer env =
 
 inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (QualType, Exp (Pos.SourcePos, QualType))
 inferType env expr = do
-  traceLog (">> " ++ pretty expr) ()
+  traceLog (">> " ++ pretty expr)
   (t, e) <- inferType' env expr
   s <- getMainSubst
   return (applySubst s t, fmap (applySubst s) e)
@@ -103,21 +103,19 @@ inferType' env (EAbs a argNames e2) =
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
      (t1, e1') <- inferType env e1
-     traceLog ("EApp: Inferred type for func expr: " ++ pretty t1) ()
+     traceLog ("EApp: Inferred type for func expr: " ++ pretty t1)
      argsTE <- accumInfer env eArgs
-     traceLog ("EApp: Inferred types for func args: " ++ (intercalate ", " $ map pretty argsTE)) ()
+     traceLog ("EApp: Inferred types for func args: " ++ (intercalate ", " $ map pretty argsTE))
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = map qualPred $ t1:tArgs
      unify a (qualType t1) (Fix . TCons TFunc $ (map qualType tArgs) ++ [tvar])
-     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds)) ()
-     tvar' <- do  pred' <- foldM (Pred.unify (unify a)) TPredTrue preds
-                  traceLog ("Verifying pred: " ++ pretty pred' ++ " with type: " ++ pretty tvar) ()
-                  pred'' <- verifyPred a pred'
+     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds))
+     tvar' <- do  pred' <- unifyPredsL a preds
                   tvarSubsted <- applyMainSubst tvar
-                  return $ TQual pred'' tvarSubsted
-     traceLog ("Inferred func application: " ++ pretty tvar') ()
+                  return $ TQual pred' tvarSubsted
+     traceLog ("Inferred func application: " ++ pretty tvar')
      return (tvar', EApp (a, tvar') e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1
@@ -179,6 +177,19 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      (expr2T, expr2') <- inferType env expr2
      return (expr2T, EPropAssign (a, expr2T) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
+  -- do (tArr, eArr') <- inferType env eArr
+  --    elemTVarName <- fresh
+  --    let elemType = Fix . TBody . TVar $ elemTVarName
+  --    unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
+  --    (tId, eIdx') <- inferType env eIdx
+  --    unify a (qualType tId) $ Fix $ TBody TNumber
+  --    (tExpr1, expr1') <- inferType env expr1
+  --    unify a (qualType tExpr1) elemType
+  --    unifyAllInstances a [elemTVarName]
+  --    (tExpr2, expr2') <- inferType env expr2
+  --    preds <- unifyPredsL a $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
+  --    tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
+  --    return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
      arrTVarName <- fresh

@@ -27,3 +27,8 @@ flipMap m = Map.foldrWithKey (\k v m' -> Map.alter (Just . addKeyToSet' k) v m')
 
 splatMap :: Ord k => Map (Set k) a -> Map k a
 splatMap m = Map.foldrWithKey (\ks v m' -> foldr (\k m'' -> Map.insert k v m'') m' (Set.toList ks)) Map.empty m
+
+eitherToMaybe :: Either a b -> Maybe b
+eitherToMaybe (Left _) = Nothing
+eitherToMaybe (Right x) = Just x
+                          

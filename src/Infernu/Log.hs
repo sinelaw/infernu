@@ -3,9 +3,10 @@
 {-# LANGUAGE BangPatterns    #-}
 
 module Infernu.Log
-       (trace, tracePretty, traceLog)
+       (trace, tracePretty, traceLog, traceLogVal)
        where
 
+import Control.Applicative (Applicative(..))
 import           Infernu.Pretty
 
 
@@ -19,6 +20,9 @@ trace _ y = y
 tracePretty :: Pretty a => String -> a -> a
 tracePretty prefix x = trace (prefix ++ " " ++ pretty x) x
 
-traceLog :: Monad m => String -> a -> m a
-traceLog !s !r = return $! trace s r `seq` r
+traceLogVal :: Applicative f => String -> a -> f a
+traceLogVal !s !r = pure $! trace s r `seq` r
 
+traceLog :: Applicative f => String -> f ()
+traceLog !s = pure $! trace s () `seq` ()
+                    

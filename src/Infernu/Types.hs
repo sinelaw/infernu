@@ -300,7 +300,7 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 0)
 -- Fix (TRow (TRowEnd Nothing))
 -- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (schemeEmpty $ Fix $ TBody TString) (TRowEnd $ Just $ RowTVar 0))
--- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = Fix (TBody TString)}) (TRowEnd Nothing)))
+-- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = Fix (TBody TString), schemePred = TPredTrue}) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
   applySubst s ft@(Fix t) =
