@@ -90,10 +90,10 @@ fromCanon (CanonPredOr (p:ps)) = foldr mkOr (fromCanonAnd p) $ map fromCanonAnd 
 -- Just [TPredOr (TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')]
 -- >>> unify u (TPredOr (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'c')
 -- Just [TPredAnd (TPredEq 0 'c') (TPredEq 1 'b')]
-unify :: (Applicative f, Ord t) => ([Set t] -> Maybe (f ())) -> TPred t -> TPred t -> Maybe (f (TPred t))
+unify :: (Applicative f, Ord t) => ([(TVarName, Set t)] -> Maybe (f ())) -> TPred t -> TPred t -> Maybe (f (TPred t))
 unify u p1 p2 = (fmap . fmap) fromCanon $ unifyPreds u (toCanon p1) (toCanon p2)
 
-unifyPreds :: (Applicative f, Ord t) => ([Set t] -> Maybe (f ())) -> CanonPredOr t -> CanonPredOr t -> Maybe (f (CanonPredOr t))
+unifyPreds :: (Applicative f, Ord t) => ([(TVarName, Set t)] -> Maybe (f ())) -> CanonPredOr t -> CanonPredOr t -> Maybe (f (CanonPredOr t))
 unifyPreds u (CanonPredOr m1s) (CanonPredOr m2s) =
     case survivors of
         [] -> Nothing
@@ -106,17 +106,17 @@ unifyPreds u (CanonPredOr m1s) (CanonPredOr m2s) =
 -- Use effectful unifyWith (using pure to lift pure values in the map to f a)
 --    (╯°□°）╯︵ ┻━┻
 unifyMaps
-  :: (Control.Applicative.Applicative f, Ord a, Ord k) =>
-     ([Set a] -> Maybe (f ()))
-     -> Map k (Set a)
-     -> Map k (Set a)
-     -> Maybe (f (Map k (Set a)))
+  :: (Applicative f, Ord a) =>
+     ([(TVarName, Set a)] -> Maybe (f ()))
+     -> Map TVarName (Set a)
+     -> Map TVarName (Set a)
+     -> Maybe (f (Map TVarName (Set a)))
 unifyMaps u m1 m2 =  (fmap Map.unions) . sequenceA <$> sequenceA [intersection', diff1, diff2]
     where intersection = Map.intersectionWith Set.union m1 m2
           intersection' = unifySets' intersection
           diff1 = unifySets' $ Map.difference m1 m2
           diff2 = unifySets' $ Map.difference m2 m1
-          unifySets' s = case u $ Map.elems s of
+          unifySets' s = case u $ Map.assocs s of
                             Nothing -> Nothing
                             Just action -> Just (action *> (pure s))
 -- unifyMaps u m1 m2 = fmap sequenceA <$> traverse (\(fok, s) -> case fok of
