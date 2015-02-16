@@ -153,9 +153,9 @@ inferType' env (EAssign a n expr1 expr2) =
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
      unify a (qualType lvalueT) (qualType rvalueT)
-     unifyAllInstances a $ getQuantificands lvalueScheme
+     instancePreds <- unifyAllInstances a $ getQuantificands lvalueScheme
      (tRest, expr2') <- inferType env expr2
-     preds <- unifyPredsL a $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
+     preds <- unifyPredsL a $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
      tRest' <- (flip TQual $ qualType tRest) <$> verifyPred a preds
      return (tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr n expr1 expr2) =
@@ -173,9 +173,11 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
                unifyRowPropertyBiased a rank0Unify (lvalueScheme, generalizedRvalue)
           Nothing -> rank0Unify
        _ -> rank0Unify
-     unifyAllInstances a [getRowTVar rowTailVar]
-     (expr2T, expr2') <- inferType env expr2
-     return (expr2T, EPropAssign (a, expr2T) objExpr' n expr1' expr2')
+     instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
+     (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
+     preds <- unifyPredsL a $ (instancePred:) $ map qualPred [objT, rvalueT, expr2T] -- TODO review
+     let tRes = TQual preds $ qualType expr2T
+     return (tRes, EPropAssign (a, tRes) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
@@ -189,11 +191,11 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      (tExpr1, expr1') <- inferType env expr1
      unify a (qualType tExpr1) elemType
      -- TODO: BUG here, because elemTVarName never has any var instances due to the predicates usage here.
-     unifyAllInstances a [elemTVarName]
+     instancePred <- unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
      let curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
-     preds <- unifyPredsL a $ (curPred:) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
-     tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
+     preds <- unifyPredsL a $ ([instancePred, curPred] ++) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
+     let tRes = TQual preds $ qualType tExpr2
      return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
   do tv <- Fix . TBody . TVar <$> fresh
@@ -248,9 +250,10 @@ inferType' env (EIndex a eArr eIdx) =
      let elemType' = qualEmpty $ Fix $ TBody $ TVar elemTVarName
          curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
      preds <- unifyPredsL a $ (curPred:) $ map qualPred [tArr, tId] -- TODO review
-     tRes <- (flip TQual $ qualType elemType') <$> verifyPred a preds
+     let tRes = TQual preds $ qualType elemType'
      return (tRes, EIndex (a, tRes)  eArr' eIdx')
 
+indexAccessPred :: TVarName -> TVarName -> TVarName -> TPred Type
 indexAccessPred arrTVarName elemTVarName idxTVarName =
     let elemType = Fix $ TBody $ TVar elemTVarName
     in
@@ -259,18 +262,17 @@ indexAccessPred arrTVarName elemTVarName idxTVarName =
     `mkOr` (TPredEq arrTVarName (Fix $ TCons TStringMap [elemType])
             `mkAnd` TPredEq idxTVarName (Fix $ TBody TString))
     
-unifyAllInstances :: Pos.SourcePos -> [TVarName] -> Infer ()
+unifyAllInstances :: Pos.SourcePos -> [TVarName] -> Infer (TPred Type)
 unifyAllInstances a tvs = do
   m <- getVarInstances
-  let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
-
   -- TODO suboptimal - some of the sets may be identical
-  let unifyAll' equivs =
+  let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
+      unifyAll' equivs =
           do  let equivsL = Set.toList equivs
-              preds <- unifyPredsL a $ map qualPred equivsL
-              _ <- verifyPred a preds
               unifyAll a . tracePretty "equivalence:" $ map qualType equivsL
-  mapM_ unifyAll' equivalenceSets
+              return $ map qualPred equivsL
+  pred' <- concat <$> mapM unifyAll' equivalenceSets
+  unifyPredsL a pred'
 
 createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins

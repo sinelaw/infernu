@@ -376,19 +376,34 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
 unifyAll :: Pos.SourcePos -> [Type] -> Infer ()
 unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 
+unifyPredAnds :: Pos.SourcePos -> [Set Type] -> Infer ()
+unifyPredAnds a s =
+    do  traceLog $ "unifyPredAnds: " ++ show s
+        mapM_ (unifyAll a . Set.toList) s
+
+                   
 subUnify :: InferState -> Pos.SourcePos -> [Set Type] -> Maybe (Infer ())
-subUnify s a ts = case execInferWith s (mapM (unifyAll a . Set.toList) ts) of
+subUnify s a ts = case execInferWith s $ unifyPredAnds a ts of
     Left _ -> Nothing
-    Right s' -> Just $ do traceLog ("PPP - Saving state: " ++ pretty s')
+    Right _ -> Just $ do return () --traceLog ("PPP - Saving state: " ++ pretty s')
+                          
 --                          setState s'
     
 unifyPred :: Pos.SourcePos -> TPred Type -> TPred Type -> Infer (TPred Type)
 unifyPred a x y = do
     traceLog ("unifyPred: " ++ pretty x ++ " ~ with ~ " ++ pretty y)
     s <- getState
-    case Pred.unify (subUnify s a) x y of
-        Nothing -> throwError a "Oh noes."
-        Just p -> p
+    p <- case Pred.unify (subUnify s a) x y of
+             Nothing -> throwError a "Oh noes."
+             Just predAction -> predAction
+    let canonP = Pred.splitCanon $ Pred.toCanon p
+    unifyPredAnds a $ Map.elems $ Pred.canonUnambiguousPreds canonP
+    case Pred.canonAmbiguousPreds canonP of
+        [] -> return $ TPredTrue
+        [singleP] ->
+            do  unifyPredAnds a $ Map.elems singleP
+                return $ TPredTrue
+        xs -> return $ Pred.fromCanon $ Pred.CanonPredOr xs
 
 verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
 verifyPred a p =
@@ -407,8 +422,13 @@ unifyPredsL :: Pos.SourcePos
                -> [TPred Type]
                -> Infer (TPred Type)
 unifyPredsL a preds =
-    do preds' <- foldM (unifyPred a) TPredTrue preds
-       verifyPred a preds'
+    case filter (/= TPredTrue) preds of
+        [] -> return TPredTrue
+        preds1 ->
+            do preds2 <- foldM (unifyPred a) TPredTrue preds1
+               preds3 <- verifyPred a preds2
+               s <- getMainSubst
+               return $ substPredType s preds3
        
      
     

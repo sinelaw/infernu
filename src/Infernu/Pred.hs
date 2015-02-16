@@ -13,7 +13,7 @@ import           Data.Set            (Set)
 import qualified Data.Set            as Set
 import           Infernu.Types       (TPred (..), TVarName, mkAnd, mkOr)
 
-data CanonPredOr t = CanonPredOr [Map TVarName (Set t)]
+data CanonPredOr t = CanonPredOr { canonPredAnds :: [Map TVarName (Set t)] }
                      deriving (Show, Eq)
 
 -- | Converts a predicate to DNF (Disjunction Normal Form)
@@ -39,6 +39,15 @@ toDNF (TPredAnd exp1 exp2) = if exp1 == exp2
 toDNF (TPredOr exp1 exp2) = toDNF exp1 `mkOr` toDNF exp2
 toDNF expr                    = expr
 
+data CanonPredSplit t = CanonPredSplit { canonAmbiguousPreds :: [Map TVarName (Set t)]
+                                       , canonUnambiguousPreds :: Map TVarName (Set t) }
+
+splitCanon :: Ord t => CanonPredOr t -> CanonPredSplit t
+splitCanon (CanonPredOr ands') = CanonPredSplit { canonAmbiguousPreds = ambigs, canonUnambiguousPreds = intersections }
+    where intersections = Map.unionsWith Set.intersection ands'
+          ambigs = map (Map.mapWithKey (\k vs -> Set.difference vs $ Map.findWithDefault Set.empty k intersections)) ands'
+    
+                                
 -- | Converts a predicate to a list of sums of products
 --
 -- >>> toCanon $ TPredAnd (TPredAnd (TPredEq 0 'a') (TPredEq 0 'b')) (TPredAnd (TPredEq 0 'c') (TPredEq 0 'd'))
@@ -104,11 +113,12 @@ unifyMaps
      -> Maybe (f (Map k (Set a)))
 unifyMaps u m1 m2 =  (fmap Map.unions) . sequenceA <$> sequenceA [intersection', diff1, diff2]
     where intersection = Map.intersectionWith Set.union m1 m2
-          intersection' = case u $ Map.elems intersection of
-                              Nothing -> Nothing
-                              Just action -> Just (action *> (pure intersection))
-          diff1 = Just . pure $ Map.difference m1 m2
-          diff2 = Just . pure $ Map.difference m2 m1
+          intersection' = unifySets' intersection
+          diff1 = unifySets' $ Map.difference m1 m2
+          diff2 = unifySets' $ Map.difference m2 m1
+          unifySets' s = case u $ Map.elems s of
+                            Nothing -> Nothing
+                            Just action -> Just (action *> (pure s))
 -- unifyMaps u m1 m2 = fmap sequenceA <$> traverse (\(fok, s) -> case fok of
 --                                                Nothing -> Nothing
 --                                                Just action -> Just $ action *> pure s)
