@@ -151,8 +151,8 @@ predsStr n preds =
         TPredTrue -> ""
         p -> prettyTab n p ++ " => "
 
-instance Pretty t => Pretty (TQual t) where
-    prettyTab n (TQual preds t) = predsStr n preds ++ prettyTab n t
+instance (Eq t, VarNames t, Pretty t) => Pretty (TQual t) where
+    prettyTab n (TQual preds t) = (predsStr n $ removeUnusedTVars (freeTypeVars t) preds) ++ prettyTab n t
         
 instance Pretty t => Pretty (TScheme t) where
   prettyTab n (TScheme vars t preds) = predsStr n preds ++ forall ++ prettyTab n t

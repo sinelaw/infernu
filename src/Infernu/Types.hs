@@ -29,6 +29,9 @@ module Infernu.Types
        , FlatRowEnd(..)
        , TRowList(..)
        , TPred(..)
+       , mkAnd
+       , mkOr
+       , removeUnusedTVars
        , TQual(..)
        , qualEmpty
        , QualType
@@ -401,7 +404,24 @@ instance Substable t => Substable (TPred t) where
     applySubst s (TPredOr p1 p2) = applySubst s p1 `TPredOr` applySubst s p2
     applySubst _ TPredTrue = TPredTrue
 
-                     
+mkAnd :: Eq t => TPred t -> TPred t -> TPred t
+mkAnd TPredTrue y = y
+mkAnd x TPredTrue = x
+mkAnd x y = if x == y then x else TPredAnd x y
+
+
+mkOr :: Eq t => TPred t -> TPred t -> TPred t
+mkOr TPredTrue y = y
+mkOr x TPredTrue = x
+mkOr x y = if x == y then x else TPredOr x y
+
+-- TODO remove Eq t constraint and add global unification for preds
+removeUnusedTVars :: Eq t => Set.Set TVarName -> TPred t -> TPred t
+removeUnusedTVars tvars p@(TPredEq n _) = if not $ n `Set.member` tvars then TPredTrue else p
+removeUnusedTVars tvars (TPredAnd p1 p2) = removeUnusedTVars tvars p1 `mkAnd` removeUnusedTVars tvars p2
+removeUnusedTVars tvars (TPredOr p1 p2) = removeUnusedTVars tvars p1 `mkOr` removeUnusedTVars tvars p2
+removeUnusedTVars _ TPredTrue = TPredTrue                                 
+                             
 -- | VarNames instance for TScheme
 -- >>> let sc v t = TScheme v t TPredTrue
 -- >>> freeTypeVars $ sc [0, 1] (Fix $ TBody $ TVar 2)

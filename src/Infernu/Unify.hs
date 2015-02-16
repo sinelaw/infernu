@@ -28,7 +28,7 @@ import qualified Infernu.Pred         as Pred
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Lib (matchZip, eitherToMaybe)
+import           Infernu.Lib (matchZip)
 
 
 ----------------------------------------------------------------------
@@ -396,7 +396,7 @@ verifyPred a p =
         traceLog ("PPP - Loaded state: " ++ pretty s)
         let p' = substPredType s p
             tvars = freeTypeVars p'
-            tautologyPred = Set.foldr (\v prev -> Pred.mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
+            tautologyPred = Set.foldr (\v prev -> mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
             currentPred = substPredType s tautologyPred
 
         traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p))

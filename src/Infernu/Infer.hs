@@ -34,7 +34,7 @@ import           Infernu.Pretty
 import           Infernu.Lib (safeLookup)
 import           Infernu.Types
 import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased, verifyPred, unifyPredsL)
-import qualified Infernu.Pred as Pred
+
 
 
 getQuantificands :: TypeScheme -> [TVarName]
@@ -204,7 +204,7 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
      let curPred = (TPredEq arrTVarName (Fix $ TCons TArray [elemType])
-                    `Pred.mkAnd` TPredEq idxTVarName (Fix $ TBody TNumber))
+                    `mkAnd` TPredEq idxTVarName (Fix $ TBody TNumber))
      preds <- unifyPredsL a $ (curPred:) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
      tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
      return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
