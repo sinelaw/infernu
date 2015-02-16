@@ -380,7 +380,7 @@ subUnify :: InferState -> Pos.SourcePos -> [Set Type] -> Maybe (Infer ())
 subUnify s a ts = case execInferWith s (mapM (unifyAll a . Set.toList) ts) of
     Left _ -> Nothing
     Right s' -> Just $ do traceLog ("PPP - Saving state: " ++ pretty s')
-                          setState s'
+--                          setState s'
     
 unifyPred :: Pos.SourcePos -> TPred Type -> TPred Type -> Infer (TPred Type)
 unifyPred a x y = do

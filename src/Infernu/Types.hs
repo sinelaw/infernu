@@ -121,7 +121,7 @@ data TBody = TVar TVarName
 newtype TypeId = TypeId TVarName
                 deriving (Show, Eq, Ord)
 
-data TConsName = TFunc | TArray | TTuple | TName TypeId
+data TConsName = TFunc | TArray | TTuple | TName TypeId | TStringMap
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -465,7 +465,7 @@ data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TypeScheme
-                             , varInstances :: Map.Map TVarName (Set.Set (Type))
+                             , varInstances :: Map.Map TVarName (Set.Set QualType)
                              , namedTypes   :: Map.Map TypeId (Type, TypeScheme) }
                    deriving (Show, Eq)
 

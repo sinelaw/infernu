@@ -177,19 +177,6 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      (expr2T, expr2') <- inferType env expr2
      return (expr2T, EPropAssign (a, expr2T) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
-  -- do (tArr, eArr') <- inferType env eArr
-  --    elemTVarName <- fresh
-  --    let elemType = Fix . TBody . TVar $ elemTVarName
-  --    unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
-  --    (tId, eIdx') <- inferType env eIdx
-  --    unify a (qualType tId) $ Fix $ TBody TNumber
-  --    (tExpr1, expr1') <- inferType env expr1
-  --    unify a (qualType tExpr1) elemType
-  --    unifyAllInstances a [elemTVarName]
-  --    (tExpr2, expr2') <- inferType env expr2
-  --    preds <- unifyPredsL a $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
-  --    tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
-  --    return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
   do (tArr, eArr') <- inferType env eArr
      elemTVarName <- fresh
      arrTVarName <- fresh
@@ -203,8 +190,7 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      unify a (qualType tExpr1) elemType
      unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
-     let curPred = (TPredEq arrTVarName (Fix $ TCons TArray [elemType])
-                    `mkAnd` TPredEq idxTVarName (Fix $ TBody TNumber))
+     let curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
      preds <- unifyPredsL a $ (curPred:) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
      tRes <- (flip TQual $ qualType tExpr2) <$> verifyPred a preds
      return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
@@ -219,6 +205,10 @@ inferType' env (ETuple a exprs) =
   do te <- accumInfer env exprs
      let t = qualEmpty . Fix . TCons TTuple . reverse $ map (qualType . fst) te
      return (t, ETuple (a,t) $ map snd te)
+inferType' _ (ERow a False []) =
+  do elemType <- Fix . TBody . TVar <$> fresh
+     let mapType = qualEmpty . Fix $ TCons TStringMap [elemType]
+     return (mapType, ERow (a,mapType) False [])
 inferType' env (ERow a isOpen propExprs) =
   do te <- accumInfer env $ map snd propExprs
      endVar <- RowTVar <$> fresh
@@ -248,20 +238,37 @@ inferType' env (EProp a eObj propName) =
      return (propType, EProp (a,propType) eObj' propName)
 inferType' env (EIndex a eArr eIdx) =
   do (tArr, eArr') <- inferType env eArr
-     elemType <- Fix . TBody . TVar <$> fresh
-     unify a (Fix $ TCons TArray [elemType]) (qualType tArr)
+     elemTVarName <- fresh
+     arrTVarName <- fresh
+     idxTVarName <- fresh
+     unify a (qualType tArr) (Fix $ TBody $ TVar arrTVarName)
      (tId, eIdx') <- inferType env eIdx
-     unify a (Fix $ TBody TNumber) (qualType tId)
-     let elemType' = qualEmpty elemType
-     return (elemType', EIndex (a, elemType')  eArr' eIdx')
+     unify a (qualType tId) (Fix $ TBody $ TVar idxTVarName)
+     let elemType' = qualEmpty $ Fix $ TBody $ TVar elemTVarName
+         curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
+     preds <- unifyPredsL a $ (curPred:) $ map qualPred [tArr, tId] -- TODO review
+     tRes <- (flip TQual $ qualType elemType') <$> verifyPred a preds
+     return (tRes, EIndex (a, tRes)  eArr' eIdx')
 
+indexAccessPred arrTVarName elemTVarName idxTVarName =
+    let elemType = Fix $ TBody $ TVar elemTVarName
+    in
+    (TPredEq arrTVarName (Fix $ TCons TArray [elemType])
+     `mkAnd` TPredEq idxTVarName (Fix $ TBody TNumber))
+    `mkOr` (TPredEq arrTVarName (Fix $ TCons TStringMap [elemType])
+            `mkAnd` TPredEq idxTVarName (Fix $ TBody TString))
+    
 unifyAllInstances :: Pos.SourcePos -> [TVarName] -> Infer ()
 unifyAllInstances a tvs = do
   m <- getVarInstances
   let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
 
   -- TODO suboptimal - some of the sets may be identical
-  let unifyAll' equivs = unifyAll a . tracePretty "equivalence:" $ Set.toList equivs
+  let unifyAll' equivs =
+          do  let equivsL = Set.toList equivs
+              preds <- unifyPredsL a $ map qualPred equivsL
+              _ <- verifyPred a preds
+              unifyAll a . tracePretty "equivalence:" $ map qualType equivsL
   mapM_ unifyAll' equivalenceSets
 
 createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
