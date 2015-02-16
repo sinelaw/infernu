@@ -33,7 +33,7 @@ import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Lib (safeLookup)
 import           Infernu.Types
-import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased, verifyPred, unifyPredsL)
+import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL)
 
 
 
@@ -158,7 +158,7 @@ inferType' env (EAssign a n expr1 expr2) =
      instancePreds <- unifyAllInstances a $ getQuantificands lvalueScheme
      (tRest, expr2') <- inferType env expr2
      preds <- unifyPredsL a $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
-     tRest' <- (flip TQual $ qualType tRest) <$> verifyPred a preds
+     let tRest' = TQual preds $ qualType tRest
      return (tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr n expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr

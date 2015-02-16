@@ -396,7 +396,7 @@ unifyPred a x y = do
     p <- case Pred.unify (subUnify s a) x y of
              Nothing -> throwError a "Oh noes."
              Just predAction -> predAction
-    let canonP = Pred.splitCanon $ Pred.toCanon p
+    let canonP = Pred.splitCanon . Pred.toCanon $ p
     unifyPredAnds a $ Map.assocs $ Pred.canonUnambiguousPreds canonP
     case Pred.canonAmbiguousPreds canonP of
         [] -> return $ TPredTrue
@@ -428,7 +428,7 @@ unifyPredsL a preds =
             do preds2 <- foldM (unifyPred a) TPredTrue preds1
                preds3 <- verifyPred a preds2
                s <- getMainSubst
-               return $ substPredType s preds3
+               return $ Pred.fromCanon . Pred.toCanon $ substPredType s preds3
        
      
     

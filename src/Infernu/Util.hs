@@ -4,7 +4,7 @@ module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 import           Control.Arrow               (second)
 import           Control.Monad               (forM)
 import           Data.Functor                ((<$>))
-import qualified Data.Set                    as Set
+
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
@@ -44,7 +44,12 @@ checkFiles fileNames = do
 #endif
   return res
 
+dedupList :: Eq a => [a] -> [a]
+dedupList [] = []
+dedupList [x] = [x]
+dedupList (x:y:ys) = if x == y then dedupList (y:ys) else x : dedupList (y:ys)
+
 annotatedSource :: [(Pos.SourcePos, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos prettyRes indexedSource
   where indexedSource = indexList sourceCode
-        prettyRes = (Set.toList . Set.fromList . fmap (second pretty)) xs
+        prettyRes = (dedupList . fmap (second pretty)) xs

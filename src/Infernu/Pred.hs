@@ -69,9 +69,9 @@ toCanon = CanonPredOr . toCanonOr' . toDNF
 -- TPredAnd (TPredEq 0 'a') (TPredAnd (TPredEq 0 'b') (TPredAnd (TPredEq 0 'c') (TPredEq 0 'd')))
 -- >>> fromCanon $ CanonPredOr [Map.fromList [(0,Set.fromList "ac")],Map.fromList [(0,Set.fromList "a"),(1,Set.fromList "d")],Map.fromList [(0,Set.fromList "c"),(1,Set.fromList "b")],Map.fromList [(1,Set.fromList "bd")]]
 -- TPredOr (TPredAnd (TPredEq 0 'a') (TPredEq 1 'd')) (TPredOr (TPredAnd (TPredEq 0 'c') (TPredEq 1 'b')) (TPredOr (TPredAnd (TPredEq 1 'b') (TPredEq 1 'd')) (TPredAnd (TPredEq 0 'a') (TPredEq 0 'c'))))
-fromCanon :: Eq t => CanonPredOr t -> TPred t
+fromCanon :: (Ord t, Eq t) => CanonPredOr t -> TPred t
 fromCanon (CanonPredOr []) = TPredTrue
-fromCanon (CanonPredOr (p:ps)) = foldr mkOr (fromCanonAnd p) $ map fromCanonAnd ps
+fromCanon (CanonPredOr ps) = foldr mkOr TPredTrue $ Set.toList $ Set.fromList $ map fromCanonAnd ps
     where fromCanonAnd m = Map.foldrWithKey (\k vs r -> Set.foldr (\v p' -> TPredEq k v `mkAnd` p') r vs) TPredTrue m
 
 -- | Main unification function: checks if two predicates can be combined in a conjunction (i.e. if they can ANDed)
