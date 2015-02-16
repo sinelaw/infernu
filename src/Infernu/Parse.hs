@@ -16,7 +16,7 @@ poo = "_/_"
 -- | A dummy expression that does nothing (but has a type).
 empty :: a -> Exp a
 empty z = ELit z LitUndefined -- EVar z poo
-
+          
 errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
 errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES3PP.prettyPrint expr)
 
