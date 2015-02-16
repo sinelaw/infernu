@@ -26,7 +26,7 @@ import qualified Text.Parsec.Pos            as Pos
 import           Infernu.Pretty
 import           Infernu.Types
 import           Infernu.Log
-import qualified Infernu.Pred as Pred
+
     
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a
@@ -401,7 +401,7 @@ substPredType subst (TPredEq n1 t) = res
                                                   then TPredTrue
                                                   else TPredEq n1s ts
                     ts -> TPredEq n1s ts
-substPredType subst (TPredAnd p1 p2) = substPredType subst p1 `Pred.mkAnd` substPredType subst p2
-substPredType subst (TPredOr p1 p2) = substPredType subst p1 `Pred.mkOr` substPredType subst p2
+substPredType subst (TPredAnd p1 p2) = substPredType subst p1 `mkAnd` substPredType subst p2
+substPredType subst (TPredOr p1 p2) = substPredType subst p1 `mkOr` substPredType subst p2
 substPredType subst p = applySubst subst p
 

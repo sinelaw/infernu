@@ -11,7 +11,7 @@ import           Data.Traversable    (sequenceA, traverse)
 
 import           Data.Set            (Set)
 import qualified Data.Set            as Set
-import           Infernu.Types       (TPred (..), TVarName)
+import           Infernu.Types       (TPred (..), TVarName, mkAnd, mkOr)
 
 data CanonPredOr t = CanonPredOr [Map TVarName (Set t)]
                      deriving (Show, Eq)
@@ -38,17 +38,6 @@ toDNF (TPredAnd exp1 exp2) = if exp1 == exp2
         dist e1 e2                = if e1 == e2 then e1 else e1 `mkAnd` e2
 toDNF (TPredOr exp1 exp2) = toDNF exp1 `mkOr` toDNF exp2
 toDNF expr                    = expr
-
-mkAnd :: Eq t => TPred t -> TPred t -> TPred t
-mkAnd TPredTrue y = y
-mkAnd x TPredTrue = x
-mkAnd x y = if x == y then x else TPredAnd x y
-
-
-mkOr :: Eq t => TPred t -> TPred t -> TPred t
-mkOr TPredTrue y = y
-mkOr x TPredTrue = x
-mkOr x y = if x == y then x else TPredOr x y
 
 -- | Converts a predicate to a list of sums of products
 --
