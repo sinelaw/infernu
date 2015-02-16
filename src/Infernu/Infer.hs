@@ -97,7 +97,7 @@ inferType' env (EAbs a argNames e2) =
   do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
-     pred' <- verifyPred a $ qualPred t1
+     pred' <- unifyPredsL a [qualPred t1]
      let t = TQual pred' $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
@@ -145,7 +145,9 @@ inferType' env (ELet a n e1 e2) =
      t' <- generalize e1 env t1
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
-     return (t2, ELet (a, t2) n e1' e2')
+     preds' <- unifyPredsL a $ map qualPred [t1, t2]
+     let resT = TQual preds' $ qualType t2
+     return (resT, ELet (a, resT) n e1' e2')
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign a n expr1 expr2) =
@@ -206,7 +208,7 @@ inferType' env (EArray a exprs) =
      return (t, EArray (a,t) $ map snd te)
 inferType' env (ETuple a exprs) =
   do te <- accumInfer env exprs
-     let t = qualEmpty . Fix . TCons TTuple . reverse $ map (qualType . fst) te
+     let t = TQual (foldr mkOr TPredTrue $ map (qualPred . fst) te) $ Fix . TCons TTuple . reverse $ map (qualType . fst) te
      return (t, ETuple (a,t) $ map snd te)
 inferType' _ (ERow a False []) =
   do elemType <- Fix . TBody . TVar <$> fresh
