@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Infernu.Unify
-       (unify, unifyAll, unifyl, unifyRowPropertyBiased, verifyPred, unifyPredsL)
+       (unify, unifyAll, unifyl, unifyRowPropertyBiased, verifyPred, unifyPred, unifyPredsL)
        where
 
 import           Control.Monad        (forM_, when, foldM)
@@ -28,7 +28,7 @@ import qualified Infernu.Pred         as Pred
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Lib (matchZip)
+import           Infernu.Lib (matchZip, eitherToMaybe)
 
 
 ----------------------------------------------------------------------
@@ -174,13 +174,13 @@ whenNotEq x y action = if x == y
 
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 =
-  do traceLog ("breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
+  do traceLog ("breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2)
 unify'' (Just recurse) a t1 t2 =
-  do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
+  do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2)
      s <- getMainSubst
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
-     traceLog ("unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
+     traceLog ("unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2)
      unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
@@ -284,9 +284,9 @@ unifyRowPropertyBiased = unifyRowPropertyBiased' unify
 --
 unifyRowPropertyBiased' :: UnifyF -> Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
 unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
-   do traceLog ("Unifying row properties: " ++ pretty tprop1s ++ " ~ " ++ pretty tprop2s) ()
+   do traceLog ("Unifying row properties: " ++ pretty tprop1s ++ " ~ " ++ pretty tprop2s)
       let crap = Fix $ TBody TUndefined
-          unifySchemes' = do traceLog ("Unifying props: " ++ pretty tprop1s ++ " ~~ " ++ pretty tprop2s) ()
+          unifySchemes' = do traceLog ("Unifying props: " ++ pretty tprop1s ++ " ~~ " ++ pretty tprop2s)
                              tprop1 <- instantiate tprop1s
                              tprop2 <- instantiate tprop2s
                              -- TODO unify predicates properly (review this) - specificaly (==)
@@ -365,7 +365,7 @@ varBind a n t =
 varBind' :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                | isInsideRowType n t =
-                   do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t) ()
+                   do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t)
                       namedType <- getNamedType n t
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
@@ -373,36 +373,42 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t in throwError a $ "Occurs check failed: " ++ pretty (f n) ++ " in " ++ pretty (mapVarNames f t)
                | otherwise = return $ singletonSubst n t
 
--- | Drops the last element of a list. Does not entail an O(n) price.
--- >>> dropLast [1,2,3]
--- [1,2]
-dropLast :: [a] -> [a]
-dropLast [] = []
-dropLast [_] = []
-dropLast (x:xs) = x : dropLast xs
-
 unifyAll :: Pos.SourcePos -> [Type] -> Infer ()
-unifyAll a ts = unifyl decycledUnify a $ zip (dropLast ts) (drop 1 ts)
+unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 
+subUnify :: InferState -> Pos.SourcePos -> [Set Type] -> Maybe (Infer ())
+subUnify s a ts = case execInferWith s (mapM (unifyAll a . Set.toList) ts) of
+    Left _ -> Nothing
+    Right s' -> Just $ do traceLog ("PPP - Saving state: " ++ pretty s')
+                          setState s'
+    
+unifyPred :: Pos.SourcePos -> TPred Type -> TPred Type -> Infer (TPred Type)
+unifyPred a x y = do
+    traceLog ("unifyPred: " ++ pretty x ++ " ~ with ~ " ++ pretty y)
+    s <- getState
+    case Pred.unify (subUnify s a) x y of
+        Nothing -> throwError a "Oh noes."
+        Just p -> p
 
 verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
 verifyPred a p =
     do  s <- getMainSubst
+        traceLog ("PPP - Loaded state: " ++ pretty s)
         let p' = substPredType s p
             tvars = freeTypeVars p'
             tautologyPred = Set.foldr (\v prev -> Pred.mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
             currentPred = substPredType s tautologyPred
 
-        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p)) ()
-        traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred) ()
-        Pred.unify (unify a) p' currentPred
-        
+        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p))
+        traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred)
+        unifyPred a p' currentPred
             
 unifyPredsL :: Pos.SourcePos
                -> [TPred Type]
                -> Infer (TPred Type)
 unifyPredsL a preds =
-    do preds' <- mapM (verifyPred a) preds
-       foldM (Pred.unify $ unify a) TPredTrue preds'
+    do preds' <- foldM (unifyPred a) TPredTrue preds
+       verifyPred a preds'
+       
      
     

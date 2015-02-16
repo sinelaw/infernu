@@ -1,17 +1,17 @@
 {-# LANGUAGE TupleSections #-}
 module Infernu.Pred
-       (unify, mkAnd, mkOr)
+--      (unify, mkAnd, mkOr)
     where
 
-import           Data.Traversable (sequenceA)
-import Control.Applicative (Applicative(..), (<$>), (*>))
-import Data.Foldable(sequenceA_)
-import           Data.Map.Lazy (Map)
-import qualified Data.Map.Lazy as Map
+import           Control.Applicative (Applicative (..), (*>), (<$>))
+import           Data.Map.Lazy       (Map)
+import qualified Data.Map.Lazy       as Map
+import           Data.Maybe          (catMaybes)
+import           Data.Traversable    (sequenceA, traverse)
 
-import           Data.Set      (Set)
-import qualified Data.Set      as Set
-import           Infernu.Types (TPred (..), TVarName)
+import           Data.Set            (Set)
+import qualified Data.Set            as Set
+import           Infernu.Types       (TPred (..), TVarName)
 
 data CanonPredOr t = CanonPredOr [Map TVarName (Set t)]
                      deriving (Show, Eq)
@@ -52,6 +52,8 @@ mkOr x y = if x == y then x else TPredOr x y
 
 -- | Converts a predicate to a list of sums of products
 --
+-- >>> toCanon $ TPredAnd (TPredAnd (TPredEq 0 'a') (TPredEq 0 'b')) (TPredAnd (TPredEq 0 'c') (TPredEq 0 'd'))
+-- CanonPredOr [fromList [(0,fromList "abcd")]]
 -- >>> toCanon $ TPredAnd (TPredOr (TPredEq 0 'a') (TPredEq 1 'b')) (TPredOr (TPredEq 0 'c') (TPredEq 1 'd'))
 -- CanonPredOr [fromList [(0,fromList "ac")],fromList [(0,fromList "a"),(1,fromList "d")],fromList [(0,fromList "c"),(1,fromList "b")],fromList [(1,fromList "bd")]]
 toCanon :: (Ord t, Eq t) => TPred t -> CanonPredOr t
@@ -65,38 +67,62 @@ toCanon = CanonPredOr . toCanonOr' . toDNF
           toCanonAnd' TPredTrue = Map.empty
 
 -- |
+-- >>> fromCanon $ CanonPredOr [Map.fromList [(0,Set.fromList "abcd")]]
+-- TPredAnd (TPredEq 0 'a') (TPredAnd (TPredEq 0 'b') (TPredAnd (TPredEq 0 'c') (TPredEq 0 'd')))
 -- >>> fromCanon $ CanonPredOr [Map.fromList [(0,Set.fromList "ac")],Map.fromList [(0,Set.fromList "a"),(1,Set.fromList "d")],Map.fromList [(0,Set.fromList "c"),(1,Set.fromList "b")],Map.fromList [(1,Set.fromList "bd")]]
--- TPredOr (TPredAnd (TPredEq 1 'd') (TPredEq 0 'a')) (TPredOr (TPredAnd (TPredEq 1 'b') (TPredEq 0 'c')) (TPredOr (TPredAnd (TPredEq 1 'd') (TPredEq 1 'b')) (TPredAnd (TPredEq 0 'c') (TPredEq 0 'a'))))
+-- TPredOr (TPredAnd (TPredEq 0 'a') (TPredEq 1 'd')) (TPredOr (TPredAnd (TPredEq 0 'c') (TPredEq 1 'b')) (TPredOr (TPredAnd (TPredEq 1 'b') (TPredEq 1 'd')) (TPredAnd (TPredEq 0 'a') (TPredEq 0 'c'))))
 fromCanon :: Eq t => CanonPredOr t -> TPred t
 fromCanon (CanonPredOr []) = TPredTrue
 fromCanon (CanonPredOr (p:ps)) = foldr mkOr (fromCanonAnd p) $ map fromCanonAnd ps
-    where fromCanonAnd m = Map.foldrWithKey (\k vs r -> Set.foldr (\v p' -> mkAnd p' $ TPredEq k v) r vs) TPredTrue m
+    where fromCanonAnd m = Map.foldrWithKey (\k vs r -> Set.foldr (\v p' -> TPredEq k v `mkAnd` p') r vs) TPredTrue m
 
 -- | Main unification function: checks if two predicates can be combined in a conjunction (i.e. if they can ANDed)
--- >>> unify (==) (TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')
--- Just (TPredAnd (TPredEq 1 'b') (TPredEq 0 'a'))
--- >>> unify (==) (TPredOr (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')
--- Just (TPredOr (TPredAnd (TPredEq 1 'b') (TPredEq 0 'a')) (TPredEq 0 'a'))
-unify :: (Applicative f, Ord t) => (t -> t -> f ()) -> TPred t -> TPred t -> f (TPred t)
-unify u p1 p2 = fmap fromCanon $ unifyPreds u (toCanon p1) (toCanon p2)
+-- >>> let u ps = sequenceA [if x == y then Just () else Nothing | x <- Set.toList ps, y <- Set.toList ps]
+-- >>> unify u (TPredEq 0 'a') (TPredEq 0 'b')
+-- Nothing
+-- >>> unify u (TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'b')
+-- Nothing
+-- >>> unify u (TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')
+-- Just [TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')]
+-- >>> unify u (TPredOr (TPredEq 0 'a') (TPredEq 0 'b')) (TPredEq 0 'a')
+-- Just [TPredEq 0 'a']
+-- >>> unify u (TPredOr (TPredEq 0 'a') (TPredEq 0 'b')) (TPredOr (TPredEq 0 'a') (TPredEq 0 'c'))
+-- Just [TPredEq 0 'a']
+-- >>> unify u (TPredOr (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')
+-- Just [TPredOr (TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')]
+-- >>> unify u (TPredOr (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'c')
+-- Just [TPredAnd (TPredEq 0 'c') (TPredEq 1 'b')]
+unify :: (Applicative f, Ord t) => ([Set t] -> Maybe (f ())) -> TPred t -> TPred t -> Maybe (f (TPred t))
+unify u p1 p2 = (fmap . fmap) fromCanon $ unifyPreds u (toCanon p1) (toCanon p2)
 
-unifyPreds :: (Applicative f, Ord t) => (t -> t -> f ()) -> CanonPredOr t -> CanonPredOr t -> f (CanonPredOr t)
+unifyPreds :: (Applicative f, Ord t) => ([Set t] -> Maybe (f ())) -> CanonPredOr t -> CanonPredOr t -> Maybe (f (CanonPredOr t))
 unifyPreds u (CanonPredOr m1s) (CanonPredOr m2s) =
-    CanonPredOr <$> sequenceA [unifyMaps u m1 m2 | m1 <- m1s, m2 <- m2s]
+    case survivors of
+        [] -> Nothing
+        preds -> Just $ (CanonPredOr <$> sequenceA preds)
+    where survivors = catMaybes $ [unifyMaps u m1 m2 | m1 <- m1s, m2 <- m2s]
 
--- TODO: Refactor    
+-- TODO: Refactor
 -- Get rid of Set - do the unification at the toCanon level
 -- Use newtypes
 -- Use effectful unifyWith (using pure to lift pure values in the map to f a)
 --    (╯°□°）╯︵ ┻━┻
 unifyMaps
-  :: (Applicative f, Ord a, Ord k) =>
-     (a -> a -> f ())
+  :: (Control.Applicative.Applicative f, Ord a, Ord k) =>
+     ([Set a] -> Maybe (f ()))
      -> Map k (Set a)
      -> Map k (Set a)
-     -> f (Map k (Set a))
-unifyMaps u m1 m2 = sequenceA $ Map.mergeWithKey (\_ t1 t2 -> Just (unifySets u t1 t2 *> (pure $ Set.union t1 t2))) (Map.map pure) (Map.map pure) m1 m2
-
-unifySets :: (Applicative f, Ord t) => (t -> t -> f ()) -> Set t -> Set t -> f ()
-unifySets u s1 s2 = sequenceA_ [x `u` y | x <- Set.toList s1, y <- Set.toList s2]
+     -> Maybe (f (Map k (Set a)))
+unifyMaps u m1 m2 =  (fmap Map.unions) . sequenceA <$> sequenceA [intersection', diff1, diff2]
+    where intersection = Map.intersectionWith Set.union m1 m2
+          intersection' = case u $ Map.elems intersection of
+                              Nothing -> Nothing
+                              Just action -> Just (action *> (pure intersection))
+          diff1 = Just . pure $ Map.difference m1 m2
+          diff2 = Just . pure $ Map.difference m2 m1
+-- unifyMaps u m1 m2 = fmap sequenceA <$> traverse (\(fok, s) -> case fok of
+--                                                Nothing -> Nothing
+--                                                Just action -> Just $ action *> pure s)
+--                     $ Map.mergeWithKey (\_ t1 t2 -> Just (u $ t1 `Set.union` t2, Set.union t1 t2)) idMap' idMap' m1 m2
+--     where idMap' = Map.map (Just $ pure (), )
 

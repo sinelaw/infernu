@@ -5,13 +5,13 @@
 module Infernu.InferState
        where
 
-import           Control.Monad              (foldM, forM, forM_, liftM2, when)
+import           Control.Monad              (foldM, forM, forM_, liftM2)
 import           Control.Monad.Trans        (lift)
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
-import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, modify)
+import           Control.Monad.Trans.State  (StateT (..), evalStateT, execStateT, get, put, modify)
 import           Data.Foldable              (Foldable (..), msum)
 import           Data.Traversable              (Traversable (..))
-import           Data.List              (intercalate)
+
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
@@ -34,11 +34,20 @@ type Infer a = StateT InferState (EitherT TypeError Identity) a
 runInferWith :: InferState -> Infer a -> Either TypeError a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
+execInferWith :: InferState -> Infer b -> Either TypeError InferState
+execInferWith ns inf = runIdentity . runEitherT $ execStateT inf ns
+
 runSubInfer :: Infer a -> Infer (Either TypeError a)
 runSubInfer a = do
   s <- get
   return $ runInferWith s a
-  
+
+getState :: Infer InferState
+getState = get
+
+setState :: InferState -> Infer ()
+setState = put
+           
 runInfer :: Infer a -> Either TypeError a
 runInfer = runInferWith emptyInferState
 
@@ -120,7 +129,7 @@ getFreeTVars env = do
 
 addNamedType :: TypeId -> Type -> TypeScheme -> Infer ()
 addNamedType tid t scheme = do
-  traceLog ("===> Introducing named type: " ++ pretty tid ++ " => " ++ pretty scheme) ()
+  traceLog ("===> Introducing named type: " ++ pretty tid ++ " => " ++ pretty scheme)
   modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
   return ()
 
@@ -224,7 +233,7 @@ resolveSimpleMutualRecursion n t tid ix =
 getNamedType :: TVarName -> Type -> Infer Type
 getNamedType n t =
   do let recTypeParamPos = isRecParamOnly n Nothing t
-     traceLog ("isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ (show $ fmap pretty $ recTypeParamPos)) ()
+     traceLog ("isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ (show $ fmap pretty $ recTypeParamPos))
      case recTypeParamPos of
       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
       -- either the variable appears outside a recursive type's type parameter list, or it appears
@@ -256,11 +265,11 @@ unrollName a tid ts =
 --     applySubstInfer $ Map.singleton 0 (Fix $ TBody TString)
 --     varSchemes <$> get
 -- :}
--- Right (fromList [(VarId 1,TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody TString),Fix (TBody (TVar 1))])})])
+-- Right (fromList [(VarId 1,TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody TString),Fix (TBody (TVar 1))]), schemePred = TPredTrue})])
 --
 applySubstInfer :: TSubst -> Infer ()
 applySubstInfer s =
-  do traceLog ("applying subst: " ++ pretty s) ()
+  do traceLog ("applying subst: " ++ pretty s)
      modify $ applySubst s
 
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
@@ -268,7 +277,7 @@ applySubstInfer s =
 -- For example:
 --
 -- >>> runInferWith (InferState { nameSource = NameSource 2, mainSubst = Map.empty, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }) . instantiate $ TScheme [0] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
--- Right Fix (TCons TFunc [Fix (TBody (TVar 3)),Fix (TBody (TVar 1))])
+-- Right (TQual {qualPred = TPredTrue, qualType = Fix (TCons TFunc [Fix (TBody (TVar 3)),Fix (TBody (TVar 1))])})
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
 --
@@ -279,7 +288,7 @@ applySubstInfer s =
 --     tenv' <- addVarScheme tenv "x" t
 --     instantiateVar (Pos.initialPos "") "x" tenv'
 -- :}
--- Right Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 1))])
+-- Right (TQual {qualPred = TPredTrue, qualType = Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 1))])})
 --
 instantiate :: TypeScheme -> Infer QualType
 instantiate (TScheme tvarNames t preds) = do
@@ -303,15 +312,15 @@ instantiateVar a n env = do
 -- Example:
 --
 -- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty $ qualEmpty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0),Fix $ TBody (TVar 1)]
--- Right (TScheme {schemeVars = [0,1], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 1))])})
+-- Right (TScheme {schemeVars = [0,1], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 1))]), schemePred = TPredTrue})
 --
 -- >>> :{
 -- runInfer $ do
 --     let t = TScheme [1] (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 1)]) TPredTrue
 --     tenv <- addVarScheme Map.empty "x" t
---     generalize (ELit "bla" LitUndefined) tenv (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
+--     generalize (ELit "bla" LitUndefined) tenv (qualEmpty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 2)])
 -- :}
--- Right (TScheme {schemeVars = [2], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 2))])})
+-- Right (TScheme {schemeVars = [2], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 2))]), schemePred = TPredTrue})
 --
 -- In this example the steps were:
 --
@@ -321,8 +330,8 @@ instantiateVar a n env = do
 --
 -- 3. result: forall 2. 1 -> 2
 --
--- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty (Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 0)])
--- Right (TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 0))])})
+-- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty (qualEmpty $ Fix $ TCons TFunc [Fix $ TBody (TVar 0), Fix $ TBody (TVar 0)])
+-- Right (TScheme {schemeVars = [0], schemeType = Fix (TCons TFunc [Fix (TBody (TVar 0)),Fix (TBody (TVar 0))]), schemePred = TPredTrue})
 --
 -- TODO add tests for monotypes
 unsafeGeneralize :: TypeEnv -> QualType -> Infer TypeScheme

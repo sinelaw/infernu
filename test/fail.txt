@@ -1,17 +1,6 @@
-// FAIL valid/builtins/assign-ops-index.js:3:1: Error: Could not unify: TString with TNumber y valid/builtins/assign-ops-index.js
-// FAIL valid/builtins/assign-ops.js:3:1: Error: Could not unify: TString with TNumber y valid/builtins/assign-ops.js
-// FAIL valid/builtins/assign-ops-property.js:3:1: Error: Could not unify: TString with TNumber y valid/builtins/assign-ops-property.js
-// FAIL valid/builtins/minusminus.js:2:9: Error: Could not unify: TString with TNumber y valid/builtins/minusminus.js
-// FAIL valid/builtins/plus-func.js:7:3: Error: Could not unify: TString with TNumber y valid/builtins/plus-func.js
-// FAIL valid/builtins/plus.js:1:11: Error: Could not unify: TString with TNumber y valid/builtins/plus.js
-// FAIL valid/builtins/plusplus.js:2:9: Error: Could not unify: TString with TNumber y valid/builtins/plusplus.js
-// FAIL valid/map.js:4:39: Error: Could not unify: TString with TNumber y valid/map.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error: Could not unify: {f: <Named Type: mu Cw. a {, ..b}>, ..b} with TUndefined y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error: Could not unify: {f: <Named Type: mu Db. a>} with TUndefined y valid/nothis-as-param.js
-in return[0ERROR y valid/object-chaining-long.js
-// FAIL valid/point.js:6:36: Error: Could not unify: TString with TNumber y valid/point.js
-// FAIL valid/promise.js:29:40: Error: Could not unify: TString with TNumber y valid/promise.js
-// FAIL valid/promise-method-workaround.js:29:40: Error: Could not unify: TString with TNumber y valid/promise-method-workaround.js
-// FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error: Could not unify: (ci = TNumber & ch = [cb]) => forall cb ch ci. ((this: cb, cb) -> cb) with (d = TNumber & c = [b]) => ((this: a, b) -> b) y valid/prop-polymorphic-assign2-this.js
-// FAIL valid/prop-polymorphic-assign3.js:4:1: Error: Could not unify: (ci = TNumber & ch = [TNumber]) => forall bv ch ci. ((this: bv, TNumber) -> TNumber) with (d = TNumber & c = [b]) => ((this: a, b) -> b) y valid/prop-polymorphic-assign3.js
+return[0.0])}).method ({method: (ERROR y valid/object-chaining-long.js
+// FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error: Could not unify: (ch = [cg] & ci = TNumber) => forall cg ch ci. ((this: cg, cg) -> cg) with (c = [b] & d = TNumber) => ((this: a, b) -> b) y valid/prop-polymorphic-assign2-this.js
+// FAIL valid/prop-polymorphic-assign3.js:4:1: Error: Could not unify: (ch = [TNumber] & ci = TNumber) => forall bv ch ci. ((this: bv, TNumber) -> TNumber) with (c = [b] & d = TNumber) => ((this: a, b) -> b) y valid/prop-polymorphic-assign3.js
 // FAIL valid/try.js:4:5: Error: Unbound variable: "e" y valid/try.js
