@@ -11,8 +11,10 @@ import           Data.Traversable    (sequenceA, traverse)
 
 import           Data.Set            (Set)
 import qualified Data.Set            as Set
+    
 import           Infernu.Types       (TPred (..), TVarName, mkAnd, mkOr)
-
+import           Infernu.Decycle     (decycle)
+    
 data CanonPredOr t = CanonPredOr { canonPredAnds :: [Map TVarName (Set t)] }
                      deriving (Show, Eq)
 
@@ -125,3 +127,35 @@ unifyMaps u m1 m2 =  (fmap Map.unions) . sequenceA <$> sequenceA [intersection',
 --                     $ Map.mergeWithKey (\_ t1 t2 -> Just (u $ t1 `Set.union` t2, Set.union t1 t2)) idMap' idMap' m1 m2
 --     where idMap' = Map.map (Just $ pure (), )
 
+
+simplify :: (Ord t, Eq t) => Maybe (TPred t -> TPred t) -> TPred t -> TPred t
+simplify Nothing p = p
+-- (a & b) | (a & c) | d <-> (a & (b | c)) | d                              
+simplify (Just r) (TPredOr p1@(TPredAnd a1 b1) p2@(TPredAnd a2 b2)) = r result
+    where
+        p1' = r p1
+        p2' = r p2
+        a1' = r a1
+        a2' = r a2
+        b1' = r b1
+        b2' = r b2
+        result =
+            if p1' == p2'
+            then p1'
+            else if a1' == a2'
+                 then a1' `mkAnd` (b1' `mkOr` b2')
+                 else if b1' == b2'
+                      then b1' `mkAnd` (a1' `mkOr` a2')
+                      else (a1' `mkAnd` b1') `mkOr` (a2' `mkAnd` b2') 
+simplify (Just r) (TPredOr p1 p2) =
+    let p1' = r p1
+        p2' = r p2
+    in r $ p1' `mkOr` p2'
+simplify (Just r) (TPredAnd p1 p2) =
+    let p1' = r p1
+        p2' = r p2
+    in r $ p1' `mkAnd` p2'
+simplify _ p = p
+
+fixSimplify :: (Ord t, Eq t) => TPred t -> TPred t
+fixSimplify = decycle simplify

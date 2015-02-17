@@ -3,6 +3,7 @@ module Infernu.Pretty where
 
 
 import           Infernu.Types
+import qualified Infernu.Pred as Pred
 
     
 import           Data.Char       (chr, ord)
@@ -108,10 +109,10 @@ instance Pretty TConsName where
 instance Pretty RowTVar where
   prettyTab _ t = ".." ++ pretty (getRowTVar t)
 
-instance Pretty t => Pretty (FType t) where
+instance (Ord t, Pretty t) => Pretty (FType t) where
   prettyTab = prettyType
 
-prettyType :: Pretty t => Int -> FType t -> String
+prettyType :: (Ord t, Pretty t) => Int -> FType t -> String
 prettyType n (TBody t) = prettyTab n t
 prettyType n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple args ++ " -> " ++ prettyTab n (last ts) ++ ")"
   where nonThisArgs = map (prettyTab n) . drop 1 $ init ts
@@ -138,25 +139,27 @@ prettyType t (TRow list) = "{"
 instance Pretty Type where
   prettyTab n (Fix t) = prettyType n t
 
-instance Pretty t => Pretty (TPred t) where
-    prettyTab n (TPredEq v t) = prettyTab n v ++ " = " ++ prettyTab n t
-    prettyTab n (TPredOr p1 p2) = "(" ++ prettyTab n p1 ++ " | " ++ prettyTab n p2 ++ ")"
-    prettyTab n (TPredAnd p1 p2) = "(" ++ prettyTab n p1 ++ " & " ++ prettyTab n p2 ++ ")"
-    prettyTab _ (TPredTrue) = "True"
+instance (Ord t, Pretty t) => Pretty (TPred t) where
+    prettyTab n = prettyPred n . Pred.fixSimplify
+    
+prettyPred n (TPredEq v t) = prettyTab n v ++ " = " ++ prettyTab n t
+prettyPred n (TPredOr p1 p2) = "(" ++ prettyTab n p1 ++ " | " ++ prettyTab n p2 ++ ")"
+prettyPred n (TPredAnd p1 p2) = "(" ++ prettyTab n p1 ++ " & " ++ prettyTab n p2 ++ ")"
+prettyPred _ (TPredTrue) = "True"
 
-instance Pretty t => Pretty [TPred t] where
+instance (Ord t, Pretty t) => Pretty [TPred t] where
     prettyTab n p = intercalate ", " $ map (prettyTab n) p
 
-predsStr :: Pretty t => Int -> TPred t -> String
+predsStr :: (Ord t, Pretty t) => Int -> TPred t -> String
 predsStr n preds =
     case preds of
         TPredTrue -> ""
         p -> prettyTab n p ++ " => "
 
-instance (Eq t, VarNames t, Pretty t) => Pretty (TQual t) where
+instance (Eq t, Ord t, VarNames t, Pretty t) => Pretty (TQual t) where
     prettyTab n (TQual preds t) = (predsStr n $ removeUnusedTVars (freeTypeVars t) preds) ++ prettyTab n t
         
-instance Pretty t => Pretty (TScheme t) where
+instance (Ord t, Pretty t) => Pretty (TScheme t) where
   prettyTab n (TScheme vars t preds) = predsStr n preds ++ forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
 
