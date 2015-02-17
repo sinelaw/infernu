@@ -20,7 +20,7 @@ import           Data.Maybe                 (fromMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
 import           Prelude                    hiding (foldr, sequence, mapM)
-import qualified Text.Parsec.Pos            as Pos
+
 
 
 import           Infernu.Pretty
@@ -59,7 +59,7 @@ fresh = do
 freshVarId :: Infer VarId
 freshVarId = VarId <$> fresh
 
-throwError :: Pos.SourcePos -> String -> Infer a
+throwError :: Source -> String -> Infer a
 throwError p s = lift . left $ TypeError p s
 
 failWith :: Maybe a -> Infer a -> Infer a
@@ -78,7 +78,7 @@ getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
 getVarId :: EVarName -> TypeEnv -> Maybe VarId
 getVarId = Map.lookup
 
-getVarScheme :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer (Maybe TypeScheme)
+getVarScheme :: Source -> EVarName -> TypeEnv -> Infer (Maybe TypeScheme)
 getVarScheme a n env = case getVarId n env of
                        Nothing -> throwError a $ "Unbound variable: '" ++ show n ++ "'"
                        Just varId -> getVarSchemeByVarId varId
@@ -249,7 +249,7 @@ unrollNameByScheme ts qvars t = applySubst subst t
 -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
 -- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh
 -- type variables.
-unrollName :: Pos.SourcePos -> TypeId -> [Type] -> Infer Type
+unrollName :: Source -> TypeId -> [Type] -> Infer Type
 unrollName a tid ts =
     -- TODO: Is it safe to ignore the scheme preds here?
     do (TScheme qvars t _) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
@@ -299,7 +299,7 @@ instantiate (TScheme tvarNames t preds) = do
   let replaceVar n = fromMaybe n $ lookup n allocNames
   return $ TQual (mapVarNames replaceVar preds) $ mapVarNames replaceVar t
 
-instantiateVar :: Pos.SourcePos -> EVarName -> TypeEnv -> Infer QualType
+instantiateVar :: Source -> EVarName -> TypeEnv -> Infer QualType
 instantiateVar a n env = do
   varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")

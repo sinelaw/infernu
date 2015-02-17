@@ -3,16 +3,16 @@ module Main (main) where
 import           Control.Monad      (forM)
 import           Infernu.Infer      (pretty)
 import           Infernu.Pretty     (Pretty (..))
-import           Infernu.Types      (QualType)
+import           Infernu.Types      (QualType, Source, IsGen(..))
 import           Infernu.Util
 import           System.Environment (getArgs)
 import qualified Text.Parsec.Pos    as Pos
 
-process :: Pretty a => Either a [(Pos.SourcePos, QualType)] -> [(Pos.SourceName, [String])] -> [Char]
-process res sourceCodes =
+process :: Pretty a => Either a [(Source, QualType)] -> [(Pos.SourceName, [String])] -> [Char]
+process res sourceCodes = 
   case res of
    Right ts -> concatMap (\(f, ds) -> annotatedSource (filteredTypes f ts) ds) sourceCodes
-     where filteredTypes f' ts' = filter (\(p, _) -> Pos.sourceName p == f') ts'
+     where filteredTypes f' ts' = filter (\((_, p), _) -> (Pos.sourceName p == f')) ts'
    Left e -> pretty e
 
 main :: IO ()

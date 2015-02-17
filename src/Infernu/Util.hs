@@ -13,7 +13,7 @@ import           Infernu.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer                (getAnnotations, runTypeInference, minifyVars)
 import           Infernu.Pretty               (pretty)
-import           Infernu.Types                (TypeError(..), QualType)
+import           Infernu.Types                (TypeError(..), QualType, IsGen(..), Source)
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -28,12 +28,12 @@ indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
 
 
-checkSource :: String -> Either TypeError [(Pos.SourcePos, QualType)]
+checkSource :: String -> Either TypeError [((IsGen, Pos.SourcePos), QualType)]
 checkSource src = case ES3Parser.parseFromString src of
-                   Left parseError -> Left $ TypeError { source = Pos.initialPos "<global>", message = show parseError }
+                   Left parseError -> Left $ TypeError { source = (IsGen True, Pos.initialPos "<global>"), message = show parseError }
                    Right expr -> fmap getAnnotations $ fmap minifyVars $ runTypeInference $ translate $ ES3.unJavaScript expr
 
-checkFiles :: [String] -> IO (Either TypeError [(Pos.SourcePos, QualType)])
+checkFiles :: [String] -> IO (Either TypeError [((IsGen, Pos.SourcePos), QualType)])
 checkFiles fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   let expr' = translate $ expr
@@ -49,7 +49,10 @@ dedupList [] = []
 dedupList [x] = [x]
 dedupList (x:y:ys) = if x == y then dedupList (y:ys) else x : dedupList (y:ys)
 
-annotatedSource :: [(Pos.SourcePos, QualType)] -> [String] -> String
-annotatedSource xs sourceCode = unlines $ zipByPos prettyRes indexedSource
+annotatedSource :: [(Source, QualType)] -> [String] -> String
+annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unIsGen $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode
-        prettyRes = (dedupList . fmap (second pretty)) xs
+--        unIsGen :: [((IsGen, Pos.SourcePos), QualType)] -> [(Pos.SourcePos, QualType)]
+        unIsGen = id --map (\((_, s), q) -> (s, q))
+        filterGen = id --filter (\((IsGen g, _), _) -> not g)
+        prettyRes = dedupList . fmap (\((g, s), q) -> (s, pretty (g, q)))

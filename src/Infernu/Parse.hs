@@ -14,34 +14,39 @@ poo :: EVarName
 poo = "_/_"
 
 -- | A dummy expression that does nothing (but has a type).
-empty :: a -> Exp a
-empty z = ELit z LitUndefined -- EVar z poo
+empty :: a -> Exp (IsGen, a)
+empty z = ELit (gen z) LitUndefined -- EVar z poo
           
 errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
 errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES3PP.prettyPrint expr)
 
-foldStmts :: Show a => [ES3.Statement a] -> Exp a -> Exp a
+foldStmts :: Show a => [ES3.Statement a] -> Exp (IsGen, a) -> Exp (IsGen, a)
 foldStmts [] k = k
 foldStmts [x] k = fromStatement x k
 foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
 
-chainExprs :: Show a => a -> Exp a -> (Exp a -> Exp a) -> Exp a -> Exp a
-chainExprs a init' getK k = ELet a poo init' $ getK k
+chainExprs :: Show a => a -> Exp (IsGen, a) -> (Exp (IsGen, a) -> Exp (IsGen, a)) -> Exp (IsGen, a) -> Exp (IsGen, a)
+chainExprs a init' getK k = ELet (gen a) poo init' $ getK k
 
 singleStmt :: Show a => a -> Exp a -> Exp a -> Exp a
 singleStmt a exp' = ELet a poo exp'
 
-fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
+gen :: a -> (IsGen, a)
+gen x = (IsGen True, x)
+
+src x = (IsGen False, x)        
+        
+fromStatement :: Show a => ES3.Statement a -> Exp (IsGen, a) -> Exp (IsGen, a)
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
-fromStatement (ES3.EmptyStmt _) = id
-fromStatement (ES3.ExprStmt z e) = singleStmt z $ fromExpression e
+fromStatement (ES3.EmptyStmt z) = id
+fromStatement (ES3.ExprStmt z e) = singleStmt (gen z) $ fromExpression e
 -- TODO: The if/while/do conversion is hacky
-fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ foldStmts [thenS, elseS]
-fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement thenS
-fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement loopS
-fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement loopS
-fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
-fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
+fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ foldStmts [thenS, elseS]
+fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement thenS
+fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
+fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
+fromStatement (ES3.BreakStmt z x) = id -- TODO verify we can ignore this
+fromStatement (ES3.ContinueStmt z x) = id -- TODO verify we can ignore this
 fromStatement (ES3.TryStmt _ stmt mCatch mFinally) = foldStmts $ [stmt] ++ catchS ++ finallyS
   where catchS = case mCatch of
                   Just (ES3.CatchClause _ _ s) -> [s]
@@ -59,14 +64,14 @@ fromStatement (ES3.ForStmt z init' test increment body) = case init' of
                                                            ES3.ExprInit expr -> chainExprs z (fromExpression expr) forBody
     where forBody = chainExprs z test'' rest
           test'' = case test of
-                    Nothing -> EVar z poo
-                    Just test' -> EArray z [fromExpression test', ELit z (LitBoolean False)]
+                    Nothing -> EVar (gen z) poo
+                    Just test' -> EArray (gen z) [fromExpression test', ELit (gen z) (LitBoolean False)]
           body' = fromStatement body
           rest = case increment of
                    Nothing -> body'
                    Just increment' -> chainExprs z (fromExpression increment') body'
 
-fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray z tests) . foldStmts $ concatMap getCaseBody cases
+fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray (gen z) tests) . foldStmts $ concatMap getCaseBody cases
     where tests = fromExpression switch : mapMaybe (fmap fromExpression . getCaseTest) cases
           getCaseTest (ES3.CaseDefault _ _) = Nothing
           getCaseTest (ES3.CaseClause _ test' _) = Just test'
@@ -75,18 +80,18 @@ fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray z tests) . 
 
 fromStatement (ES3.VarDeclStmt _ decls) = chainDecls decls
 fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
-fromStatement (ES3.ReturnStmt z x) = EIndexAssign z (EVar z "return") (ELit z $ LitNumber 0)
+fromStatement (ES3.ReturnStmt z x) = EIndexAssign (gen z) (EVar (gen z) "return") (ELit (gen z) $ LitNumber 0)
                                      $ case x of
-                                        Nothing -> ELit z LitUndefined
+                                        Nothing -> ELit (gen z) LitUndefined
                                         Just x' -> fromExpression x'
 
 -- | Creates an EAbs (function abstraction)
-toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp a
-toAbs z args stmts = EAbs z ("this" : map ES3.unId args) body'
+--toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (IsGen, a)
+toAbs z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'
   -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
   where body' = case any hasReturn stmts of
-                 True -> ELet z "return" (EArray z []) $ foldStmts stmts $ (EIndex z (EVar z "return") (ELit z $ LitNumber 0))
-                 False -> ELet z "return" (empty z) $ foldStmts stmts $ (ELit z LitUndefined)
+                 True -> ELet (gen z) "return" (EArray (gen z) []) $ foldStmts stmts $ (EIndex (gen z) (EVar (gen z) "return") (ELit (gen z) $ LitNumber 0))
+                 False -> ELet (gen z) "return" (empty z) $ foldStmts stmts $ (ELit (gen z) LitUndefined)
 
 
 hasReturn :: ES3.Statement a -> Bool
@@ -118,30 +123,30 @@ hasReturn (ES3.VarDeclStmt _ _) = False
 hasReturn (ES3.FunctionStmt _ _ _ _) = False
 hasReturn (ES3.ReturnStmt _ _) = True
 
-toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp a -> Exp a
+toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp (IsGen, a) -> Exp (IsGen, a)
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
-                                       in ELet z (ES3.unId name) abs' letBody
+                                       in ELet (src z) (ES3.unId name) abs' letBody
 
-chainDecls :: Show a => [ES3.VarDecl a] -> Exp a -> Exp a
+chainDecls :: Show a => [ES3.VarDecl a] -> Exp (IsGen, a) -> Exp (IsGen, a)
 chainDecls [] k = k
-chainDecls (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chainDecls xs k)
-chainDecls (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet z' name (fromExpression v) (chainDecls xs k)
+chainDecls (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet (gen z') name (ELit (gen z') LitUndefined) (chainDecls xs k)
+chainDecls (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet (gen z') name (fromExpression v) (chainDecls xs k)
 
 makeThis :: Show a => a -> Exp a
 makeThis z = ELit z $ LitNull -- TODO should be undefined
 
-fromExpression :: Show a => ES3.Expression a -> Exp a
-fromExpression (ES3.StringLit z s) = ELit z $ LitString s
-fromExpression (ES3.RegexpLit z s g i) = ELit z $ LitRegex s g i
-fromExpression (ES3.BoolLit z s) = ELit z $ LitBoolean s
-fromExpression (ES3.IntLit z s) = ELit z (LitNumber $ fromIntegral s)
-fromExpression (ES3.NumLit z s) = ELit z $ LitNumber s
-fromExpression (ES3.NullLit z) = ELit z LitNull
-fromExpression (ES3.ArrayLit z exprs) = EArray z $ map fromExpression exprs
-fromExpression (ES3.ObjectLit z props) = ERow z False $ map (fromProp *** fromExpression) props
-fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex z (fromExpression arrExpr) (fromExpression indexExpr)
-fromExpression (ES3.VarRef z name) = EVar z $ ES3.unId name
-fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse z (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
+fromExpression :: Show a => ES3.Expression a -> Exp (IsGen, a)
+fromExpression (ES3.StringLit z s) = ELit (src z) $ LitString s
+fromExpression (ES3.RegexpLit z s g i) = ELit (src z) $ LitRegex s g i
+fromExpression (ES3.BoolLit z s) = ELit (src z) $ LitBoolean s
+fromExpression (ES3.IntLit z s) = ELit (src z) (LitNumber $ fromIntegral s)
+fromExpression (ES3.NumLit z s) = ELit (src z) $ LitNumber s
+fromExpression (ES3.NullLit z) = ELit (src z) LitNull
+fromExpression (ES3.ArrayLit z exprs) = EArray (src z) $ map fromExpression exprs
+fromExpression (ES3.ObjectLit z props) = ERow (src z) False $ map (fromProp *** fromExpression) props
+fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex (src z) (fromExpression arrExpr) (fromExpression indexExpr)
+fromExpression (ES3.VarRef z name) = EVar (src z) $ ES3.unId name
+fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse (src z) (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
 fromExpression (ES3.CallExpr z expr argExprs) =
   -- Instead of simply translating, here we also do some specific simplification by defining
   -- (adding an ELet) for the object expression if the function is a method call.
@@ -149,19 +154,20 @@ fromExpression (ES3.CallExpr z expr argExprs) =
   -- (<complicated expr>, ...)) by binding the object expression to '__obj__'.
   -- So that we get: let __obj__ = <complicated expr> in __obj__.method(__obj__, ...)
   case expr of
-   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp z' var propName) var
+   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') var propName) var
      where var = fromExpression varExpr
-   ES3.DotRef z' objExpr (ES3.Id _ propName) -> appExpr (Just propName) (EProp z' obj propName) obj
+   ES3.DotRef z' objExpr (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') obj propName) obj
      where obj = fromExpression objExpr
-   _ -> appExpr Nothing (fromExpression expr) (ELit z LitUndefined)
-  where appExpr (Just "call") _ obj = (EApp z obj (map fromExpression argExprs)) -- TODO: may be wrong if object expression is not a function!
-        appExpr _ funcExpr thisExpr = (EApp z funcExpr (thisExpr : map fromExpression argExprs))
+   _ -> appExpr Nothing (fromExpression expr) (ELit (gen z) LitUndefined)
+  where appExpr (Just "call") _ obj = (EApp (src z) obj (map fromExpression argExprs)) -- TODO: may be wrong if object expression is not a function!
+        appExpr _ funcExpr thisExpr = (EApp (src z) funcExpr (thisExpr : map fromExpression argExprs))
   --error $ "Assetion failed: expecting at least 'this'"
 fromExpression (ES3.AssignExpr z op target expr) = assignExpr
-  where (assignExpr, oldValue) = case target of
-          ES3.LVar _ name -> (assignToVar z name value, EVar z name)
-          ES3.LDot _ objExpr name -> (assignToProperty z objExpr name value, EProp z (fromExpression objExpr) name)
-          ES3.LBracket _ objExpr idxExpr -> (assignToIndex z objExpr idxExpr value, EIndex z (fromExpression objExpr) (fromExpression idxExpr))
+  where sz = src z
+        (assignExpr, oldValue) = case target of
+          ES3.LVar _ name -> (assignToVar z name value, EVar sz name)
+          ES3.LDot _ objExpr name -> (assignToProperty z objExpr name value, EProp sz (fromExpression objExpr) name)
+          ES3.LBracket _ objExpr idxExpr -> (assignToIndex z objExpr idxExpr value, EIndex sz (fromExpression objExpr) (fromExpression idxExpr))
         expr' = fromExpression expr
         value = case op of
           ES3.OpAssign -> expr'
@@ -178,61 +184,61 @@ fromExpression (ES3.AssignExpr z op target expr) = assignExpr
           ES3.OpAssignBOr      -> applyOpFunc z ES3.OpBOr      [oldValue, expr']
 
 fromExpression (ES3.FuncExpr z Nothing     argNames stmts) = toAbs z argNames stmts
-fromExpression (ES3.FuncExpr z (Just name) argNames stmts) = toNamedAbs z argNames stmts name (EVar z $ ES3.unId name)
+fromExpression (ES3.FuncExpr z (Just name) argNames stmts) = toNamedAbs z argNames stmts name (EVar (gen z) $ ES3.unId name)
 
 fromExpression e@(ES3.ListExpr z exprs) =
     case exprs of
       [] -> errorNotSupported "empty list (,) expression" z e
       [x] -> fromExpression x
       -- Should the let here use an allocated name here?
-      xs -> ELet z poo (ETuple z (tail exprs')) (head exprs')
+      xs -> ELet (gen z) poo (ETuple (gen z) (tail exprs')) (head exprs')
           where exprs' = reverse . map fromExpression $ xs
-fromExpression (ES3.ThisRef z) = EVar z "this"
-fromExpression (ES3.DotRef z expr propId) = EProp z (fromExpression expr) (ES3.unId propId)
-fromExpression (ES3.NewExpr z expr argExprs) = ENew z (fromExpression expr) (map fromExpression argExprs)
+fromExpression (ES3.ThisRef z) = EVar (src z) "this"
+fromExpression (ES3.DotRef z expr propId) = EProp (src z) (fromExpression expr) (ES3.unId propId)
+fromExpression (ES3.NewExpr z expr argExprs) = ENew (src z) (fromExpression expr) (map fromExpression argExprs)
 --  ELet z "__this__" (ERow z True []) (ELet z "_bla_" (EApp z (fromExpression expr) ((EVar z "__this__") : map fromExpression argExprs)) (EVar z "__this__"))
 fromExpression e@(ES3.PrefixExpr z op expr) =
   case op of
     -- prefix +/- are converted to 0-x and 0+x
-    ES3.PrefixPlus -> EApp z (opFunc z ES3.OpAdd) [makeThis z, ELit z $ LitNumber 0, fromExpression expr]
-    ES3.PrefixMinus -> EApp z (opFunc z ES3.OpSub) [makeThis z, ELit z $ LitNumber 0, fromExpression expr]
+    ES3.PrefixPlus -> EApp (gen z) (opFunc z ES3.OpAdd) [makeThis (gen z), ELit (gen z) $ LitNumber 0, fromExpression expr]
+    ES3.PrefixMinus -> EApp (gen z) (opFunc z ES3.OpSub) [makeThis (gen z), ELit (gen z) $ LitNumber 0, fromExpression expr]
     -- delete, void unsupported
     ES3.PrefixVoid -> errorNotSupported "void" z e
     ES3.PrefixDelete -> errorNotSupported "delete" z e
     -- all the rest are expected to exist as unary builtin functions
-    _ -> EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [makeThis z, fromExpression expr]
-fromExpression (ES3.InfixExpr z op e1 e2) = EApp z (EVar z $ show . ES3PP.prettyPrint $ op) [makeThis z, fromExpression e1, fromExpression e2]
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name $ addConstant z op (EVar z name)
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr name $ addConstant z op (EProp z objExpr' name)
+    _ -> EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression expr]
+fromExpression (ES3.InfixExpr z op e1 e2) = EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression e1, fromExpression e2]
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name $ addConstant z op (EVar (src z) name)
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr name $ addConstant z op (EProp (src z) objExpr' name)
   where objExpr' = fromExpression objExpr
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex z objExpr idxExpr $ addConstant z op (EIndex z objExpr' idxExpr')
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex z objExpr idxExpr $ addConstant z op (EIndex (src z) objExpr' idxExpr')
   where objExpr' = fromExpression objExpr
         idxExpr' = fromExpression idxExpr
 
-opFunc :: a -> ES3.InfixOp -> Exp a
-opFunc z op = EVar z $ show . ES3PP.prettyPrint $ op
+opFunc :: a -> ES3.InfixOp -> Exp (IsGen, a)
+opFunc z op = EVar (gen z) $ show . ES3PP.prettyPrint $ op
 
-applyOpFunc :: Show a => a -> ES3.InfixOp -> [Exp a] -> Exp a
-applyOpFunc z op exprs = EApp z (opFunc z op) (makeThis z : exprs)
+applyOpFunc :: Show a => a -> ES3.InfixOp -> [Exp (IsGen, a)] -> Exp (IsGen, a)
+applyOpFunc z op exprs = EApp (gen z) (opFunc z op) (makeThis (gen z) : exprs)
 
 -- TODO: the translation results in equivalent types, but currently ignore pre vs. postfix so the data flow is wrong.
-addConstant :: Show a => a -> ES3.UnaryAssignOp -> Exp a -> Exp a
-addConstant z op expr = EApp z (opFunc z ES3.OpAdd) [makeThis z, expr, ELit z $ LitNumber x]
+addConstant :: Show a => a -> ES3.UnaryAssignOp -> Exp (IsGen, a) -> Exp (IsGen, a)
+addConstant z op expr = EApp (gen z) (opFunc z ES3.OpAdd) [makeThis (gen z), expr, ELit (gen z) $ LitNumber x]
   where x = case op of
              ES3.PrefixInc -> 1
              ES3.PrefixDec -> -1
              ES3.PostfixInc -> 1
              ES3.PostfixDec -> -1
 
-assignToVar :: Show a => a -> EVarName -> Exp a -> Exp a
-assignToVar z name expr = EAssign z name expr (EVar z name)
+assignToVar :: Show a => a -> EVarName -> Exp (IsGen, a) -> Exp (IsGen, a)
+assignToVar z name expr = EAssign (src z) name expr (EVar (src z) name)
 
-assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp a -> Exp a
-assignToProperty  z objExpr name expr = EPropAssign z objExpr' name expr (EProp z objExpr' name)
+assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp (IsGen, a) -> Exp (IsGen, a)
+assignToProperty  z objExpr name expr = EPropAssign (src z) objExpr' name expr (EProp (src z) objExpr' name)
   where objExpr' = fromExpression objExpr
 
-assignToIndex :: Show a => a -> ES3.Expression a  -> ES3.Expression a -> Exp a -> Exp a
-assignToIndex z objExpr idxExpr expr = EIndexAssign z objExpr' idxExpr' expr (EIndex z objExpr' idxExpr')
+assignToIndex :: Show a => a -> ES3.Expression a  -> ES3.Expression a -> Exp (IsGen, a) -> Exp (IsGen, a)
+assignToIndex z objExpr idxExpr expr = EIndexAssign (src z) objExpr' idxExpr' expr (EIndex (src z) objExpr' idxExpr')
   where objExpr' = fromExpression objExpr
         idxExpr' = fromExpression idxExpr
 
@@ -244,6 +250,6 @@ fromProp (ES3.PropNum _ x) = show x
 
 -- -- ------------------------------------------------------------------------
 
-translate :: [ES3.Statement Pos.SourcePos] -> Exp Pos.SourcePos
-translate js = ELet pos poo (empty pos) $ foldStmts js $ EVar pos poo
+translate :: [ES3.Statement Pos.SourcePos] -> Exp (IsGen, Pos.SourcePos)
+translate js = ELet (gen pos) poo (empty pos) $ foldStmts js $ EVar (gen pos) poo
   where pos = Pos.initialPos "<global>"
