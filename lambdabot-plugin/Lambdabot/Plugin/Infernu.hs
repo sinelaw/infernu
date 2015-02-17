@@ -33,7 +33,7 @@ infernuPlugin = newModule
 sayType :: String -> String
 sayType rest = case  runTypeInference . translate . ES3.unJavaScript <$> ES3Parser.parseFromString rest of
                 Left e -> show e
-                Right res -> case filter (\((IsGen g, _), _) -> not g) . getAnnotations <$> res of
+                Right res -> case getAnnotations <$> res of
                               Left e' -> pretty e'
                               Right [] -> show "There is nothing there."
                               Right xs -> pretty . minifyVars . snd $ head xs

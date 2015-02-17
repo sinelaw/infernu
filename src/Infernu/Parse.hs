@@ -206,7 +206,7 @@ fromExpression e@(ES3.PrefixExpr z op expr) =
     ES3.PrefixVoid -> errorNotSupported "void" z e
     ES3.PrefixDelete -> errorNotSupported "delete" z e
     -- all the rest are expected to exist as unary builtin functions
-    _ -> EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression expr]
+    _ -> EApp (src z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression expr]
 fromExpression (ES3.InfixExpr z op e1 e2) = EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression e1, fromExpression e2]
 fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name $ addConstant z op (EVar (src z) name)
 fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr name $ addConstant z op (EProp (src z) objExpr' name)

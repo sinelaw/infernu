@@ -392,7 +392,7 @@ unifyPred a x y = do
     traceLog ("unifyPred: " ++ pretty x ++ " ~ with ~ " ++ pretty y)
     s <- getState
     p <- case Pred.unify (subUnify s a) x y of
-             Nothing -> throwError a $ "Failed to unify predicates: \n   \t" ++ pretty x  ++ "\nand\t" ++ pretty y
+             Nothing -> throwError a $ "Failed to unify predicates: '" ++ pretty x  ++ "'  and  '" ++ pretty y ++ "'"
              Just predAction -> predAction
     let canonP = Pred.splitCanon . Pred.toCanon $ p
     unifyPredAnds a $ Pred.canonUnambiguousPreds canonP

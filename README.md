@@ -107,21 +107,20 @@ TODO: More examples
 
 ## TODO
 
-- [ ] support maps (string -> a), using ambigious type for {} (empty anonymous object): it can be (map string a | closed empty record)
+- [ ] consider adding sum types with guards as pattern matchers. required because some functions, like array index access, can return 'undefined' (e.g. if index is out of range)
 - [ ] allow empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
-- [ ] in inferred types, preserve source code context info and use it for more readable unification errors
 - [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...`
 - [ ] find a reasonable solution for optional parameters - perhaps using an implicit "Maybe"-like type or implicit type unions, and require guards?
 - [ ] when concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere)
 - [ ] BUG: top-level type of naked object `{a:3}` isn't shown unless it is wrapped in a paren `({a:3})`.
 - [ ] support `arguments` (a tuple?) and function `bind`
-- [ ] deal better with inferred polymorphic object properties - requires full rank-n unification
 - [ ] Should we treat functions as objects with properties? the only properties they have are: length (very weird! we might as well leave it out), and call/bind/apply (which need special handling)
 
 ### Future
 
 - [ ] type annotations
 - [ ] add support for CommonJS modules
+- [ ] deal better with inferred polymorphic object properties - requires full rank-n unification
 
 <!--  LocalWords:  JS polymorphism Hindley Milner JS's Equi num arrNums TNumber TString getData
  -->

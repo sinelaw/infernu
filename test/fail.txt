@@ -4,3 +4,9 @@ ERROR y valid/object-chaining-long.js
 // FAIL (False, valid/prop-polymorphic-assign2-this.js:4:1): Error: Could not unify: forall cg. ((this: cg, cg) -> cg) with ((this: a, b) -> b) y valid/prop-polymorphic-assign2-this.js
 // FAIL (False, valid/prop-polymorphic-assign3.js:4:1): Error: Could not unify: forall bv. ((this: bv, TNumber) -> TNumber) with ((this: a, b) -> b) y valid/prop-polymorphic-assign3.js
 // FAIL (False, valid/try.js:4:5): Error: Unbound variable: "e" y valid/try.js
+and	((cj = [ci] & ck = TNumber) | (cj = <Map ci> & ck = TString)) n invalid/array-assign.js
+and	((dv = [du] & dw = TNumber) | (dv = <Map du> & dw = TString)) n invalid/array-param.js
+and	(cy = TNumber | cy = TString) n invalid/builtins/plus-func.js
+and	((di = [dh] & dj = TNumber) | (di = <Map dh> & dj = TString)) n invalid/polyfunc.js
+and	((dh = [dg] & di = TNumber) | (dh = <Map dg> & di = TString)) n invalid/prop-polymorphic-assign.js
+and	((cm = [cl] & cn = TNumber) | (cm = <Map cl> & cn = TString)) n invalid/return-multi.js
