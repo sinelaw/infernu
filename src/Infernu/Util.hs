@@ -4,7 +4,7 @@ module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 import           Control.Arrow               (second)
 import           Control.Monad               (forM)
 import           Data.Functor                ((<$>))
-
+import qualified Data.Set                    as Set
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
@@ -44,15 +44,10 @@ checkFiles fileNames = do
 #endif
   return res
 
-dedupList :: Eq a => [a] -> [a]
-dedupList [] = []
-dedupList [x] = [x]
-dedupList (x:y:ys) = if x == y then dedupList (y:ys) else x : dedupList (y:ys)
-
 annotatedSource :: [(Source, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unIsGen $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode
---        unIsGen :: [((IsGen, Pos.SourcePos), QualType)] -> [(Pos.SourcePos, QualType)]
-        unIsGen = id --map (\((_, s), q) -> (s, q))
-        filterGen = id --filter (\((IsGen g, _), _) -> not g)
-        prettyRes = dedupList . fmap (\((g, s), q) -> (s, pretty (g, q)))
+        unIsGen :: [((IsGen, Pos.SourcePos), QualType)] -> [(Pos.SourcePos, QualType)]
+        unIsGen = map (\((_, s), q) -> (s, q))
+        filterGen = filter (\((IsGen g, _), _) -> not g)
+        prettyRes = Set.toList . Set.fromList . fmap (second pretty)
