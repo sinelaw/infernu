@@ -7,7 +7,7 @@ import           Control.Applicative (Applicative (..), (*>), (<$>))
 import           Data.Map.Lazy       (Map)
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe          (catMaybes)
-import           Data.Traversable    (sequenceA, traverse)
+import           Data.Traversable    (sequenceA)
 
 import           Data.Set            (Set)
 import qualified Data.Set            as Set
@@ -92,10 +92,10 @@ fromCanon (CanonPredOr ps) = foldr mkOr TPredTrue $ Set.toList $ Set.fromList $ 
 -- Just [TPredOr (TPredAnd (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'a')]
 -- >>> unify u (TPredOr (TPredEq 0 'a') (TPredEq 1 'b')) (TPredEq 0 'c')
 -- Just [TPredAnd (TPredEq 0 'c') (TPredEq 1 'b')]
-unify :: (Applicative f, Ord t) => ([(TVarName, Set t)] -> Maybe (f ())) -> TPred t -> TPred t -> Maybe (f (TPred t))
+unify :: (Applicative f, Ord t) => (Map TVarName (Set t) -> Maybe (f (Map TVarName (Set t)))) -> TPred t -> TPred t -> Maybe (f (TPred t))
 unify u p1 p2 = (fmap . fmap) fromCanon $ unifyPreds u (toCanon p1) (toCanon p2)
 
-unifyPreds :: (Applicative f, Ord t) => ([(TVarName, Set t)] -> Maybe (f ())) -> CanonPredOr t -> CanonPredOr t -> Maybe (f (CanonPredOr t))
+unifyPreds :: (Applicative f, Ord t) => (Map TVarName (Set t) -> Maybe (f (Map TVarName (Set t)))) -> CanonPredOr t -> CanonPredOr t -> Maybe (f (CanonPredOr t))
 unifyPreds u (CanonPredOr m1s) (CanonPredOr m2s) =
     case survivors of
         [] -> Nothing
@@ -109,7 +109,7 @@ unifyPreds u (CanonPredOr m1s) (CanonPredOr m2s) =
 --    (╯°□°）╯︵ ┻━┻
 unifyMaps
   :: (Applicative f, Ord a) =>
-     ([(TVarName, Set a)] -> Maybe (f ()))
+     (Map TVarName (Set a) -> Maybe (f (Map TVarName (Set a))))
      -> Map TVarName (Set a)
      -> Map TVarName (Set a)
      -> Maybe (f (Map TVarName (Set a)))
@@ -118,15 +118,8 @@ unifyMaps u m1 m2 =  (fmap Map.unions) . sequenceA <$> sequenceA [intersection',
           intersection' = unifySets' intersection
           diff1 = unifySets' $ Map.difference m1 m2
           diff2 = unifySets' $ Map.difference m2 m1
-          unifySets' s = case u $ Map.assocs s of
-                            Nothing -> Nothing
-                            Just action -> Just (action *> (pure s))
--- unifyMaps u m1 m2 = fmap sequenceA <$> traverse (\(fok, s) -> case fok of
---                                                Nothing -> Nothing
---                                                Just action -> Just $ action *> pure s)
---                     $ Map.mergeWithKey (\_ t1 t2 -> Just (u $ t1 `Set.union` t2, Set.union t1 t2)) idMap' idMap' m1 m2
---     where idMap' = Map.map (Just $ pure (), )
-
+          unifySets' s = (*> pure s) <$> u s
+                  
 
 simplify :: (Ord t, Eq t) => Maybe (TPred t -> TPred t) -> TPred t -> TPred t
 simplify Nothing p = p
