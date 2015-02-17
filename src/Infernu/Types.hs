@@ -9,7 +9,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Infernu.Types
-       (Exp(..)
+       (IsGen(..)
+       , Source
+       , Exp(..)
        , LitVal(..)
        , EVarName
        , TVarName
@@ -77,7 +79,8 @@ import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary (Arbitrary (..))
 #endif
 
-
+newtype IsGen = IsGen Bool
+              deriving (Show, Eq, Ord)
 
 type EVarName = String
 type EPropName = String
@@ -146,7 +149,9 @@ data FType t = TBody TBody
 
 type Type = Fix FType
 
-data TypeError = TypeError { source :: Pos.SourcePos, message :: String }
+type Source = (IsGen, Pos.SourcePos)
+              
+data TypeError = TypeError { source :: Source, message :: String }
                deriving (Show, Eq, Ord)
 
 ----------------------------------------------------------------------

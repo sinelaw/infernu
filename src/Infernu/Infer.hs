@@ -24,7 +24,7 @@ import           Data.Maybe                (mapMaybe)
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 import           Prelude                   hiding (foldr, sequence)
-import qualified Text.Parsec.Pos           as Pos
+
 import Data.List (intercalate)
 
 import qualified Infernu.Builtins          as Builtins
@@ -65,7 +65,7 @@ closeRow t = t
 
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp Pos.SourcePos] -> Infer [(QualType, Exp (Pos.SourcePos, QualType))]
+accumInfer :: TypeEnv -> [Exp Source] -> Infer [(QualType, Exp (Source, QualType))]
 accumInfer env =
   do traceLog ("accumInfer: env: " ++ pretty env)
      foldM accumInfer' []
@@ -73,14 +73,14 @@ accumInfer env =
              do (t, e) <- inferType env expr
                 return ((t,e):types)
 
-inferType  :: TypeEnv -> Exp Pos.SourcePos -> Infer (QualType, Exp (Pos.SourcePos, QualType))
+inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
   traceLog (">> " ++ pretty expr)
   (t, e) <- inferType' env expr
   s <- getMainSubst
   return (applySubst s t, fmap (applySubst s) e)
 
-inferType' :: TypeEnv -> Exp Pos.SourcePos -> Infer (QualType, Exp (Pos.SourcePos, QualType))
+inferType' :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType' _ (ELit a lit) = do
   let t = Fix $ TBody $ case lit of
                     LitNumber _ -> TNumber
@@ -264,7 +264,7 @@ indexAccessPred arrTVarName elemTVarName idxTVarName =
     `mkOr` (TPredEq arrTVarName (Fix $ TCons TStringMap [elemType])
             `mkAnd` TPredEq idxTVarName (Fix $ TBody TString))
     
-unifyAllInstances :: Pos.SourcePos -> [TVarName] -> Infer (TPred Type)
+unifyAllInstances :: Source -> [TVarName] -> Infer (TPred Type)
 unifyAllInstances a tvs = do
   m <- getVarInstances
   -- TODO suboptimal - some of the sets may be identical
@@ -287,7 +287,7 @@ createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
                addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 
-typeInference :: Map EVarName TypeScheme -> Exp Pos.SourcePos -> Infer (Exp (Pos.SourcePos, QualType))
+typeInference :: Map EVarName TypeScheme -> Exp Source -> Infer (Exp (Source, QualType))
 typeInference builtins e =
   do env <- createEnv builtins
      (_t, e') <- inferType env e
@@ -402,12 +402,12 @@ typeInference builtins e =
 --
 -- >>> test $ let' "x" (fun ["a"] (var "a")) (let' "getX" (fun ["v"] (var "x")) (let' "setX" (fun ["v"] (let' "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean True)))) (let' "_" (app (var "setX") (fun ["a"] (lit (LitString "a")))) (var "getX"))))
 -- "(this: b -> (this: TString -> TString))"
-test :: Exp Pos.SourcePos -> String
+test :: Exp Source -> String
 test e = case runTypeInference e of
           Left err -> pretty err
           Right expr -> pretty $ snd . head . getAnnotations . minifyVars $ expr
 
 
-runTypeInference :: Exp Pos.SourcePos -> Either TypeError (Exp (Pos.SourcePos, QualType))
+runTypeInference :: Exp Source -> Either TypeError (Exp (Source, QualType))
 runTypeInference e = runInfer $ typeInference Builtins.builtins e
 

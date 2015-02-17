@@ -172,8 +172,14 @@ instance (Pretty k) => Pretty (Set.Set k) where
   prettyTab n s = "Set {" ++ str' ++ "}"
     where str' = intercalate ", " . map (prettyTab n) . Set.toList $ s
 
+instance Pretty Pos.SourcePos where
+    prettyTab _ p = Pos.sourceName p ++ ":" ++ show (Pos.sourceLine p) ++ ":" ++ show (Pos.sourceColumn p)
+
+instance Pretty IsGen where
+    prettyTab _ (IsGen g) = show g
+    
 instance Pretty TypeError where
-  prettyTab _ (TypeError p s) = Pos.sourceName p ++ ":" ++ show (Pos.sourceLine p) ++ ":" ++ show (Pos.sourceColumn p) ++ ": Error: " ++ s
+  prettyTab _ (TypeError s m) = pretty s ++ ": Error: " ++ m
 
 instance Pretty NameSource where
   prettyTab _ = show

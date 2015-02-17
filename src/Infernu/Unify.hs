@@ -18,7 +18,7 @@ import           Data.Maybe           (mapMaybe)
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
 import           Prelude              hiding (foldr, foldl, mapM, sequence)
-import qualified Text.Parsec.Pos      as Pos
+
 
 import           Infernu.BuiltinArray (arrayRowType)
 import           Infernu.BuiltinRegex (regexRowType)
@@ -41,7 +41,7 @@ tryMakeRow _ = return Nothing
 ----------------------------------------------------------------------
 
 
-type UnifyF = Pos.SourcePos -> Type -> Type -> Infer ()
+type UnifyF = Source -> Type -> Type -> Infer ()
 
 unify :: UnifyF
 unify a t1 t2 = decycledUnify a t1 t2
@@ -183,12 +183,12 @@ unify'' (Just recurse) a t1 t2 =
      traceLog ("unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2)
      unify' recurse a t1' t2'
 
-unificationError :: (VarNames x, Pretty x) => Pos.SourcePos -> x -> x -> Infer b
+unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
   where [a, b] = minifyVars [x, y]
 
 -- | Main unification function
-unify' :: UnifyF -> Pos.SourcePos -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
+unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 
 -- | Type variables
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
@@ -259,7 +259,7 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
 
 
-unifyTryMakeRow :: UnifyF -> Pos.SourcePos -> Bool -> TRowList Type -> FType Type -> Infer ()
+unifyTryMakeRow :: UnifyF -> Source -> Bool -> TRowList Type -> FType Type -> Infer ()
 unifyTryMakeRow r a leftBiased tRowList t2 =
   do let tRow = TRow tRowList
      res <- tryMakeRow t2
@@ -270,7 +270,7 @@ unifyTryMakeRow r a leftBiased tRowList t2 =
                       else r a (Fix $ TRow rowType) (Fix tRow)
 
 
-unifyRowPropertyBiased :: Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
+unifyRowPropertyBiased :: Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
 unifyRowPropertyBiased = unifyRowPropertyBiased' unify
 
 -- | TODO: This hacky piece of code implements a simple 'subtyping' relation between
@@ -282,7 +282,7 @@ unifyRowPropertyBiased = unifyRowPropertyBiased' unify
 -- 1. If the LHS is not quanitified at all
 -- 2. If the LHS is a function type quantified only on the type of 'this'
 --
-unifyRowPropertyBiased' :: UnifyF -> Pos.SourcePos -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
+unifyRowPropertyBiased' :: UnifyF -> Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
 unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
    do traceLog ("Unifying row properties: " ++ pretty tprop1s ++ " ~ " ++ pretty tprop2s)
       let crap = Fix $ TBody TUndefined
@@ -306,7 +306,7 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
              then unifySchemes'
              else errorAction
 
-unifyRows :: (VarNames x, Pretty x) => UnifyF -> Pos.SourcePos -> RowTVar
+unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
                -> (x, Set EPropName, Map EPropName TypeScheme)
                -> (x, Set EPropName, FlatRowEnd Type)
                -> Infer ()
@@ -326,10 +326,10 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
          FlatRowEndRec tid ts -> recurse a (in1NotIn2row) (Fix $ TCons (TName tid) ts)
 
 -- | Unifies pairs of types, accumulating the substs
-unifyl :: UnifyF -> Pos.SourcePos -> [(Type, Type)] -> Infer ()
+unifyl :: UnifyF -> Source -> [(Type, Type)] -> Infer ()
 unifyl r a ts = mapM_ (unifyl' r a) ts
 
-unifyl' :: UnifyF -> Pos.SourcePos -> (Type, Type) -> Infer ()
+unifyl' :: UnifyF -> Source -> (Type, Type) -> Infer ()
 unifyl' recurse a (x, y) = do
   recurse a (tracePretty "--1" $ x) (tracePretty "--2" $ y)
 
@@ -357,12 +357,12 @@ isInsideRowType n (Fix t) =
    TRow t' -> n `Set.member` freeTypeVars t'
    _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
-varBind :: Pos.SourcePos -> TVarName -> Type -> Infer ()
+varBind :: Source -> TVarName -> Type -> Infer ()
 varBind a n t =
   do s <- varBind' a n t
      applySubstInfer s
 
-varBind' :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
+varBind' :: Source -> TVarName -> Type -> Infer TSubst
 varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                | isInsideRowType n t =
                    do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t)
@@ -373,23 +373,23 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t in throwError a $ "Occurs check failed: " ++ pretty (f n) ++ " in " ++ pretty (mapVarNames f t)
                | otherwise = return $ singletonSubst n t
 
-unifyAll :: Pos.SourcePos -> [Type] -> Infer ()
+unifyAll :: Source -> [Type] -> Infer ()
 unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 
-unifyPredAnds :: Pos.SourcePos -> [(TVarName, Set Type)] -> Infer ()
+unifyPredAnds :: Source -> [(TVarName, Set Type)] -> Infer ()
 unifyPredAnds a ss =
     do  traceLog $ "unifyPredAnds: " ++ show ss
         mapM_ (\(tv, s) -> unifyAll a $ (Fix $ TBody $ TVar tv) : Set.toList s) ss
 
                    
-subUnify :: InferState -> Pos.SourcePos -> [(TVarName, Set Type)] -> Maybe (Infer ())
+subUnify :: InferState -> Source -> [(TVarName, Set Type)] -> Maybe (Infer ())
 subUnify s a ts = case execInferWith s $ unifyPredAnds a ts of
     Left _ -> Nothing
     Right _ -> Just $ do return () --traceLog ("PPP - Saving state: " ++ pretty s')
                           
 --                          setState s'
     
-unifyPred :: Pos.SourcePos -> TPred Type -> TPred Type -> Infer (TPred Type)
+unifyPred :: Source -> TPred Type -> TPred Type -> Infer (TPred Type)
 unifyPred a x y = do
     traceLog ("unifyPred: " ++ pretty x ++ " ~ with ~ " ++ pretty y)
     s <- getState
@@ -405,7 +405,7 @@ unifyPred a x y = do
                 return $ TPredTrue
         xs -> return $ Pred.fromCanon $ Pred.CanonPredOr xs
 
-verifyPred :: Pos.SourcePos -> TPred Type -> Infer (TPred Type)
+verifyPred :: Source -> TPred Type -> Infer (TPred Type)
 verifyPred a p =
     do  s <- getMainSubst
         traceLog ("PPP - Loaded state: " ++ pretty s)
@@ -418,7 +418,7 @@ verifyPred a p =
         traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred)
         unifyPred a p' currentPred
             
-unifyPredsL :: Pos.SourcePos
+unifyPredsL :: Source
                -> [TPred Type]
                -> Infer (TPred Type)
 unifyPredsL a preds =
