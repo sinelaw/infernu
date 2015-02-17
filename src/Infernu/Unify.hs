@@ -409,10 +409,10 @@ verifyPred :: Source -> TPred Type -> Infer (TPred Type)
 verifyPred a p =
     do  s <- getMainSubst
         traceLog ("PPP - Loaded state: " ++ pretty s)
-        let p' = substPredType s p
+        let p' = Pred.fixSimplify $ substPredType s p
             tvars = freeTypeVars p'
             tautologyPred = Set.foldr (\v prev -> mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
-            currentPred = substPredType s tautologyPred
+            currentPred = Pred.fixSimplify $ substPredType s tautologyPred
 
         traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p))
         traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred)
@@ -428,7 +428,7 @@ unifyPredsL a preds =
             do preds2 <- foldM (unifyPred a) TPredTrue preds1
                preds3 <- verifyPred a preds2
                s <- getMainSubst
-               return $ Pred.fromCanon . Pred.toCanon $ substPredType s preds3
+               return $ Pred.fixSimplify $ substPredType s preds3
        
      
     
