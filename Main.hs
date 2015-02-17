@@ -3,7 +3,7 @@ module Main (main) where
 import           Control.Monad      (forM)
 import           Infernu.Infer      (pretty)
 import           Infernu.Pretty     (Pretty (..))
-import           Infernu.Types      (QualType, Source, IsGen(..))
+import           Infernu.Types      (QualType, Source)
 import           Infernu.Util
 import           System.Environment (getArgs)
 import qualified Text.Parsec.Pos    as Pos

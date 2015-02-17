@@ -113,7 +113,7 @@ addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
           setTVars = mapVarNames' $ Set.toList updatedSet
           mapVarNames' :: [QualType] -> [TVarName]
           mapVarNames' [] = []
-          mapVarNames' (TQual pred (Fix (TBody (TVar n))) : ts) = n : mapVarNames' ts
+          mapVarNames' (TQual _ (Fix (TBody (TVar n))) : ts) = n : mapVarNames' ts
           mapVarNames' (_:ts) = mapVarNames' ts
 
 
@@ -352,6 +352,7 @@ isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
 isExpansive (EArray _ _)  = True
 isExpansive (ETuple _ _)  = True
+isExpansive (EStringMap _ _)    = True
 isExpansive (ERow _ _ _)    = True
 isExpansive (EIfThenElse _ e1 e2 e3) = any isExpansive [e1, e2, e3]
 isExpansive (EProp _ e _)  = isExpansive e

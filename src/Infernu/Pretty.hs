@@ -79,6 +79,7 @@ instance Pretty (Exp a) where
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
   prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
   prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
+  prettyTab t (EStringMap _ exprs) = "<" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ " => " ++ prettyTab t v) exprs) ++ ">"
 
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + (n - 1))
@@ -142,6 +143,7 @@ instance Pretty Type where
 instance (Ord t, Pretty t) => Pretty (TPred t) where
     prettyTab n = prettyPred n . Pred.fixSimplify
     
+prettyPred :: (Pretty a, Ord a) => Int -> TPred a -> [Char]
 prettyPred n (TPredEq v t) = prettyTab n v ++ " = " ++ prettyTab n t
 prettyPred n (TPredOr p1 p2) = "(" ++ prettyTab n p1 ++ " | " ++ prettyTab n p2 ++ ")"
 prettyPred n (TPredAnd p1 p2) = "(" ++ prettyTab n p1 ++ " & " ++ prettyTab n p2 ++ ")"
@@ -161,7 +163,7 @@ instance (Eq t, Ord t, VarNames t, Pretty t) => Pretty (TQual t) where
 
 -- TODO remove Eq t constraint and add global unification for preds
 removeUnusedTVars :: (VarNames t, Eq t) => Set.Set TVarName -> TPred t -> TPred t
-removeUnusedTVars tvars p@(TPredEq n t) = if n `Set.member` tvars then p else TPredTrue
+removeUnusedTVars tvars p@(TPredEq n _) = if n `Set.member` tvars then p else TPredTrue
 removeUnusedTVars tvars (TPredAnd p1 p2) = removeUnusedTVars tvars p1 `mkAnd` removeUnusedTVars tvars p2
 removeUnusedTVars tvars (TPredOr p1 p2) = removeUnusedTVars tvars p1 `mkOr` removeUnusedTVars tvars p2
 removeUnusedTVars _ TPredTrue = TPredTrue                                 

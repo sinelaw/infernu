@@ -103,6 +103,7 @@ data Exp a = EVar a EVarName
            | EArray a [Exp a]
            | ETuple a [Exp a]
            | ERow a Bool [(EPropName, Exp a)]
+           | EStringMap a [(String, Exp a)]
            | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
            | EProp a (Exp a) EPropName
              -- TODO EIndex should not be part of the AST. should be a builtin function using

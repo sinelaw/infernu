@@ -3,7 +3,7 @@ module Infernu.Parse
        where
 
 import           Control.Arrow                    ((***))
-import           Data.Maybe                       (mapMaybe)
+import           Data.Maybe                       (mapMaybe, catMaybes)
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
 import           Infernu.Types
@@ -34,19 +34,20 @@ singleStmt a exp' = ELet a poo exp'
 gen :: a -> (IsGen, a)
 gen x = (IsGen True, x)
 
+src :: a -> (IsGen, a)
 src x = (IsGen False, x)        
         
 fromStatement :: Show a => ES3.Statement a -> Exp (IsGen, a) -> Exp (IsGen, a)
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
-fromStatement (ES3.EmptyStmt z) = id
+fromStatement (ES3.EmptyStmt _) = id
 fromStatement (ES3.ExprStmt z e) = singleStmt (gen z) $ fromExpression e
 -- TODO: The if/while/do conversion is hacky
 fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ foldStmts [thenS, elseS]
 fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement thenS
 fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
 fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
-fromStatement (ES3.BreakStmt z x) = id -- TODO verify we can ignore this
-fromStatement (ES3.ContinueStmt z x) = id -- TODO verify we can ignore this
+fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
+fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.TryStmt _ stmt mCatch mFinally) = foldStmts $ [stmt] ++ catchS ++ finallyS
   where catchS = case mCatch of
                   Just (ES3.CatchClause _ _ s) -> [s]
@@ -86,7 +87,7 @@ fromStatement (ES3.ReturnStmt z x) = EIndexAssign (gen z) (EVar (gen z) "return"
                                         Just x' -> fromExpression x'
 
 -- | Creates an EAbs (function abstraction)
---toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (IsGen, a)
+toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (IsGen, a)
 toAbs z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'
   -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
   where body' = case any hasReturn stmts of
@@ -143,7 +144,10 @@ fromExpression (ES3.IntLit z s) = ELit (src z) (LitNumber $ fromIntegral s)
 fromExpression (ES3.NumLit z s) = ELit (src z) $ LitNumber s
 fromExpression (ES3.NullLit z) = ELit (src z) LitNull
 fromExpression (ES3.ArrayLit z exprs) = EArray (src z) $ map fromExpression exprs
-fromExpression (ES3.ObjectLit z props) = ERow (src z) False $ map (fromProp *** fromExpression) props
+fromExpression (ES3.ObjectLit z props) = let stringProps = map (fromPropString . fst) props
+                                         in if all (\x -> x /= Nothing) stringProps
+                                            then EStringMap (src z) $ zip (catMaybes stringProps) (map (fromExpression . snd) props) 
+                                            else ERow (src z) False $ map (fromProp *** fromExpression) props
 fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex (src z) (fromExpression arrExpr) (fromExpression indexExpr)
 fromExpression (ES3.VarRef z name) = EVar (src z) $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse (src z) (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
@@ -248,6 +252,10 @@ fromProp (ES3.PropId _ (ES3.Id _ x)) = x
 fromProp (ES3.PropString _ x) = x
 fromProp (ES3.PropNum _ x) = show x
 
+fromPropString :: ES3.Prop a -> Maybe String
+fromPropString (ES3.PropString _ x) = Just x
+fromPropString _ = Nothing
+                  
 -- -- ------------------------------------------------------------------------
 
 translate :: [ES3.Statement Pos.SourcePos] -> Exp (IsGen, Pos.SourcePos)

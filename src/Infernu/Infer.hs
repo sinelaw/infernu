@@ -210,10 +210,14 @@ inferType' env (ETuple a exprs) =
   do te <- accumInfer env exprs
      let t = TQual (foldr mkOr TPredTrue $ map (qualPred . fst) te) $ Fix . TCons TTuple . reverse $ map (qualType . fst) te
      return (t, ETuple (a,t) $ map snd te)
-inferType' _ (ERow a False []) =
-  do elemType <- Fix . TBody . TVar <$> fresh
-     let mapType = qualEmpty . Fix $ TCons TStringMap [elemType]
-     return (mapType, ERow (a,mapType) False [])
+inferType' env (EStringMap a exprs') =
+  do let exprs = map snd exprs'
+     elemType <- Fix . TBody . TVar <$> fresh
+     te <- accumInfer env exprs
+     let types = map (qualType . fst) te
+     unifyl unify a $ zip (elemType:types) types
+     let t = qualEmpty . Fix $ TCons TStringMap [elemType]
+     return (t, EStringMap (a,t) $ zip (map fst exprs') (map snd te))
 inferType' env (ERow a isOpen propExprs) =
   do te <- accumInfer env $ map snd propExprs
      endVar <- RowTVar <$> fresh
