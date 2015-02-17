@@ -158,7 +158,14 @@ predsStr n preds =
 
 instance (Eq t, Ord t, VarNames t, Pretty t) => Pretty (TQual t) where
     prettyTab n (TQual preds t) = (predsStr n $ removeUnusedTVars (freeTypeVars t) preds) ++ prettyTab n t
-        
+
+-- TODO remove Eq t constraint and add global unification for preds
+removeUnusedTVars :: (VarNames t, Eq t) => Set.Set TVarName -> TPred t -> TPred t
+removeUnusedTVars tvars p@(TPredEq n t) = if n `Set.member` tvars then p else TPredTrue
+removeUnusedTVars tvars (TPredAnd p1 p2) = removeUnusedTVars tvars p1 `mkAnd` removeUnusedTVars tvars p2
+removeUnusedTVars tvars (TPredOr p1 p2) = removeUnusedTVars tvars p1 `mkOr` removeUnusedTVars tvars p2
+removeUnusedTVars _ TPredTrue = TPredTrue                                 
+
 instance (Ord t, Pretty t) => Pretty (TScheme t) where
   prettyTab n (TScheme vars t preds) = predsStr n preds ++ forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "

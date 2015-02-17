@@ -376,18 +376,16 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
 unifyAll :: Source -> [Type] -> Infer ()
 unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 
-unifyPredAnds :: Source -> [(TVarName, Set Type)] -> Infer ()
+unifyPredAnds :: Source -> Map TVarName (Set Type) -> Infer (Map TVarName (Set Type))
 unifyPredAnds a ss =
     do  traceLog $ "unifyPredAnds: " ++ show ss
-        mapM_ (\(tv, s) -> unifyAll a $ (Fix $ TBody $ TVar tv) : Set.toList s) ss
-
+        mapM_ (\(tv, s) -> unifyAll a $ (Fix $ TBody $ TVar tv) : Set.toList s) $ Map.assocs ss
+        applyMainSubst ss
                    
-subUnify :: InferState -> Source -> [(TVarName, Set Type)] -> Maybe (Infer ())
+subUnify :: InferState -> Source -> Map TVarName (Set Type) -> Maybe (Infer (Map TVarName (Set Type)))
 subUnify s a ts = case execInferWith s $ unifyPredAnds a ts of
     Left _ -> Nothing
-    Right _ -> Just $ do return () --traceLog ("PPP - Saving state: " ++ pretty s')
-                          
---                          setState s'
+    Right s' -> Just $ return $ applySubst (mainSubst s') ts
     
 unifyPred :: Source -> TPred Type -> TPred Type -> Infer (TPred Type)
 unifyPred a x y = do
@@ -397,12 +395,12 @@ unifyPred a x y = do
              Nothing -> throwError a "Oh noes."
              Just predAction -> predAction
     let canonP = Pred.splitCanon . Pred.toCanon $ p
-    unifyPredAnds a $ Map.assocs $ Pred.canonUnambiguousPreds canonP
+    unifyPredAnds a $ Pred.canonUnambiguousPreds canonP
     case Pred.canonAmbiguousPreds canonP of
         [] -> return $ TPredTrue
-        [singleP] ->
-            do  unifyPredAnds a $ Map.assocs singleP
-                return $ TPredTrue
+        [singleP] -> do unifyPredAnds a singleP
+                        return $ TPredTrue
+                        --Pred.fromCanon . Pred.CanonPredOr . (:[]) <$> unifyPredAnds a singleP
         xs -> return $ Pred.fromCanon $ Pred.CanonPredOr xs
 
 verifyPred :: Source -> TPred Type -> Infer (TPred Type)
