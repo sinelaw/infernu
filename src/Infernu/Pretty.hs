@@ -133,7 +133,7 @@ prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
 prettyType n (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map (prettyTab n) ts)
 prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
 prettyType n (TCons (TName name) ts) = "<" ++ pretty name ++ ">" -- : " ++ (unwords $ map (prettyTab n) ts) ++ ">"
-prettyType n (TCons TStringMap [t]) = "<Map " ++ prettyTab n t ++ ">"
+prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
 prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
 prettyType t (TRow list) = "{"
                           ++ intercalate ", " (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
