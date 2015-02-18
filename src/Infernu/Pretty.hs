@@ -102,7 +102,9 @@ instance Pretty TypeId where
 
 instance Pretty TBody where
   prettyTab t (TVar n) = prettyTab t n
-  prettyTab _ x = show x
+  prettyTab _ x = case show x of
+                      'T':xs -> xs
+                      xs -> xs
 
 instance Pretty TConsName where
   prettyTab _ = show
@@ -110,16 +112,22 @@ instance Pretty TConsName where
 instance Pretty RowTVar where
   prettyTab _ t = ".." ++ pretty (getRowTVar t)
 
-instance (Ord t, Pretty t) => Pretty (FType t) where
-  prettyTab = prettyType
+instance Pretty Type where
+  prettyTab x = prettyType x . unFix
 
-prettyType :: (Ord t, Pretty t) => Int -> FType t -> String
+instance Pretty (FType Type) where
+  prettyTab = prettyType
+                
+prettyType :: Int -> FType Type -> String
 prettyType n (TBody t) = prettyTab n t
-prettyType n (TCons TFunc ts) = "(" ++ nakedSingleOrTuple args ++ " -> " ++ prettyTab n (last ts) ++ ")"
+prettyType n (TCons TFunc ts) = wrapThis this $ args ++ " -> " ++ prettyTab n (last ts)
   where nonThisArgs = map (prettyTab n) . drop 1 $ init ts
-        args = case ts of
-                [] -> nonThisArgs
-                (this:_) -> ("this: " ++ prettyTab n this) : nonThisArgs
+        (this, args) = case ts of
+                [] -> (Nothing, nakedSingleOrTuple nonThisArgs)
+                (this_:_) -> (Just this_, nakedSingleOrTuple nonThisArgs)
+        wrapThis Nothing s = s
+        wrapThis (Just (Fix (TBody TUndefined))) s = s
+        wrapThis (Just t) s = prettyTab n t ++ ".(" ++ s ++ ")"
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
 prettyType n (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map (prettyTab n) ts)
@@ -131,14 +139,10 @@ prettyType t (TRow list) = "{"
                           ++ intercalate ", " (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
                           ++ (case r of
                                FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
-                               FlatRowEndRec tid ts -> ", " ++ prettyTab t (TCons (TName tid) ts) -- TODO
+                               FlatRowEndRec tid ts -> ", " ++ prettyTab t (Fix $ TCons (TName tid) ts) -- TODO
                              )
                           ++ "}"
   where (props, r) = flattenRow list
-
---instance Pretty t => Pretty (Fix t) where
-instance Pretty Type where
-  prettyTab n (Fix t) = prettyType n t
 
 instance (Ord t, Pretty t) => Pretty (TPred t) where
     prettyTab n = prettyPred n . Pred.fixSimplify
