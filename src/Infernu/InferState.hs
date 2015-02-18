@@ -206,6 +206,7 @@ allocNamedType n t =
      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          target = replaceFix (TBody (TVar n)) namedType t
      scheme <- unsafeGeneralize Map.empty $ qualEmpty target
+     traceLog $ "===> Generated scheme for mu type: " ++ pretty scheme
      currentNamedTypes <- filter (areEquivalentNamedTypes (Fix namedType, scheme)) . map snd . Map.toList . namedTypes <$> get
      case currentNamedTypes of
       [] -> do addNamedType typeId (Fix namedType) scheme

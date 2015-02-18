@@ -9,6 +9,7 @@ import           Control.Monad        (forM_, when, foldM)
 import           Data.Functor         ((<$>))
 import           Data.Monoid          (Monoid (..))
 import           Data.Traversable     (Traversable (..))
+import           Data.Foldable     (Foldable (..))
 
 
 import           Data.Map.Lazy        (Map)
@@ -341,22 +342,30 @@ instance Monoid OrBool where
 
 -- | Checks if a type var name appears as a free type variable nested somewhere inside a row type.
 --
--- >>> isInsideRowType 0 (Fix (TBody $ TVar 0))
--- False
--- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just $ RowTVar 0)))
--- True
--- >>> isInsideRowType 0 (Fix (TRow $ TRowEnd (Just $ RowTVar 1)))
--- False
--- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TRow $ TRowEnd (Just $ RowTVar 1)]))
--- False
--- >>> isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TRow $ TRowEnd (Just $ RowTVar 0)]))
--- True
-isInsideRowType :: TVarName -> Type -> Bool
+-- >>> getSingleton $ isInsideRowType 0 (Fix (TBody $ TVar 0))
+-- Nothing
+-- >>> getSingleton $ isInsideRowType 0 (Fix (TRow $ TRowEnd (Just $ RowTVar 0)))
+-- Just Fix (TRow (TRowEnd (Just (RowTVar 0))))
+-- >>> getSingleton $ isInsideRowType 0 (Fix (TRow $ TRowEnd (Just $ RowTVar 1)))
+-- Nothing
+-- >>> getSingleton $ isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TRow $ TRowEnd (Just $ RowTVar 1)]))
+-- Nothing
+-- >>> getSingleton $ isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TRow $ TRowEnd (Just $ RowTVar 0)]))
+-- Just Fix (TRow (TRowEnd (Just (RowTVar 0))))
+isInsideRowType :: TVarName -> Type -> Set Type
 isInsideRowType n (Fix t) =
   case t of
-   TRow t' -> n `Set.member` freeTypeVars t'
-   _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
+   TRow t' -> if n `Set.member` freeTypeVars t'
+              then Set.singleton $ Fix t
+              else Set.empty
+   _ -> (foldr (\x l -> (isInsideRowType n x) `Set.union` l) Set.empty t)
+--   _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
+getSingleton :: Set a -> Maybe a
+getSingleton s = case foldr (:) [] s of
+                     [x] -> Just x
+                     _ -> Nothing
+   
 varBind :: Source -> TVarName -> Type -> Infer ()
 varBind a n t =
   do s <- varBind' a n t
@@ -364,13 +373,18 @@ varBind a n t =
 
 varBind' :: Source -> TVarName -> Type -> Infer TSubst
 varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
-               | isInsideRowType n t =
-                   do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " = " ++ pretty t)
-                      namedType <- getNamedType n t
+               | Just rowT <- getSingleton $ isInsideRowType n t =
+                   do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " recursive in: " ++ pretty t ++ ", found enclosing row type: " ++ " = " ++ pretty rowT)
+                      recVar <- fresh
+                      let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
+                          recT = replaceFix (TBody (TVar n)) (unFix withRecVar) rowT
+                      namedType <- getNamedType recVar recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
-                      return $ singletonSubst n namedType
-               | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t in throwError a $ "Occurs check failed: " ++ pretty (f n) ++ " in " ++ pretty (mapVarNames f t)
+                      traceLog $ "===> Resulting mu type: " ++ pretty n ++ " = " ++ pretty withRecVar
+                      return $ singletonSubst recVar namedType `composeSubst` singletonSubst n withRecVar
+               | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t
+                                                 in throwError a $ "Occurs check failed: " ++ pretty (f n) ++ " in " ++ pretty (mapVarNames f t)
                | otherwise = return $ singletonSubst n t
 
 unifyAll :: Source -> [Type] -> Infer ()
