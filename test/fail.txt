@@ -1,6 +1,6 @@
-// FAIL (False, valid/nothis-as-obj-param.js:10:7): Error: Could not unify: {f: ((this: <Named Type: mu D`. a {, ..b}>, TNumber) -> a), ..b} with TUndefined y valid/nothis-as-obj-param.js
-// FAIL (False, valid/nothis-as-param.js:12:7): Error: Could not unify: {f: ((this: <Named Type: mu De. a>, TNumber) -> a)} with TUndefined y valid/nothis-as-param.js
-ERROR y valid/object-chaining-long.js
+// FAIL (False, valid/nothis-as-obj-param.js:10:7): Error: Could not unify: {f: ((this: <D`>, TNumber) -> a), ..b} with TUndefined y valid/nothis-as-obj-param.js
+// FAIL (False, valid/nothis-as-param.js:12:7): Error: Could not unify: {f: ((this: <De>, TNumber) -> a)} with TUndefined y valid/nothis-as-param.js
+return[0.0]ERROR y valid/object-chaining-long.js
 // FAIL (False, valid/prop-polymorphic-assign2-this.js:4:1): Error: Could not unify: forall cg. ((this: cg, cg) -> cg) with ((this: a, b) -> b) y valid/prop-polymorphic-assign2-this.js
 // FAIL (False, valid/prop-polymorphic-assign3.js:4:1): Error: Could not unify: forall bv. ((this: bv, TNumber) -> TNumber) with ((this: a, b) -> b) y valid/prop-polymorphic-assign3.js
 // FAIL (False, valid/try.js:4:5): Error: Unbound variable: "e" y valid/try.js
