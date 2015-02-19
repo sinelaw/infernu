@@ -126,7 +126,7 @@ hasReturn (ES3.ReturnStmt _ _) = True
 
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id b -> Exp (IsGen, a) -> Exp (IsGen, a)
 toNamedAbs z args stmts name letBody = let abs' = toAbs z args stmts
-                                       in ELet (src z) (ES3.unId name) abs' letBody
+                                       in ELet (gen z) (ES3.unId name) abs' letBody
 
 chainDecls :: Show a => [ES3.VarDecl a] -> Exp (IsGen, a) -> Exp (IsGen, a)
 chainDecls [] k = k
