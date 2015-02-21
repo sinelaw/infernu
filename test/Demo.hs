@@ -2,8 +2,9 @@ module Demo where
 
 import           Data.Bool          (bool)
 import           Data.Functor       ((<$>))
-import           Infernu.Util        (checkFiles)
-import           Infernu.Infer       (pretty)
+import           Data.List          (intercalate)
+import           Infernu.Infer      (pretty)
+import           Infernu.Util       (checkFiles)
 import           System.Environment (getArgs)
 
 isRight :: Either a b -> Bool
@@ -22,4 +23,4 @@ main = do
         Right _ -> ""
       toOk = bool "FAIL" "OK" . shouldPass
   --print $ fmap (pretty . snd) res
-  putStrLn $ "// " ++ toOk typeChecked ++ " " ++ message
+  putStrLn $ "// " ++ toOk typeChecked ++ " " ++ (intercalate " | " $ lines message)

@@ -7,7 +7,7 @@ import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 
 ts :: [TVarName] -> Type -> TypeScheme
-ts tvs t = TScheme tvs t TPredTrue
+ts tvs t = TScheme tvs (qualEmpty t)
            
 unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = ts [0] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 0, t1, t2]
@@ -44,7 +44,8 @@ builtins = Map.fromList [
   ("!",            unaryFunc tBoolean tBoolean),
   ("~",            unaryFunc tNumber  tNumber),
   ("typeof",       ts [0,1] $ Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 0, tString]),
-  ("+",            TScheme [0,1] (binarySimpleFunc (tVar 0) (tVar 1)) (TPredOr (TPredEq 1 $ Fix $ TBody $ TString) (TPredEq 1 $ Fix $ TBody $ TNumber))),
+  ("+",            TScheme [0,1] $ TQual { qualPred = [TPredIsIn (ClassName "Plus") (tVar 1)]
+                                         , qualType = binarySimpleFunc (tVar 0) (tVar 1) }),
   ("-",            numOp),
   ("*",            numOp),
   ("/",            numOp),

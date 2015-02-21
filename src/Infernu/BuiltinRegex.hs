@@ -8,14 +8,14 @@ import Infernu.Types
 import Infernu.InferState
 import           Infernu.Lib (safeLookup)
 
-string :: Type
-string = Fix $ TBody TString
+string :: TQual Type
+string = qualEmpty $ Fix $ TBody TString
 
 -- regex :: Type
 -- regex = Fix $ TBody TRegex
 
-ts :: t -> TScheme t
-ts t = TScheme [] t TPredTrue
+ts :: TQual t -> TScheme t
+ts t = TScheme [] t
 
 regexProps :: [(String, TypeScheme)]
 regexProps = 
