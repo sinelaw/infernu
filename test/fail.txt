@@ -7,4 +7,3 @@ ERROR y valid/object-chaining-long.js
 // FAIL  n invalid/bug3.js
 // FAIL  n invalid/debounce.js
 // FAIL  n invalid/mutable-id.js
-// FAIL  n invalid/occurs.js

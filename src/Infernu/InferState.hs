@@ -96,14 +96,20 @@ addVarScheme env n scheme = do
   setVarScheme n varId scheme
   return $ Map.insert n varId env
 
-addPendingUnification :: ((Source, TypeScheme), Type) -> Infer ()
+--addPendingUnification :: (Source, Type, (ClasSet TypeScheme) -> Infer ()
+addPendingUnification :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer ()
 addPendingUnification ts = do
     modify $ \is -> is { pendingUni = Set.insert ts $ pendingUni is }
     return ()
 
-getPendingUnifications :: Infer (Set ((Source, TypeScheme), Type))
+getPendingUnifications :: Infer (Set (Source, Type, (ClassName, Set TypeScheme)))
 getPendingUnifications = pendingUni <$> get
-                         
+
+setPendingUnifications :: (Set (Source, Type, (ClassName, Set TypeScheme))) -> Infer ()
+setPendingUnifications ts = do
+    modify $ \is -> is { pendingUni = ts }
+    return ()
+        
 ----------------------------------------------------------------------
 -- | Adds a pair of equivalent items to an equivalence map.
 --

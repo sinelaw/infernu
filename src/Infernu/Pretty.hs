@@ -192,7 +192,7 @@ instance (Ord t, Pretty t) => Pretty (Class t) where
         where s' = intercalate ", " . map (prettyTab n) $ classInstances c
                   
 instance Pretty InferState where
-  prettyTab t (InferState ns sub vs vi tn pu cs) = "InferState { nameSource: "
+  prettyTab t (InferState ns sub vs vi tn cs pu) = "InferState { nameSource: "
                                              ++ pretty ns ++ newline
                                              ++ ", subst: " ++ pretty sub ++ newline
                                              ++ ", varSchemes: " ++ pretty vs ++ newline

@@ -450,7 +450,7 @@ data InferState = InferState { nameSource   :: NameSource
                              , varInstances :: Map.Map TVarName (Set.Set QualType)
                              , namedTypes   :: Map.Map TypeId (Type, TypeScheme)
                              , classes      :: Map.Map ClassName (Class Type)
-                             , pendingUni   :: Set.Set ((Source, TypeScheme), Type)
+                             , pendingUni   :: Set.Set (Source, Type, (ClassName, Set.Set TypeScheme))
                              }
                    deriving (Show, Eq)
 

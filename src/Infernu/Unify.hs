@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Infernu.Unify
-       (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL)
+       (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL, unifyPending)
        where
 
 
@@ -16,7 +16,7 @@ import           Data.Traversable     (Traversable (..))
 import           Data.Either          (rights)
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
-import           Data.Maybe           (mapMaybe, catMaybes)
+import           Data.Maybe           (catMaybes, mapMaybe)
 
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
@@ -407,26 +407,50 @@ unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 
 unifyPredsL :: Source -> [TPred Type] -> Infer [TPred Type]
 unifyPredsL a ps = catMaybes <$>
-    do  forM ps $ \p@(TPredIsIn className t) -> do
-            (Class insts) <- lookupClass className `failWithM` (throwError a $ "Unknown class: " ++ pretty className ++ " in pred list: " ++ pretty ps)
-            let unifAction scheme = do inst <- instantiate scheme >>= assertNoPred
-                                       unify a inst t
-            unifyResults <- forM insts $ \instScheme -> ((a, instScheme), ) <$> runSubInfer ((unifAction instScheme) >> getState)
-            case rights $ map snd unifyResults of
-                []         -> throwError a $ concat ["Could not find matching instance of "
-                                                    , pretty className
-                                                    , " for type "
-                                                    , pretty t
-                                                    , ", errors include: "
-                                                    , intercalate "\n" $ map pretty $ map snd unifyResults ]
-                [newState] -> do setState newState
-                                 traceLog $ "Predicate unification can remove pred: " ++ pretty p
-                                 return Nothing 
-                _          -> do traceLog "TODO: handle this! need to remember pending unifications"
-                                 forM_ unifyResults $ (\(scheme', res) ->
-                                                       do case res of
-                                                              Left _ -> return ()
-                                                              Right _ -> addPendingUnification (scheme', t))
-                                 return $ Just p
-        
-        -- return $ Set.toList $ Set.fromList $ ps
+    do  forM ps $ \p@(TPredIsIn className t) ->
+                      do  entry <- ((a,t,) . (className,) . Set.fromList . classInstances) <$> lookupClass className
+                                   `failWithM` (throwError a $ "Unknown class: " ++ pretty className ++ " in pred list: " ++ pretty ps)
+                          remainingAmbiguities <- unifyAmbiguousEntry entry
+                          case remainingAmbiguities of
+                              Nothing -> return $ Nothing
+                              Just ambig ->
+                                  do  addPendingUnification ambig
+                                      return $ Just p
+
+isRight (Right _) = True
+isRight _  = False
+             
+unifyAmbiguousEntry :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer (Maybe (Source, Type, (ClassName, Set TypeScheme)))
+unifyAmbiguousEntry (a, t, (ClassName className, tss)) = 
+    do  let unifAction ts =
+                do inst <- instantiate ts >>= assertNoPred
+                   unify a inst t
+        unifyResults <- forM (Set.toList tss) $ \instScheme -> (instScheme, ) <$> runSubInfer ((unifAction instScheme) >> getState)
+        let survivors = filter (isRight . snd) unifyResults
+        case rights $ map snd survivors of
+            []         -> throwError a $ concat ["Could not find matching instance of "
+                                                , pretty className
+                                                , " for type "
+                                                , pretty t
+                                                , ", errors include: "
+                                                , intercalate "\n" $ map pretty $ map snd unifyResults ]
+            [newState] -> setState newState >> return Nothing
+            _          -> return . Just . (\x -> (a, t, (ClassName className, x))) . Set.fromList . map fst $ survivors
+
+unifyPending :: Infer ()
+unifyPending = getPendingUnifications >>= loop
+    where loop pu =
+              do  newEntries <- forM (Set.toList pu) unifyAmbiguousEntry
+                  let pu' = Set.fromList $ catMaybes newEntries
+                  setPendingUnifications $ pu'
+                  when (pu' /= pu) $ loop pu'
+                  
+--             do  newEntries <- forM (Set.toList pu) $ \entry@((src, ts), t) ->
+--                                 do  t' <- applyMainSubst t
+--                                     let unifAction = do inst <- instantiate ts >>= assertNoPred
+--                                                         inst' <- applyMainSubst inst
+--                                                         unify src inst' t'
+--                                     result <- runSubInfer $ unifAction >> getState
+
+
+

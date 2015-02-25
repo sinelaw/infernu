@@ -14,26 +14,26 @@ module Infernu.Infer
     where
 
 
-import           Control.Monad             (foldM, forM)
-import           Data.Foldable             (Foldable (..))
-import           Data.Functor              ((<$>))
+import           Control.Monad      (foldM, forM)
+import           Data.Foldable      (Foldable (..))
+import           Data.Functor       ((<$>))
 
-import           Data.Map.Lazy             (Map)
-import qualified Data.Map.Lazy             as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
-import           Prelude                   hiding (foldr, sequence)
+import           Data.Map.Lazy      (Map)
+import qualified Data.Map.Lazy      as Map
+import           Data.Maybe         (mapMaybe)
+import           Data.Set           (Set)
+import qualified Data.Set           as Set
+import           Prelude            hiding (foldr, sequence)
 
-import Data.List (intercalate)
+import           Data.List          (intercalate)
 
-import qualified Infernu.Builtins          as Builtins
+import qualified Infernu.Builtins   as Builtins
 import           Infernu.InferState
+import           Infernu.Lib        (safeLookup)
 import           Infernu.Log
 import           Infernu.Pretty
-import           Infernu.Lib (safeLookup)
 import           Infernu.Types
-import           Infernu.Unify             (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL)
+import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyRowPropertyBiased, unifyl)
 
 
 
@@ -77,6 +77,7 @@ inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
   traceLog (">> " ++ pretty expr ++ " -- env: " ++ pretty env)
   (t, e) <- inferType' env expr
+  unifyPending
   s <- getMainSubst
   st <- getState
   traceLog (">> " ++ pretty expr ++ " -- inferred :: " ++ (pretty $ applySubst s t))
@@ -158,8 +159,8 @@ inferType' env (EAssign a n expr1 expr2) =
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
      unify a (qualType lvalueT) (qualType rvalueT)
-     (tRest, expr2') <- inferType env expr2
      instancePreds <- (unifyAllInstances a $ getQuantificands lvalueScheme)
+     (tRest, expr2') <- inferType env expr2
      preds <- unifyPredsL a $ concat $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
      let tRest' = TQual preds $ qualType tRest
      return (tRest', EAssign (a, tRest') n expr1' expr2')
@@ -265,19 +266,19 @@ inferType' env (EIndex a eArr eIdx) =
 indexAccessPred :: TVarName -> TVarName -> TVarName -> TPred Type
 indexAccessPred arrTVarName elemTVarName idxTVarName =
     let elemType = mkv elemTVarName
-        mkv = Fix . TBody . TVar 
+        mkv = Fix . TBody . TVar
     in
      TPredIsIn (ClassName "Indexable") (Fix $ TCons TTuple
                                         [ mkv arrTVarName
                                         , mkv idxTVarName
                                         , mkv elemTVarName
                                         ])
-                                          -- Fix $ TCons TArray [elemType]) 
+                                          -- Fix $ TCons TArray [elemType])
     -- , TPredIsIn "Index"
     --  `mkAnd` TPredEq idxTVarName (Fix $ TBody TNumber))
     -- `mkOr` (TPredEq arrTVarName (Fix $ TCons TStringMap [elemType])
     --         `mkAnd` TPredEq idxTVarName (Fix $ TBody TString))
-    
+
 unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do
   m <- getVarInstances
