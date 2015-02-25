@@ -111,30 +111,6 @@ setPendingUnifications ts = do
     return ()
         
 ----------------------------------------------------------------------
--- | Adds a pair of equivalent items to an equivalence map.
---
--- >>> let m1 = addEquivalence 1 2 Map.empty
--- >>> pretty m1
--- "Map (b => Set {b, c}, c => Set {b, c})"
--- >>> pretty $ addEquivalence 1 3 m1
--- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
--- >>> pretty $ addEquivalence 3 1 m1
--- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
--- >>> pretty $ addEquivalence 4 5 m1
--- "Map (b => Set {b, c}, c => Set {b, c}, e => Set {e, f}, f => Set {e, f})"
--- >>> pretty $ addEquivalence 1 4 $ addEquivalence 4 5 m1
--- "Map (b => Set {b, c, e, f}, c => Set {b, c, e, f}, e => Set {b, c, e, f}, f => Set {b, c, e, f})"
-addEquivalence :: TVarName -> TVarName -> Map TVarName (Set QualType) -> Map TVarName (Set QualType)
-addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
-    where updatedSet :: Set QualType
-          updatedSet = Set.insert (qualEmpty $ Fix $ TBody $ TVar x) . Set.insert (qualEmpty $ Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
-          getSet item = fromMaybe Set.empty $ Map.lookup item m
-          setTVars :: [TVarName]
-          setTVars = mapVarNames' $ Set.toList updatedSet
-          mapVarNames' :: [QualType] -> [TVarName]
-          mapVarNames' [] = []
-          mapVarNames' (TQual _ (Fix (TBody (TVar n))) : ts) = n : mapVarNames' ts
-          mapVarNames' (_:ts) = mapVarNames' ts
 
 
 addVarInstance :: TVarName -> TVarName -> Infer ()

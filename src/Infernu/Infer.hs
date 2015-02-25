@@ -77,7 +77,7 @@ inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
   traceLog (">> " ++ pretty expr ++ " -- env: " ++ pretty env)
   (t, e) <- inferType' env expr
-  unifyPending
+--  unifyPending
   s <- getMainSubst
   st <- getState
   traceLog (">> " ++ pretty expr ++ " -- inferred :: " ++ (pretty $ applySubst s t))
@@ -154,13 +154,17 @@ inferType' env (ELet a n e1 e2) =
      return (resT, ELet (a, resT) n e1' e2')
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
-inferType' env (EAssign a n expr1 expr2) =
-  do lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
+inferType' env expr@(EAssign a n expr1 expr2) =
+  do traceLog $ "EAssign: " ++ pretty expr
+     lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
+     traceLog $ "EAssign lvalueScheme: " ++ pretty lvalueScheme
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
      unify a (qualType lvalueT) (qualType rvalueT)
-     instancePreds <- (unifyAllInstances a $ getQuantificands lvalueScheme)
      (tRest, expr2') <- inferType env expr2
+     traceLog $ "EAssign lvalueT: " ++ pretty lvalueT
+     traceLog $ "EAssign Invoking unifyAllInstances on scheme: " ++ pretty lvalueScheme
+     instancePreds <- (unifyAllInstances a $ getQuantificands lvalueScheme)
      preds <- unifyPredsL a $ concat $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
      let tRest' = TQual preds $ qualType tRest
      return (tRest', EAssign (a, tRest') n expr1' expr2')

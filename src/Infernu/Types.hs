@@ -50,6 +50,7 @@ module Infernu.Types
        , singletonSubst
        , VarId(..)
        , NameSource(..)
+       , addEquivalence
        , VarNames(freeTypeVars, mapVarNames)
        , EPropName
 #ifdef QUICKCHECK
@@ -425,9 +426,7 @@ instance VarNames t => VarNames (TScheme t) where
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
 instance Substable t => Substable (TScheme t) where
-  -- | When subsituting on a TScheme, we allow replacing quantified vars!
-  -- (i.e. we don't do (foldr Map.delete s qvars) $ applySubst t)
-  applySubst s (TScheme qvars t) = TScheme qvars (applySubst s t)
+  applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 
 newtype VarId = VarId Int
@@ -508,8 +507,38 @@ instance VarNames InferState where
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
                        , mainSubst = s `composeSubst` (mainSubst is)
-                       , varInstances = Map.fromList $ map (\(k,v) -> (k, (applySubst s v) `Set.union` v)) $ Map.assocs $ varInstances is }
-
+                       , varInstances = Map.fromList $ concatMap (\(k,v) -> entries k v) $ Map.assocs $ varInstances is }
+      where updatedSet v = (applySubst s v) `Set.union` v
+            entries k v = (k, v') : (map (, v') $ substedKeyEntries k)
+                          where v' = updatedSet v
+            substedKeyEntries k = case applySubst s (Fix $ TBody $ TVar k) of
+                                      Fix (TBody (TVar m)) -> if m == k then [] else [m]
+                                      _ -> []
+            
+-- | Adds a pair of equivalent items to an equivalence map.
+--
+-- >>> let m1 = addEquivalence 1 2 Map.empty
+-- >>> pretty m1
+-- "Map (b => Set {b, c}, c => Set {b, c})"
+-- >>> pretty $ addEquivalence 1 3 m1
+-- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
+-- >>> pretty $ addEquivalence 3 1 m1
+-- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
+-- >>> pretty $ addEquivalence 4 5 m1
+-- "Map (b => Set {b, c}, c => Set {b, c}, e => Set {e, f}, f => Set {e, f})"
+-- >>> pretty $ addEquivalence 1 4 $ addEquivalence 4 5 m1
+-- "Map (b => Set {b, c, e, f}, c => Set {b, c, e, f}, e => Set {b, c, e, f}, f => Set {b, c, e, f})"
+addEquivalence :: TVarName -> TVarName -> Map.Map TVarName (Set.Set QualType) -> Map.Map TVarName (Set.Set QualType)
+addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
+    where updatedSet :: Set.Set QualType
+          updatedSet = Set.insert (qualEmpty $ Fix $ TBody $ TVar x) . Set.insert (qualEmpty $ Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
+          getSet item = fromMaybe Set.empty $ Map.lookup item m
+          setTVars :: [TVarName]
+          setTVars = mapVarNames' $ Set.toList updatedSet
+          mapVarNames' :: [QualType] -> [TVarName]
+          mapVarNames' [] = []
+          mapVarNames' (TQual _ (Fix (TBody (TVar n))) : ts) = n : mapVarNames' ts
+          mapVarNames' (_:ts) = mapVarNames' ts
 
 
 
