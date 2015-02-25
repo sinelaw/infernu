@@ -114,12 +114,16 @@ setPendingUnifications ts = do
 -- | Adds a pair of equivalent items to an equivalence map.
 --
 -- >>> let m1 = addEquivalence 1 2 Map.empty
--- >>> m1
--- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]
--- >>> addEquivalence 1 3 m1
--- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(3,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])]
--- >>> addEquivalence 3 1 m1
--- fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]),(3,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])]
+-- >>> pretty m1
+-- "Map (b => Set {b, c}, c => Set {b, c})"
+-- >>> pretty $ addEquivalence 1 3 m1
+-- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
+-- >>> pretty $ addEquivalence 3 1 m1
+-- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
+-- >>> pretty $ addEquivalence 4 5 m1
+-- "Map (b => Set {b, c}, c => Set {b, c}, e => Set {e, f}, f => Set {e, f})"
+-- >>> pretty $ addEquivalence 1 4 $ addEquivalence 4 5 m1
+-- "Map (b => Set {b, c, e, f}, c => Set {b, c, e, f}, e => Set {b, c, e, f}, f => Set {b, c, e, f})"
 addEquivalence :: TVarName -> TVarName -> Map TVarName (Set QualType) -> Map TVarName (Set QualType)
 addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
     where updatedSet :: Set QualType
