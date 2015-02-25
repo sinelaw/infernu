@@ -75,9 +75,12 @@ accumInfer env =
 
 inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
-  traceLog (">> " ++ pretty expr)
+  traceLog (">> " ++ pretty expr ++ " -- env: " ++ pretty env)
   (t, e) <- inferType' env expr
   s <- getMainSubst
+  st <- getState
+  traceLog (">> " ++ pretty expr ++ " -- inferred :: " ++ (pretty $ applySubst s t))
+  traceLog ("   infer state: " ++ prettyTab 3 st)
   return (applySubst s t, fmap (applySubst s) e)
 
 inferType' :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
@@ -193,8 +196,8 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      (tExpr1, expr1') <- inferType env expr1
      unify a (qualType tExpr1) elemType
      -- TODO: BUG here, because elemTVarName never has any var instances due to the predicates usage here.
-     (tExpr2, expr2') <- inferType env expr2
      instancePred <- unifyAllInstances a [elemTVarName]
+     (tExpr2, expr2') <- inferType env expr2
      let curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
      preds <- unifyPredsL a $ concat $ ((curPred:instancePred):) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
      let tRes = TQual preds $ qualType tExpr2
