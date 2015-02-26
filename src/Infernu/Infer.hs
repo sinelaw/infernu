@@ -77,7 +77,7 @@ inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
   traceLog (">> " ++ pretty expr ++ " -- env: " ++ pretty env)
   (t, e) <- inferType' env expr
---  unifyPending
+  unifyPending
   s <- getMainSubst
   st <- getState
   traceLog (">> " ++ pretty expr ++ " -- inferred :: " ++ (pretty $ applySubst s t))
