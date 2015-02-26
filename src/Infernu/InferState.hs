@@ -85,16 +85,15 @@ getVarScheme a n env = case getVarId n env of
                        Nothing -> throwError a $ "Unbound variable: '" ++ show n ++ "'"
                        Just varId -> getVarSchemeByVarId varId
 
-setVarScheme :: EVarName -> VarId -> TypeScheme -> Infer ()
-setVarScheme n varId scheme = do
+setVarScheme :: TypeEnv -> EVarName -> TypeScheme -> VarId -> Infer TypeEnv
+setVarScheme env n scheme varId = do
   modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ pretty n ++ ": " ++ pretty scheme) . Map.insert varId scheme $ varSchemes is }
-  return ()
+  return $ Map.insert n varId env
 
 addVarScheme :: TypeEnv -> EVarName -> TypeScheme -> Infer TypeEnv
 addVarScheme env n scheme = do
   varId <- tracePretty ("-- '" ++ pretty n ++ "' = varId") <$> freshVarId
-  setVarScheme n varId scheme
-  return $ Map.insert n varId env
+  setVarScheme env n scheme varId
 
 --addPendingUnification :: (Source, Type, (ClasSet TypeScheme) -> Infer ()
 addPendingUnification :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer ()

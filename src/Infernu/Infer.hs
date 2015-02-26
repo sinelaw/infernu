@@ -166,6 +166,11 @@ inferType' env expr@(EAssign a n expr1 expr2) =
      traceLog $ "EAssign Invoking unifyAllInstances on scheme: " ++ pretty lvalueScheme
      instancePreds <- (unifyAllInstances a $ getQuantificands lvalueScheme)
      preds <- unifyPredsL a $ concat $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
+     -- update the variable scheme, removing perhaps some quantified tvars
+     varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
+     updatedScheme <- generalize expr1 env (schemeType lvalueScheme)
+     _ <- setVarScheme env n updatedScheme varId
+     --
      let tRest' = TQual preds $ qualType tRest
      return (tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr n expr1 expr2) =
