@@ -28,5 +28,5 @@ function debounce(f, millis) {
     };
 }
 var fonce = debounce(function (x) {  return x[0]; }, 0);
-fonce(false);
+fonce('a');
 //return debounce;

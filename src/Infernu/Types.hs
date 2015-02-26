@@ -399,7 +399,7 @@ instance Substable t => Substable (TQual t) where
     applySubst s (TQual p t) = TQual (applySubst s p) (applySubst s t)
 
 instance VarNames t => VarNames (TPred t) where
-    freeTypeVars (TPredIsIn n t) = freeTypeVars t
+    freeTypeVars (TPredIsIn _ t) = freeTypeVars t
     mapVarNames f (TPredIsIn n t) = TPredIsIn n $ mapVarNames f t
 
 instance Substable t => Substable (TPred t) where
@@ -426,7 +426,13 @@ instance VarNames t => VarNames (TScheme t) where
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
 instance Substable t => Substable (TScheme t) where
-  applySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
+    applySubst = schemeForceApplySubst
+
+-- Substitution on TScheme that doesn't touch quantified variables
+schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
+
+-- Substitution on TScheme that *does* replace even quantified variables
+schemeForceApplySubst s (TScheme qvars t) = TScheme qvars (applySubst s t)
 
 
 newtype VarId = VarId Int
