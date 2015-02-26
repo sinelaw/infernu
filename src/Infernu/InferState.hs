@@ -5,7 +5,7 @@
 module Infernu.InferState
        where
 
-import           Control.Monad              (foldM, forM, forM_, liftM2)
+import           Control.Monad              (foldM, forM, forM_, liftM2, when)
 import           Control.Monad.Trans        (lift)
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify)
@@ -295,14 +295,17 @@ applySubstInfer s =
 -- :}
 -- Right (TQual {qualPred = TPredTrue, qualType = Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 1))])})
 --
-instantiate :: TypeScheme -> Infer QualType
-instantiate (TScheme tvarNames t) = do
+instantiateScheme :: Bool -> TypeScheme -> Infer QualType
+instantiateScheme shouldAddVarInstances (TScheme tvarNames t) = do
   allocNames <- forM tvarNames $ \tvName -> do
     freshName <- fresh
     return (tvName, freshName)
-  forM_ allocNames $ uncurry addVarInstance
+  when shouldAddVarInstances $ forM_ allocNames $ uncurry addVarInstance
   let replaceVar n = fromMaybe n $ lookup n allocNames
   return $ mapVarNames replaceVar t
+
+instantiate :: TypeScheme -> Infer QualType
+instantiate = instantiateScheme True
 
 instantiateVar :: Source -> EVarName -> TypeEnv -> Infer QualType
 instantiateVar a n env = do

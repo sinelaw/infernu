@@ -1,11 +1,10 @@
-// FAIL (False, valid/debounce.js:31:22): Error: Could not unify: Number with String y valid/debounce.js
-// FAIL (False, valid/indexable.js:16:6): Error: Could not unify: Number with String y valid/indexable.js
 // FAIL (False, valid/nothis-as-obj-param.js:10:7): Error: Could not unify: {f: <Dd>.(Number -> a), ..b} with Undefined y valid/nothis-as-obj-param.js
 // FAIL (False, valid/nothis-as-param.js:12:7): Error: Could not unify: {f: <Di>.(Number -> a)} with Undefined y valid/nothis-as-param.js
-ERROR y valid/object-chaining-long.js
+in return[0.0] := thiERROR y valid/object-chaining-long.js
 // FAIL (False, valid/prop-polymorphic-assign2-this.js:4:1): Error: Could not unify: forall ci. ci.(ci -> ci) with a.(b -> b) y valid/prop-polymorphic-assign2-this.js
 // FAIL (False, valid/prop-polymorphic-assign3.js:4:1): Error: Could not unify: forall bx. bx.(Number -> Number) with a.(b -> b) y valid/prop-polymorphic-assign3.js
 // FAIL (False, valid/try.js:4:5): Error: Unbound variable: "e" y valid/try.js
 // FAIL  n invalid/bug2.js
+// FAIL  n invalid/bug5.js
 // FAIL  n invalid/debounce.js
 // FAIL  n invalid/occurs.js
