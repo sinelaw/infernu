@@ -119,8 +119,8 @@ instance Pretty (FType Type) where
                 
 prettyType :: Int -> FType Type -> String
 prettyType n (TBody t) = prettyTab n t
-prettyType n (TCons TFunc ts) = wrapThis this $ args ++ " -> " ++ prettyTab n (last ts)
-  where nonThisArgs = map (prettyTab n) . drop 1 $ init ts
+prettyType n (TFunc ts tres) = wrapThis this $ args ++ " -> " ++ prettyTab n tres
+  where nonThisArgs = map (prettyTab n) . drop 1 $ ts
         (this, args) = case ts of
                 [] -> (Nothing, nakedSingleOrTuple nonThisArgs)
                 (this_:_) -> (Just this_, nakedSingleOrTuple nonThisArgs)
@@ -131,7 +131,7 @@ prettyType n (TCons TFunc ts) = wrapThis this $ args ++ " -> " ++ prettyTab n (l
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
 prettyType n (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map (prettyTab n) ts)
 prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-prettyType n (TCons (TName name) ts) = "<" ++ pretty name ++ ">" -- : " ++ (unwords $ map (prettyTab n) ts) ++ ">"
+prettyType _ (TCons (TName name) _) = "<" ++ pretty name ++ ">" -- : " ++ (unwords $ map (prettyTab n) ts) ++ ">"
 prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
 prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
 prettyType t (TRow list) = "{"
@@ -144,10 +144,10 @@ prettyType t (TRow list) = "{"
   where (props, r) = flattenRow list
 
 instance Pretty ClassName where
-    prettyTab n (ClassName c) = c
+    prettyTab _ (ClassName c) = c
                     
 instance (Pretty t) => Pretty (TPred t) where
-    prettyTab n (TPredIsIn cn t) = pretty cn ++ " " ++ pretty t
+    prettyTab _ (TPredIsIn cn t) = pretty cn ++ " " ++ pretty t
     
 instance (Pretty t) => Pretty [TPred t] where
     prettyTab n p = intercalate ", " $ map (prettyTab n) p

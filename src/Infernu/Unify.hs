@@ -11,7 +11,7 @@ import           Data.Foldable        (Foldable (..))
 import           Data.Functor         ((<$>))
 import           Data.List            (intercalate)
 import           Data.Monoid          (Monoid (..))
-import           Data.Traversable     (Traversable (..))
+-- import           Data.Traversable     (Traversable (..))
 
 import           Data.Either          (rights)
 import           Data.Map.Lazy        (Map)
@@ -234,20 +234,38 @@ unify' recurse a t1 (TCons (TName n2) targs2) =
 -- | A type constructor vs. a simple type
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' _ a t1@(TCons _ _) t2@(TBody _) = unificationError a t1 t2
+                                         
+-- | A function vs. a simple type
+unify' _ a t1@(TBody _) t2@(TFunc _ _) = unificationError a t1 t2
+unify' _ a t1@(TFunc _ _) t2@(TBody _) = unificationError a t1 t2
+
+-- | A function vs. a type constructor                                         
+unify' _ a t1@(TFunc _ _) t2@(TCons _ _) = unificationError a t1 t2
+unify' _ a t1@(TCons _ _) t2@(TFunc _ _) = unificationError a t1 t2
 
 -- | Two type constructors
--- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
-  do when (n1 /= n2) $ unificationError a t1 t2
-     case matchZip ts1 ts2 of
-      Nothing -> unificationError a t1 t2
-      Just ts -> unifyl recurse a ts
+  do  when (n1 /= n2) $ unificationError a t1 t2
+      case matchZip ts1 ts2 of
+        Nothing -> unificationError a t1 t2
+        Just ts -> unifyl recurse a ts
 
+-- | Two functions
+-- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
+unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
+  do  case matchZip ts1 ts2 of
+        Nothing -> unificationError a t1 t2
+        Just ts -> do  unifyl recurse a ts
+                       recurse a tres2 tres1
+     
 -- | Type constructor vs. row type
 unify' r a (TRow tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TCons _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
 unify' r a (TRow tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TBody _)   (TRow tRowList)  = unifyTryMakeRow r a False tRowList t1
+unify' r a (TRow tRowList) t2@(TFunc _ _)  = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TFunc _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
+
 
 -- | Two row types
 -- TODO: un-hackify!
@@ -417,6 +435,7 @@ unifyPredsL a ps = catMaybes <$>
                                   do  addPendingUnification ambig
                                       return $ Just p
 
+isRight :: Either a b -> Bool
 isRight (Right _) = True
 isRight _  = False
              

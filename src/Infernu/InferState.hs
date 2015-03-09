@@ -11,11 +11,12 @@ import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify)
 import           Data.Foldable              (Foldable (..), msum)
 import           Data.Traversable              (Traversable (..))
-
+import           Data.Monoid (mappend)
+    
 import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
-import           Data.Map.Lazy              (Map)
+-- import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
@@ -170,6 +171,7 @@ isRecParamOnly n1 typeId t1 =
    TBody _ -> Just []
    TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
+   TFunc ts tres -> (isRecParamOnly n1 Nothing) tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
    TRow rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
              case rlist' of
@@ -187,21 +189,23 @@ dropAt n (_:xs) = dropAt (n-1) xs
 
 replaceRecType :: TypeId -> TypeId -> Int -> Type -> Type
 replaceRecType typeId newTypeId indexToDrop t1 =
-  case unFix t1 of
-   TBody _ -> t1
-   TCons (TName typeId') subTs -> if typeId == typeId'
-                                  then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
-                                  else t1
-   TCons n subTs -> Fix $ TCons n $ map (replaceRecType typeId newTypeId indexToDrop) subTs
-   TRow rlist -> Fix $ TRow $ go rlist
-     where go rlist' =
-             case rlist' of
-              TRowEnd _ -> rlist'
-              TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (go rlist'')
-                  where replace' = replaceRecType typeId newTypeId indexToDrop
-              TRowRec tid ts -> if typeId == tid
-                                then TRowRec newTypeId $ dropAt indexToDrop ts
-                                else rlist'
+    let replace' = replaceRecType typeId newTypeId indexToDrop
+        mapTs' = map replace'
+    in  case unFix t1 of
+            TBody _ -> t1
+            TCons (TName typeId') subTs -> if typeId == typeId'
+                                          then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
+                                          else t1
+            TCons n subTs -> Fix $ TCons n $ mapTs' subTs
+            TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
+            TRow rlist -> Fix $ TRow $ go rlist
+             where go rlist' =
+                     case rlist' of
+                      TRowEnd _ -> rlist'
+                      TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (go rlist'')
+                      TRowRec tid ts -> if typeId == tid
+                                        then TRowRec newTypeId $ dropAt indexToDrop ts
+                                        else rlist'
 
 allocNamedType :: TVarName -> Type -> Infer Type
 allocNamedType n t =

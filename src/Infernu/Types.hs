@@ -125,7 +125,7 @@ data TBody = TVar TVarName
 newtype TypeId = TypeId TVarName
                 deriving (Show, Eq, Ord)
 
-data TConsName = TFunc | TArray | TTuple | TName TypeId | TStringMap
+data TConsName = TArray | TTuple | TName TypeId | TStringMap
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -145,6 +145,9 @@ data TRowList t = TRowProp EPropName (TScheme t) (TRowList t)
 
 data FType t = TBody TBody
              | TCons TConsName [t]
+               -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
+               -- and always wrapped in a Tuple - but are expanded to a list here for convenience
+             | TFunc [t] t 
              | TRow (TRowList t)
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
@@ -428,10 +431,12 @@ instance VarNames t => VarNames (TScheme t) where
 instance Substable t => Substable (TScheme t) where
     applySubst = schemeForceApplySubst
 
--- Substitution on TScheme that doesn't touch quantified variables
+-- | Substitution on TScheme that doesn't touch quantified variables
+schemeQApplySubst :: Substable t => TSubst -> TScheme t -> TScheme t
 schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
--- Substitution on TScheme that *does* replace even quantified variables
+-- | Substitution on TScheme that *does* replace even quantified variables
+schemeForceApplySubst :: Substable t => TSubst -> TScheme t -> TScheme t
 schemeForceApplySubst s (TScheme qvars t) = TScheme qvars (applySubst s t)
 
 
@@ -540,11 +545,11 @@ addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
           updatedSet = Set.insert (qualEmpty $ Fix $ TBody $ TVar x) . Set.insert (qualEmpty $ Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
           getSet item = fromMaybe Set.empty $ Map.lookup item m
           setTVars :: [TVarName]
-          setTVars = mapVarNames' $ Set.toList updatedSet
-          mapVarNames' :: [QualType] -> [TVarName]
-          mapVarNames' [] = []
-          mapVarNames' (TQual _ (Fix (TBody (TVar n))) : ts) = n : mapVarNames' ts
-          mapVarNames' (_:ts) = mapVarNames' ts
+          setTVars = mapVarNames'' $ Set.toList updatedSet
+          mapVarNames'' :: [QualType] -> [TVarName]
+          mapVarNames'' [] = []
+          mapVarNames'' (TQual _ (Fix (TBody (TVar n))) : ts) = n : mapVarNames'' ts
+          mapVarNames'' (_:ts) = mapVarNames'' ts
 
 
 

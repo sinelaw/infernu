@@ -102,7 +102,7 @@ inferType' env (EAbs a argNames e2) =
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
      pred' <- unifyPredsL a $ qualPred t1
-     let t = TQual pred' $ Fix $ TCons TFunc $ argTypes ++ [qualType t1]
+     let t = TQual pred' $ Fix $ TFunc argTypes (qualType t1)
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
@@ -114,7 +114,7 @@ inferType' env (EApp a e1 eArgs) =
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:tArgs
-     unify a (qualType t1) (Fix . TCons TFunc $ (map qualType tArgs) ++ [tvar])
+     unify a (qualType t1) (Fix $ TFunc (map qualType tArgs) tvar)
      traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds))
      tvar' <- do  pred' <- unifyPredsL a preds
                   tvarSubsted <- applyMainSubst tvar
@@ -130,7 +130,7 @@ inferType' env (ENew a e1 eArgs) =
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:(map fst argsTE)
-     unify a (qualType t1) (Fix . TCons TFunc $ tArgs ++ [resT])
+     unify a (qualType t1) (Fix $ TFunc tArgs resT)
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> fresh
      unify a (Fix . TRow . TRowEnd $ Just rowConstraintVar) thisT
