@@ -152,11 +152,14 @@ instance (Pretty t) => Pretty (TPred t) where
 instance (Pretty t) => Pretty [TPred t] where
     prettyTab n p = intercalate ", " $ map (prettyTab n) p
 
-instance (Pretty t) => Pretty (TQual t) where
+instance (VarNames t, Pretty t) => Pretty (TQual t) where
     prettyTab n (TQual [] t) = prettyTab n t
-    prettyTab n (TQual preds t) = prettyTab n preds ++ " => " ++ prettyTab n t
+    prettyTab n (TQual preds t) = prettyTab n preds' ++ " => " ++ prettyTab n t
+        where predsFTV = map (\p -> (freeTypeVars p, p)) preds
+              typeFTV = freeTypeVars t
+              preds' = map snd $ filter (\(ftv, p) -> not . Set.null $ ftv `Set.intersection` typeFTV) predsFTV
 
-instance (Ord t, Pretty t) => Pretty (TScheme t) where
+instance (Ord t, VarNames t, Pretty t) => Pretty (TScheme t) where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
 
@@ -187,7 +190,7 @@ instance Pretty NameSource where
 instance Pretty VarId where
   prettyTab _ = show
 
-instance (Ord t, Pretty t) => Pretty (Class t) where
+instance (Ord t, VarNames t, Pretty t) => Pretty (Class t) where
     prettyTab n c = "{ instances = [" ++ s' ++ "] }"
         where s' = intercalate ", " . map (prettyTab n) $ classInstances c
                   
