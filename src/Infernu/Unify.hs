@@ -2,34 +2,35 @@
 {-# LANGUAGE TupleSections #-}
 
 module Infernu.Unify
-       (unify, unifyAll, unifyl, unifyRowPropertyBiased, verifyPred, unifyPred, unifyPredsL)
+       (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL, unifyPending)
        where
 
-import           Control.Monad        (forM_, when, foldM)
+
+import           Control.Monad        (forM, forM_, when)
+import           Data.Foldable        (Foldable (..))
 import           Data.Functor         ((<$>))
+import           Data.List            (intercalate)
 import           Data.Monoid          (Monoid (..))
-import           Data.Traversable     (Traversable (..))
-import           Data.Foldable     (Foldable (..))
+-- import           Data.Traversable     (Traversable (..))
 
-
+import           Data.Either          (rights)
 import           Data.Map.Lazy        (Map)
 import qualified Data.Map.Lazy        as Map
-import           Data.Maybe           (mapMaybe)
+import           Data.Maybe           (catMaybes, mapMaybe)
 
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
-import           Prelude              hiding (foldr, foldl, mapM, sequence)
+import           Prelude              hiding (foldl, foldr, mapM, sequence)
 
 
 import           Infernu.BuiltinArray (arrayRowType)
 import           Infernu.BuiltinRegex (regexRowType)
 import           Infernu.Decycle
 import           Infernu.InferState
-import qualified Infernu.Pred         as Pred
+import           Infernu.Lib          (matchZip)
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Lib (matchZip)
 
 
 ----------------------------------------------------------------------
@@ -188,6 +189,11 @@ unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
   where [a, b] = minifyVars [x, y]
 
+assertNoPred :: QualType -> Infer Type
+assertNoPred q =
+    do  when (not $ null $ qualPred q) $ fail $ "Assertion failed: pred in " ++ pretty q
+        return $ qualType q
+
 -- | Main unification function
 unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 
@@ -211,35 +217,61 @@ unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
        do let unroll' n' targs' = unrollName a n' targs'
           t1' <- unroll' n1 targs1
           t2' <- unroll' n2 targs2
-          recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
+          -- TODO don't ignore qual preds...
+          mapM_ assertNoPred [t1', t2']
+          recurse a (qualType t1') (qualType t2')
 
 -- | A recursive type and another type
-unify' recurse a (TCons (TName n1) targs1) t2 = unrollName a n1 targs1 >>= \t1' -> recurse a t1' (Fix t2)
-unify' recurse a t1 (TCons (TName n2) targs2) = unrollName a n2 targs2 >>= \t2' -> recurse a (Fix t1) t2'
+unify' recurse a (TCons (TName n1) targs1) t2 =
+    unrollName a n1 targs1
+    >>= assertNoPred
+    >>= flip (recurse a) (Fix t2)
+unify' recurse a t1 (TCons (TName n2) targs2) =
+    unrollName a n2 targs2
+    >>= assertNoPred
+    >>= recurse a (Fix t1)
 
 -- | A type constructor vs. a simple type
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' _ a t1@(TCons _ _) t2@(TBody _) = unificationError a t1 t2
+                                         
+-- | A function vs. a simple type
+unify' _ a t1@(TBody _) t2@(TFunc _ _) = unificationError a t1 t2
+unify' _ a t1@(TFunc _ _) t2@(TBody _) = unificationError a t1 t2
+
+-- | A function vs. a type constructor                                         
+unify' _ a t1@(TFunc _ _) t2@(TCons _ _) = unificationError a t1 t2
+unify' _ a t1@(TCons _ _) t2@(TFunc _ _) = unificationError a t1 t2
 
 -- | Two type constructors
--- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
-  do when (n1 /= n2) $ unificationError a t1 t2
-     case matchZip ts1 ts2 of
-      Nothing -> unificationError a t1 t2
-      Just ts -> unifyl recurse a ts
+  do  when (n1 /= n2) $ unificationError a t1 t2
+      case matchZip ts1 ts2 of
+        Nothing -> unificationError a t1 t2
+        Just ts -> unifyl recurse a ts
 
+-- | Two functions
+-- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
+unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
+  do  case matchZip ts1 ts2 of
+        Nothing -> unificationError a t1 t2
+        Just ts -> do  unifyl recurse a ts
+                       recurse a tres2 tres1
+     
 -- | Type constructor vs. row type
 unify' r a (TRow tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TCons _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
 unify' r a (TRow tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TBody _)   (TRow tRowList)  = unifyTryMakeRow r a False tRowList t1
+unify' r a (TRow tRowList) t2@(TFunc _ _)  = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TFunc _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
+
 
 -- | Two row types
 -- TODO: un-hackify!
 unify' recurse a t1@(TRow row1) t2@(TRow row2) =
   if t1 == t2 then return ()
-  else do 
+  else do
      let (m2, r2) = flattenRow row2
          names2 = Set.fromList $ Map.keys m2
          (m1, r1) = flattenRow row1
@@ -296,9 +328,9 @@ unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
                              -- TODO do something with pred'
                              recurse a (qualType tprop1) (qualType tprop2)
           isSimpleScheme =
-            -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2 
+            -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
             case tprop1s of
-             TScheme [] _ _ -> True
+             TScheme [] _ -> True
              _ -> False
       -- TODO should do biased type scheme unification here
       if areEquivalentNamedTypes (crap, tprop1s) (crap, tprop2s)
@@ -365,7 +397,7 @@ getSingleton :: Set a -> Maybe a
 getSingleton s = case foldr (:) [] s of
                      [x] -> Just x
                      _ -> Nothing
-   
+
 varBind :: Source -> TVarName -> Type -> Infer ()
 varBind a n t =
   do s <- varBind' a n t
@@ -390,57 +422,54 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
 unifyAll :: Source -> [Type] -> Infer ()
 unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 
-unifyPredAnds :: Source -> Map TVarName (Set Type) -> Infer (Map TVarName (Set Type))
-unifyPredAnds a ss =
-    do  traceLog $ "unifyPredAnds: " ++ show ss
-        mapM_ (\(tv, s) -> unifyAll a $ (Fix $ TBody $ TVar tv) : Set.toList s) $ Map.assocs ss
-        applyMainSubst ss
-                   
-subUnify :: InferState -> Source -> Map TVarName (Set Type) -> Maybe (Infer (Map TVarName (Set Type)))
-subUnify s a ts = case execInferWith s $ unifyPredAnds a ts of
-    Left _ -> Nothing
-    Right s' -> Just $ return $ applySubst (mainSubst s') ts
-    
-unifyPred :: Source -> TPred Type -> TPred Type -> Infer (TPred Type)
-unifyPred a x y = do
-    traceLog ("unifyPred: " ++ pretty x ++ " ~ with ~ " ++ pretty y)
-    s <- getState
-    p <- case Pred.unify (subUnify s a) x y of
-             Nothing -> throwError a $ "Failed to unify predicates: '" ++ pretty x  ++ "'  and  '" ++ pretty y ++ "'"
-             Just predAction -> predAction
-    let canonP = Pred.splitCanon . Pred.toCanon $ p
-    unifyPredAnds a $ Pred.canonUnambiguousPreds canonP
-    case Pred.canonAmbiguousPreds canonP of
-        [] -> return $ TPredTrue
-        [singleP] -> do unifyPredAnds a singleP
-                        return $ TPredTrue
-                        --Pred.fromCanon . Pred.CanonPredOr . (:[]) <$> unifyPredAnds a singleP
-        xs -> return $ Pred.fromCanon $ Pred.CanonPredOr xs
 
-verifyPred :: Source -> TPred Type -> Infer (TPred Type)
-verifyPred a p =
-    do  s <- getMainSubst
-        traceLog ("PPP - Loaded state: " ++ pretty s)
-        let p' = Pred.fixSimplify $ substPredType s p
-            tvars = freeTypeVars p'
-            tautologyPred = Set.foldr (\v prev -> mkAnd prev (TPredEq v (Fix $ TBody $ TVar v))) TPredTrue tvars
-            currentPred = Pred.fixSimplify $ substPredType s tautologyPred
+unifyPredsL :: Source -> [TPred Type] -> Infer [TPred Type]
+unifyPredsL a ps = catMaybes <$>
+    do  forM ps $ \p@(TPredIsIn className t) ->
+                      do  entry <- ((a,t,) . (className,) . Set.fromList . classInstances) <$> lookupClass className
+                                   `failWithM` (throwError a $ "Unknown class: " ++ pretty className ++ " in pred list: " ++ pretty ps)
+                          remainingAmbiguities <- unifyAmbiguousEntry entry
+                          case remainingAmbiguities of
+                              Nothing -> return $ Nothing
+                              Just ambig ->
+                                  do  addPendingUnification ambig
+                                      return $ Just p
 
-        traceLog ("Verifying preds: substitution for input " ++ pretty p ++ " would be " ++ (pretty $ substPredType s p))
-        traceLog ("Verifying preds: " ++ pretty p' ++ " with context-pred: " ++ pretty currentPred)
-        unifyPred a p' currentPred
-            
-unifyPredsL :: Source
-               -> [TPred Type]
-               -> Infer (TPred Type)
-unifyPredsL a preds =
-    case filter (/= TPredTrue) preds of
-        [] -> return TPredTrue
-        preds1 ->
-            do preds2 <- foldM (unifyPred a) TPredTrue preds1
-               preds3 <- verifyPred a preds2
-               s <- getMainSubst
-               return $ Pred.fixSimplify $ substPredType s preds3
-       
-     
-    
+isRight :: Either a b -> Bool
+isRight (Right _) = True
+isRight _  = False
+             
+unifyAmbiguousEntry :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer (Maybe (Source, Type, (ClassName, Set TypeScheme)))
+unifyAmbiguousEntry (a, t, (ClassName className, tss)) = 
+    do  let unifAction ts =
+                do inst <- instantiateScheme False ts >>= assertNoPred
+                   unify a inst t
+        unifyResults <- forM (Set.toList tss) $ \instScheme -> (instScheme, ) <$> runSubInfer ((unifAction instScheme) >> getState)
+        let survivors = filter (isRight . snd) unifyResults
+        case rights $ map snd survivors of
+            []         -> throwError a $ concat ["Could not find matching instance of "
+                                                , pretty className
+                                                , " for type "
+                                                , pretty t
+                                                , ", errors include: "
+                                                , intercalate "\n" $ map pretty $ map snd unifyResults ]
+            [newState] -> setState newState >> return Nothing
+            _          -> return . Just . (\x -> (a, t, (ClassName className, x))) . Set.fromList . map fst $ survivors
+
+unifyPending :: Infer ()
+unifyPending = getPendingUnifications >>= loop
+    where loop pu =
+              do  newEntries <- forM (Set.toList pu) unifyAmbiguousEntry
+                  let pu' = Set.fromList $ catMaybes newEntries
+                  setPendingUnifications $ pu'
+                  when (pu' /= pu) $ loop pu'
+                  
+--             do  newEntries <- forM (Set.toList pu) $ \entry@((src, ts), t) ->
+--                                 do  t' <- applyMainSubst t
+--                                     let unifAction = do inst <- instantiate ts >>= assertNoPred
+--                                                         inst' <- applyMainSubst inst
+--                                                         unify src inst' t'
+--                                     result <- runSubInfer $ unifAction >> getState
+
+
+

@@ -26,7 +26,6 @@ library
   exposed-modules:     Infernu.Infer
                      , Infernu.Parse
                      , Infernu.Util
-                     , Infernu.Pred
                      , Infernu.Pretty
                      , Infernu.Types
                      , Infernu.Fix

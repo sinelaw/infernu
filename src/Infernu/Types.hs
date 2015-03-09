@@ -30,9 +30,9 @@ module Infernu.Types
        , liftRowTVar
        , FlatRowEnd(..)
        , TRowList(..)
+       , ClassName(..)
+       , Class(..)
        , TPred(..)
-       , mkAnd
-       , mkOr
        , TQual(..)
        , qualEmpty
        , QualType
@@ -50,6 +50,7 @@ module Infernu.Types
        , singletonSubst
        , VarId(..)
        , NameSource(..)
+       , addEquivalence
        , VarNames(freeTypeVars, mapVarNames)
        , EPropName
 #ifdef QUICKCHECK
@@ -124,7 +125,7 @@ data TBody = TVar TVarName
 newtype TypeId = TypeId TVarName
                 deriving (Show, Eq, Ord)
 
-data TConsName = TFunc | TArray | TTuple | TName TypeId | TStringMap
+data TConsName = TArray | TTuple | TName TypeId | TStringMap
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -144,13 +145,16 @@ data TRowList t = TRowProp EPropName (TScheme t) (TRowList t)
 
 data FType t = TBody TBody
              | TCons TConsName [t]
+               -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
+               -- and always wrapped in a Tuple - but are expanded to a list here for convenience
+             | TFunc [t] t 
              | TRow (TRowList t)
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type Type = Fix FType
 
 type Source = (IsGen, Pos.SourcePos)
-              
+
 data TypeError = TypeError { source :: Source, message :: String }
                deriving (Show, Eq, Ord)
 
@@ -360,31 +364,35 @@ instance Substable (TRowList Type) where
   applySubst s (TRowRec tid ts) = TRowRec tid $ applySubst s ts
 
 ----------------------------------------------------------------------
+newtype ClassName = ClassName String
+                  deriving (Show, Eq, Ord)
 
-data TPred t = TPredEq TVarName t
-             | TPredOr (TPred t) (TPred t)
-             | TPredAnd (TPred t) (TPred t)
-             | TPredTrue
+data Class t = Class { --classSupers :: [ClassName],
+                       classInstances :: [TScheme t] }
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-data TQual t = TQual { qualPred :: TPred t, qualType :: t }
+data TPred t = TPredIsIn { predClass :: ClassName, predType :: t }
+             deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+data TQual t = TQual { qualPred :: [TPred t], qualType :: t }
              deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 qualEmpty :: t -> TQual t
-qualEmpty = TQual TPredTrue
-            
+qualEmpty = TQual []
+
 type QualType = TQual Type
-                
-data TScheme t = TScheme { schemeVars :: [TVarName], schemeType :: t, schemePred :: TPred t }
+
+data TScheme t = TScheme { schemeVars :: [TVarName]
+                         , schemeType :: TQual t }
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 schemeEmpty :: t -> TScheme t
-schemeEmpty t = TScheme [] t TPredTrue
+schemeEmpty t = TScheme [] $ qualEmpty t
 
 schemeFromQual :: TQual t -> TScheme t
-schemeFromQual q = TScheme [] (qualType q) (qualPred q)
-                   
-type TypeScheme = TScheme Type 
+schemeFromQual q = TScheme [] q
+
+type TypeScheme = TScheme Type
 
 instance VarNames t => VarNames (TQual t) where
     freeTypeVars (TQual p t) = freeTypeVars p `Set.union` freeTypeVars t
@@ -392,33 +400,13 @@ instance VarNames t => VarNames (TQual t) where
 
 instance Substable t => Substable (TQual t) where
     applySubst s (TQual p t) = TQual (applySubst s p) (applySubst s t)
-                  
+
 instance VarNames t => VarNames (TPred t) where
-    freeTypeVars (TPredEq n t) = Set.insert n $ freeTypeVars t
-    freeTypeVars (TPredAnd p1 p2) = freeTypeVars p1 `Set.union` freeTypeVars p2
-    freeTypeVars (TPredOr p1 p2) = freeTypeVars p1 `Set.union` freeTypeVars p2
-    freeTypeVars TPredTrue = Set.empty
-    mapVarNames f (TPredEq n t) = TPredEq (f n) $ mapVarNames f t
-    mapVarNames f (TPredAnd p1 p2) = TPredAnd (mapVarNames f p1) (mapVarNames f p2)
-    mapVarNames f (TPredOr p1 p2) = TPredOr (mapVarNames f p1) (mapVarNames f p2)
-    mapVarNames _ TPredTrue = TPredTrue
+    freeTypeVars (TPredIsIn _ t) = freeTypeVars t
+    mapVarNames f (TPredIsIn n t) = TPredIsIn n $ mapVarNames f t
 
 instance Substable t => Substable (TPred t) where
-    applySubst s (TPredEq n t) = TPredEq n $ applySubst s t
-    applySubst s (TPredAnd p1 p2) = applySubst s p1 `TPredAnd` applySubst s p2
-    applySubst s (TPredOr p1 p2) = applySubst s p1 `TPredOr` applySubst s p2
-    applySubst _ TPredTrue = TPredTrue
-
-mkAnd :: Eq t => TPred t -> TPred t -> TPred t
-mkAnd TPredTrue y = y
-mkAnd x TPredTrue = x
-mkAnd x y = if x == y then x else TPredAnd x y
-
-
-mkOr :: Eq t => TPred t -> TPred t -> TPred t
-mkOr TPredTrue y = y
-mkOr x TPredTrue = x
-mkOr x y = if x == y then x else TPredOr x y
+    applySubst s (TPredIsIn n t) = TPredIsIn n $ applySubst s t
 
 -- | VarNames instance for TScheme
 -- >>> let sc v t = TScheme v t TPredTrue
@@ -437,13 +425,19 @@ mkOr x y = if x == y then x else TPredOr x y
 -- >>> freeTypeVars $ sc [1] (Fix $ TBody $ TNumber)
 -- fromList []
 instance VarNames t => VarNames (TScheme t) where
-  freeTypeVars (TScheme qvars t preds) = (freeTypeVars t `Set.union` freeTypeVars preds) `Set.difference` Set.fromList qvars
-  mapVarNames f (TScheme qvars t preds) = TScheme (map f qvars) (mapVarNames f t) (mapVarNames f preds)
+  freeTypeVars (TScheme qvars t) = (freeTypeVars t) `Set.difference` Set.fromList qvars
+  mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
 instance Substable t => Substable (TScheme t) where
-  -- | When subsituting on a TScheme, we allow replacing quantified vars!
-  -- (i.e. we don't do (foldr Map.delete s qvars) $ applySubst t)
-  applySubst s (TScheme qvars t preds) = TScheme qvars (applySubst s t) (applySubst s preds)
+    applySubst = schemeForceApplySubst
+
+-- | Substitution on TScheme that doesn't touch quantified variables
+schemeQApplySubst :: Substable t => TSubst -> TScheme t -> TScheme t
+schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
+
+-- | Substitution on TScheme that *does* replace even quantified variables
+schemeForceApplySubst :: Substable t => TSubst -> TScheme t -> TScheme t
+schemeForceApplySubst s (TScheme qvars t) = TScheme qvars (applySubst s t)
 
 
 newtype VarId = VarId Int
@@ -464,19 +458,56 @@ data InferState = InferState { nameSource   :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TypeScheme
                              , varInstances :: Map.Map TVarName (Set.Set QualType)
-                             , namedTypes   :: Map.Map TypeId (Type, TypeScheme) }
+                             , namedTypes   :: Map.Map TypeId (Type, TypeScheme)
+                             , classes      :: Map.Map ClassName (Class Type)
+                             , pendingUni   :: Set.Set (Source, Type, (ClassName, Set.Set TypeScheme))
+                             }
                    deriving (Show, Eq)
 
 emptyInferState :: InferState
-emptyInferState = InferState { nameSource = NameSource 0
+emptyInferState = InferState { nameSource = NameSource 2
                              , mainSubst = nullSubst
                              , varSchemes = Map.empty
                              , varInstances = Map.empty
                              , namedTypes = Map.empty
+                             , pendingUni = Set.empty
+                             , classes = Map.fromList
+                                         [ (ClassName "Indexable", Class { classInstances =
+                                                                                   [ TScheme { schemeVars = [0]
+                                                                                             , schemeType = qualEmpty
+                                                                                                            $ Fix $ TCons TTuple
+                                                                                                            [ Fix $ TCons TArray [Fix $ TBody $ TVar 0]
+                                                                                                            , Fix $ TBody TNumber
+                                                                                                            , Fix $ TBody $ TVar 0 ]
+                                                                                             }
+                                                                                   , TScheme { schemeVars = [1]
+                                                                                             , schemeType = qualEmpty
+                                                                                                            $ Fix $ TCons TTuple
+                                                                                                            [ Fix $ TCons TStringMap [Fix $ TBody $ TVar 1]
+                                                                                                            , Fix $ TBody TString
+                                                                                                            , Fix $ TBody $ TVar 1 ]
+                                                                                             }
+                                                                                   , TScheme { schemeVars = []
+                                                                                             , schemeType = qualEmpty
+                                                                                                            $ Fix $ TCons TTuple
+                                                                                                            [ Fix $ TBody TString
+                                                                                                            , Fix $ TBody TNumber
+                                                                                                            , Fix $ TBody TString ]
+                                                                                             }
+                                                                                   ] })
+                                         , (ClassName "Plus", Class { classInstances =
+                                                                              [ TScheme { schemeVars = []
+                                                                                        , schemeType = qualEmpty $ Fix $ TBody $ TNumber
+                                                                                        }
+                                                                              , TScheme { schemeVars = []
+                                                                                        , schemeType = qualEmpty $ Fix $ TBody $ TString
+                                                                                        }
+                                                                              ] })
+                                         ]
                              }
-    
+
 -- | VarNames instance for InferState
--- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, mainSubst = Map.empty, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])], namedTypes = Map.empty }
+-- >>> mapVarNames (\k -> k + 1) $ emptyInferState { varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])] }
 -- InferState {nameSource = NameSource {lastName = 0}, mainSubst = fromList [], varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])], namedTypes = fromList []}
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
@@ -487,8 +518,38 @@ instance VarNames InferState where
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
                        , mainSubst = s `composeSubst` (mainSubst is)
-                       , varInstances = Map.fromList $ map (\(k,v) -> (k, (applySubst s v) `Set.union` v)) $ Map.assocs $ varInstances is }
-
+                       , varInstances = Map.fromList $ concatMap (\(k,v) -> entries k v) $ Map.assocs $ varInstances is }
+      where updatedSet v = (applySubst s v) `Set.union` v
+            entries k v = (k, v') : (map (, v') $ substedKeyEntries k)
+                          where v' = updatedSet v
+            substedKeyEntries k = case applySubst s (Fix $ TBody $ TVar k) of
+                                      Fix (TBody (TVar m)) -> if m == k then [] else [m]
+                                      _ -> []
+            
+-- | Adds a pair of equivalent items to an equivalence map.
+--
+-- >>> let m1 = addEquivalence 1 2 Map.empty
+-- >>> pretty m1
+-- "Map (b => Set {b, c}, c => Set {b, c})"
+-- >>> pretty $ addEquivalence 1 3 m1
+-- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
+-- >>> pretty $ addEquivalence 3 1 m1
+-- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
+-- >>> pretty $ addEquivalence 4 5 m1
+-- "Map (b => Set {b, c}, c => Set {b, c}, e => Set {e, f}, f => Set {e, f})"
+-- >>> pretty $ addEquivalence 1 4 $ addEquivalence 4 5 m1
+-- "Map (b => Set {b, c, e, f}, c => Set {b, c, e, f}, e => Set {b, c, e, f}, f => Set {b, c, e, f})"
+addEquivalence :: TVarName -> TVarName -> Map.Map TVarName (Set.Set QualType) -> Map.Map TVarName (Set.Set QualType)
+addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
+    where updatedSet :: Set.Set QualType
+          updatedSet = Set.insert (qualEmpty $ Fix $ TBody $ TVar x) . Set.insert (qualEmpty $ Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
+          getSet item = fromMaybe Set.empty $ Map.lookup item m
+          setTVars :: [TVarName]
+          setTVars = mapVarNames'' $ Set.toList updatedSet
+          mapVarNames'' :: [QualType] -> [TVarName]
+          mapVarNames'' [] = []
+          mapVarNames'' (TQual _ (Fix (TBody (TVar n))) : ts) = n : mapVarNames'' ts
+          mapVarNames'' (_:ts) = mapVarNames'' ts
 
 
 
@@ -516,4 +577,3 @@ runAllTests :: IO Bool
 runAllTests = $(quickCheckAll)
 
 #endif
-

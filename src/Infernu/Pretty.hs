@@ -3,7 +3,6 @@ module Infernu.Pretty where
 
 
 import           Infernu.Types
-import qualified Infernu.Pred as Pred
 
     
 import           Data.Char       (chr, ord)
@@ -120,8 +119,8 @@ instance Pretty (FType Type) where
                 
 prettyType :: Int -> FType Type -> String
 prettyType n (TBody t) = prettyTab n t
-prettyType n (TCons TFunc ts) = wrapThis this $ args ++ " -> " ++ prettyTab n (last ts)
-  where nonThisArgs = map (prettyTab n) . drop 1 $ init ts
+prettyType n (TFunc ts tres) = wrapThis this $ args ++ " -> " ++ prettyTab n tres
+  where nonThisArgs = map (prettyTab n) . drop 1 $ ts
         (this, args) = case ts of
                 [] -> (Nothing, nakedSingleOrTuple nonThisArgs)
                 (this_:_) -> (Just this_, nakedSingleOrTuple nonThisArgs)
@@ -132,7 +131,7 @@ prettyType n (TCons TFunc ts) = wrapThis this $ args ++ " -> " ++ prettyTab n (l
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
 prettyType n (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map (prettyTab n) ts)
 prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-prettyType n (TCons (TName name) ts) = "<" ++ pretty name ++ ">" -- : " ++ (unwords $ map (prettyTab n) ts) ++ ">"
+prettyType _ (TCons (TName name) _) = "<" ++ pretty name ++ ">" -- : " ++ (unwords $ map (prettyTab n) ts) ++ ">"
 prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
 prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
 prettyType t (TRow list) = "{"
@@ -144,36 +143,21 @@ prettyType t (TRow list) = "{"
                           ++ "}"
   where (props, r) = flattenRow list
 
-instance (Ord t, Pretty t) => Pretty (TPred t) where
-    prettyTab n = prettyPred n . Pred.fixSimplify
+instance Pretty ClassName where
+    prettyTab _ (ClassName c) = c
+                    
+instance (Pretty t) => Pretty (TPred t) where
+    prettyTab _ (TPredIsIn cn t) = pretty cn ++ " " ++ pretty t
     
-prettyPred :: (Pretty a, Ord a) => Int -> TPred a -> [Char]
-prettyPred n (TPredEq v t) = prettyTab n v ++ " = " ++ prettyTab n t
-prettyPred n (TPredOr p1 p2) = "(" ++ prettyTab n p1 ++ " | " ++ prettyTab n p2 ++ ")"
-prettyPred n (TPredAnd p1 p2) = "(" ++ prettyTab n p1 ++ " & " ++ prettyTab n p2 ++ ")"
-prettyPred _ (TPredTrue) = "True"
-
-instance (Ord t, Pretty t) => Pretty [TPred t] where
+instance (Pretty t) => Pretty [TPred t] where
     prettyTab n p = intercalate ", " $ map (prettyTab n) p
 
-predsStr :: (Ord t, Pretty t) => Int -> TPred t -> String
-predsStr n preds =
-    case preds of
-        TPredTrue -> ""
-        p -> prettyTab n p ++ " => "
-
-instance (Eq t, Ord t, VarNames t, Pretty t) => Pretty (TQual t) where
-    prettyTab n (TQual preds t) = (predsStr n $ removeUnusedTVars (freeTypeVars t) preds) ++ prettyTab n t
-
--- TODO remove Eq t constraint and add global unification for preds
-removeUnusedTVars :: (VarNames t, Eq t) => Set.Set TVarName -> TPred t -> TPred t
-removeUnusedTVars tvars p@(TPredEq n _) = if n `Set.member` tvars then p else TPredTrue
-removeUnusedTVars tvars (TPredAnd p1 p2) = removeUnusedTVars tvars p1 `mkAnd` removeUnusedTVars tvars p2
-removeUnusedTVars tvars (TPredOr p1 p2) = removeUnusedTVars tvars p1 `mkOr` removeUnusedTVars tvars p2
-removeUnusedTVars _ TPredTrue = TPredTrue                                 
+instance (Pretty t) => Pretty (TQual t) where
+    prettyTab n (TQual [] t) = prettyTab n t
+    prettyTab n (TQual preds t) = prettyTab n preds ++ " => " ++ prettyTab n t
 
 instance (Ord t, Pretty t) => Pretty (TScheme t) where
-  prettyTab n (TScheme vars t preds) = predsStr n preds ++ forall ++ prettyTab n t
+  prettyTab n (TScheme vars t) = forall ++ prettyTab n t
       where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
 
 instance (Pretty a, Pretty b) => Pretty (Either a b) where
@@ -203,12 +187,18 @@ instance Pretty NameSource where
 instance Pretty VarId where
   prettyTab _ = show
 
+instance (Ord t, Pretty t) => Pretty (Class t) where
+    prettyTab n c = "{ instances = [" ++ s' ++ "] }"
+        where s' = intercalate ", " . map (prettyTab n) $ classInstances c
+                  
 instance Pretty InferState where
-  prettyTab t (InferState ns sub vs vi tn) = "InferState { nameSource: "
+  prettyTab t (InferState ns sub vs vi tn cs pu) = "InferState { nameSource: "
                                              ++ pretty ns ++ newline
                                              ++ ", subst: " ++ pretty sub ++ newline
                                              ++ ", varSchemes: " ++ pretty vs ++ newline
                                              ++ ", varInstances: " ++ pretty vi ++ newline
                                              ++ ", namedTypes: " ++ pretty tn ++ newline
+                                             ++ ", pendingUni: " ++ pretty pu ++ newline
+                                             ++ ", classes: " ++ pretty cs ++ newline
                                              ++ "}"
     where newline = "\n" ++ tab (t+1)
