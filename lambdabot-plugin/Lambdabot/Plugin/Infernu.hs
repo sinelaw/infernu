@@ -36,5 +36,6 @@ sayType rest = case  runTypeInference . fmap Source . translate . ES3.unJavaScri
                 Right res -> case getAnnotations <$> res of
                               Left e' -> pretty e'
                               Right [] -> show "There is nothing there."
-                              Right xs -> pretty . minifyVars . snd $ head xs
+                              Right xs -> pretty . minifyVars . snd $ head $ filterGen xs
+                                  where filterGen = filter (\(Source (IsGen g, _), _) -> not g)
 
