@@ -15,7 +15,7 @@ import qualified Language.ECMAScript3.Syntax as ES3
 import           Infernu.Infer                (getAnnotations, minifyVars,
                                               pretty, runTypeInference)
 import           Infernu.Parse                (translate)
-import           Infernu.Types (IsGen(..))
+import           Infernu.Types (IsGen(..), Source(..))
 
 infernuPlugin :: Module ()
 infernuPlugin = newModule
@@ -31,7 +31,7 @@ infernuPlugin = newModule
 
 --sayType :: Monad m => String -> Cmd m ()
 sayType :: String -> String
-sayType rest = case  runTypeInference . translate . ES3.unJavaScript <$> ES3Parser.parseFromString rest of
+sayType rest = case  runTypeInference . fmap Source . translate . ES3.unJavaScript <$> ES3Parser.parseFromString rest of
                 Left e -> show e
                 Right res -> case getAnnotations <$> res of
                               Left e' -> pretty e'

@@ -45,6 +45,9 @@ instance (Pretty a, Pretty b) => Pretty [(a,b)] where
 pretty :: Pretty a => a -> String
 pretty = prettyTab 0
 
+instance Pretty Source where
+    prettyTab _ (Source (IsGen isGen, pos)) = pretty pos ++ (if isGen then "*" else "")
+         
 instance Pretty LitVal where
   prettyTab _ (LitNumber x) = show x
   prettyTab _ (LitBoolean x) = show x

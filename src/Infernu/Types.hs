@@ -10,7 +10,7 @@
 
 module Infernu.Types
        (IsGen(..)
-       , Source
+       , Source(..)
        , emptySource
        , Exp(..)
        , LitVal(..)
@@ -154,10 +154,11 @@ data FType t = TBody TBody
 
 type Type = Fix FType
 
-type Source = (IsGen, Pos.SourcePos)
+newtype Source = Source (IsGen, Pos.SourcePos)
+               deriving (Show, Eq, Ord)
 
 emptySource :: Source
-emptySource = (IsGen True, Pos.initialPos "")
+emptySource = Source (IsGen True, Pos.initialPos "")
                
 data TypeError = TypeError { source :: Source, message :: String }
                deriving (Show, Eq, Ord)

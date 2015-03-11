@@ -13,7 +13,7 @@ import           Infernu.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer                (getAnnotations, runTypeInference, minifyVars)
 import           Infernu.Pretty               (pretty)
-import           Infernu.Types                (TypeError(..), QualType, IsGen(..), Source)
+import           Infernu.Types                (TypeError(..), QualType, IsGen(..), Source(..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -28,15 +28,15 @@ indexList :: [a] -> [(Int, a)]
 indexList = zip [1..]
 
 
-checkSource :: String -> Either TypeError [((IsGen, Pos.SourcePos), QualType)]
+checkSource :: String -> Either TypeError [(Source, QualType)]
 checkSource src = case ES3Parser.parseFromString src of
-                   Left parseError -> Left $ TypeError { source = (IsGen True, Pos.initialPos "<global>"), message = show parseError }
-                   Right expr -> fmap getAnnotations $ fmap minifyVars $ runTypeInference $ translate $ ES3.unJavaScript expr
+                   Left parseError -> Left $ TypeError { source = Source (IsGen True, Pos.initialPos "<global>"), message = show parseError }
+                   Right expr -> fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap Source $ translate $ ES3.unJavaScript expr
 
-checkFiles :: [String] -> IO (Either TypeError [((IsGen, Pos.SourcePos), QualType)])
+checkFiles :: [String] -> IO (Either TypeError [(Source, QualType)])
 checkFiles fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
-  let expr' = translate $ expr
+  let expr' = fmap Source $ translate $ expr
       expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
 #ifdef TRACE
@@ -47,7 +47,7 @@ checkFiles fileNames = do
 annotatedSource :: [(Source, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unIsGen $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode
-        unIsGen :: [((IsGen, Pos.SourcePos), QualType)] -> [(Pos.SourcePos, QualType)]
-        unIsGen = map (\((_, s), q) -> (s, q))
-        filterGen = filter (\((IsGen g, _), _) -> not g)
+        unIsGen :: [(Source, QualType)] -> [(Pos.SourcePos, QualType)]
+        unIsGen = map (\(Source (_, s), q) -> (s, q))
+        filterGen = filter (\(Source (IsGen g, _), _) -> not g)
         prettyRes = Set.toList . Set.fromList . fmap (second pretty)

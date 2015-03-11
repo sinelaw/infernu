@@ -3,7 +3,7 @@ module Main (main) where
 import           Control.Monad      (forM)
 import           Infernu.Infer      (pretty)
 import           Infernu.Pretty     (Pretty (..))
-import           Infernu.Types      (QualType, Source)
+import           Infernu.Types      (QualType, Source(..))
 import           Infernu.Util
 import           System.Environment (getArgs)
 import           System.Exit        (exitFailure)
@@ -13,7 +13,7 @@ process :: Pretty a => Either a [(Source, QualType)] -> [(Pos.SourceName, [Strin
 process res sourceCodes =
   case res of
    Right ts -> Right $ concatMap (\(f, ds) -> annotatedSource (filteredTypes f ts) ds) sourceCodes
-     where filteredTypes f' ts' = filter (\((_, p), _) -> (Pos.sourceName p == f')) ts'
+     where filteredTypes f' ts' = filter (\(Source (_, p), _) -> (Pos.sourceName p == f')) ts'
    Left e -> Left $ pretty e
 
 main :: IO ()
