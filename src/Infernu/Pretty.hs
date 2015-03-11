@@ -154,10 +154,7 @@ instance (Pretty t) => Pretty [TPred t] where
 
 instance (VarNames t, Pretty t) => Pretty (TQual t) where
     prettyTab n (TQual [] t) = prettyTab n t
-    prettyTab n (TQual preds t) = prettyTab n preds' ++ " => " ++ prettyTab n t
-        where predsFTV = map (\p -> (freeTypeVars p, p)) preds
-              typeFTV = freeTypeVars t
-              preds' = map snd $ filter (\(ftv, p) -> not . Set.null $ ftv `Set.intersection` typeFTV) predsFTV
+    prettyTab n (TQual preds t) = prettyTab n preds ++ " => " ++ prettyTab n t
 
 instance (Ord t, VarNames t, Pretty t) => Pretty (TScheme t) where
   prettyTab n (TScheme vars t) = forall ++ prettyTab n t

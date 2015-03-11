@@ -11,6 +11,7 @@
 module Infernu.Types
        (IsGen(..)
        , Source
+       , emptySource
        , Exp(..)
        , LitVal(..)
        , EVarName
@@ -155,6 +156,9 @@ type Type = Fix FType
 
 type Source = (IsGen, Pos.SourcePos)
 
+emptySource :: Source
+emptySource = (IsGen True, Pos.initialPos "")
+               
 data TypeError = TypeError { source :: Source, message :: String }
                deriving (Show, Eq, Ord)
 
@@ -221,9 +225,9 @@ instance VarNames t => VarNames (TRowList t) where
 -- fromList []
 -- >>> freeTypeVars (Fix $ TBody $ TVar 0)
 -- fromList [0]
--- >>> freeTypeVars (Fix $ TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])
+-- >>> freeTypeVars (Fix $ TFunc [Fix $ TBody $ TVar 0] (Fix $ TBody $ TVar 1))
 -- fromList [0,1]
--- >>> freeTypeVars (Fix $ TCons TFunc [Fix $ TBody $ TVar 1])
+-- >>> freeTypeVars (Fix $ TFunc [] (Fix $ TBody $ TVar 1))
 -- fromList [1]
 -- >>> freeTypeVars $ (Fix $ (TRow (TRowEnd (Just $ RowTVar 3))) :: Type)
 -- fromList [3]
@@ -312,7 +316,7 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowEnd $ Just $ RowTVar 0)
 -- Fix (TRow (TRowEnd Nothing))
 -- >>> applySubst (Map.fromList [(0, Fix $ TRow $ TRowEnd Nothing)]) (Fix $ TRow $ TRowProp "bla" (schemeEmpty $ Fix $ TBody TString) (TRowEnd $ Just $ RowTVar 0))
--- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = Fix (TBody TString), schemePred = TPredTrue}) (TRowEnd Nothing)))
+-- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = TQual {qualPred = [], qualType = Fix (TBody TString)}}) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
   applySubst s ft@(Fix t) =
@@ -398,8 +402,13 @@ instance VarNames t => VarNames (TQual t) where
     freeTypeVars (TQual p t) = freeTypeVars p `Set.union` freeTypeVars t
     mapVarNames f (TQual p t) = TQual (mapVarNames f p) (mapVarNames f t)
 
-instance Substable t => Substable (TQual t) where
-    applySubst s (TQual p t) = TQual (applySubst s p) (applySubst s t)
+-- | Substable instance for TQual
+-- >>> let qt = TQual [TPredIsIn (ClassName "Bla") (Fix $ TBody (TVar 0))] (Fix $ TBody (TVar 0))
+-- >>> let s = singletonSubst 0 (Fix $ TBody TNumber)
+-- >>> applySubst s qt
+-- TQual {qualPred = [TPredIsIn {predClass = ClassName "Bla", predType = Fix (TBody TNumber)}], qualType = Fix (TBody TNumber)}
+instance (Substable t, VarNames t) => Substable (TQual t) where
+    applySubst s (TQual preds t) = TQual (applySubst s preds) (applySubst s t)
 
 instance VarNames t => VarNames (TPred t) where
     freeTypeVars (TPredIsIn _ t) = freeTypeVars t
@@ -428,15 +437,15 @@ instance VarNames t => VarNames (TScheme t) where
   freeTypeVars (TScheme qvars t) = (freeTypeVars t) `Set.difference` Set.fromList qvars
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
-instance Substable t => Substable (TScheme t) where
+instance (VarNames t, Substable t) => Substable (TScheme t) where
     applySubst = schemeForceApplySubst
 
 -- | Substitution on TScheme that doesn't touch quantified variables
-schemeQApplySubst :: Substable t => TSubst -> TScheme t -> TScheme t
+schemeQApplySubst :: (VarNames t, Substable t) => TSubst -> TScheme t -> TScheme t
 schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 -- | Substitution on TScheme that *does* replace even quantified variables
-schemeForceApplySubst :: Substable t => TSubst -> TScheme t -> TScheme t
+schemeForceApplySubst :: (VarNames t, Substable t) => TSubst -> TScheme t -> TScheme t
 schemeForceApplySubst s (TScheme qvars t) = TScheme qvars (applySubst s t)
 
 
