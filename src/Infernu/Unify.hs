@@ -371,9 +371,9 @@ instance Monoid OrBool where
 -- Just Fix (TRow (TRowEnd (Just (RowTVar 0))))
 -- >>> getSingleton $ isInsideRowType 0 (Fix (TRow $ TRowEnd (Just $ RowTVar 1)))
 -- Nothing
--- >>> getSingleton $ isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 0, Fix $ TRow $ TRowEnd (Just $ RowTVar 1)]))
+-- >>> getSingleton $ isInsideRowType 0 (Fix (TFunc [Fix $ TBody $ TVar 0] (Fix $ TRow $ TRowEnd (Just $ RowTVar 1))))
 -- Nothing
--- >>> getSingleton $ isInsideRowType 0 (Fix (TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TRow $ TRowEnd (Just $ RowTVar 0)]))
+-- >>> getSingleton $ isInsideRowType 0 (Fix (TFunc [Fix $ TBody $ TVar 1] (Fix $ TRow $ TRowEnd (Just $ RowTVar 0))))
 -- Just Fix (TRow (TRowEnd (Just (RowTVar 0))))
 isInsideRowType :: TVarName -> Type -> Set Type
 isInsideRowType n (Fix t) =
