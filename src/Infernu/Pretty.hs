@@ -122,14 +122,14 @@ instance Pretty (FType Type) where
                 
 prettyType :: Int -> FType Type -> String
 prettyType n (TBody t) = prettyTab n t
-prettyType n (TFunc ts tres) = wrapThis this $ args ++ " -> " ++ prettyTab n tres
+prettyType n (TFunc ts tres) = wrapThis this $ "(" ++ args ++ " -> " ++ prettyTab n tres ++ ")"
   where nonThisArgs = map (prettyTab n) . drop 1 $ ts
         (this, args) = case ts of
                 [] -> (Nothing, nakedSingleOrTuple nonThisArgs)
                 (this_:_) -> (Just this_, nakedSingleOrTuple nonThisArgs)
         wrapThis Nothing s = s
         wrapThis (Just (Fix (TBody TUndefined))) s = s
-        wrapThis (Just t) s = prettyTab n t ++ ".(" ++ s ++ ")"
+        wrapThis (Just t) s = prettyTab n t ++ "." ++ s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
 prettyType n (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map (prettyTab n) ts)
