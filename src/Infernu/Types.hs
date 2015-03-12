@@ -439,15 +439,19 @@ instance VarNames t => VarNames (TScheme t) where
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
 instance (VarNames t, Substable t) => Substable (TScheme t) where
-    applySubst = schemeQApplySubst --schemeForceApplySubst
+    applySubst = schemeQApplySubst -- schemeForceApplySubst
 
 -- | Substitution on TScheme that doesn't touch quantified variables
+-- Useful for normal substitution
 schemeQApplySubst :: (VarNames t, Substable t) => TSubst -> TScheme t -> TScheme t
 schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 -- | Substitution on TScheme that *does* replace even quantified variables
+-- Useful for un-generalizing mutable variables
 schemeForceApplySubst :: (VarNames t, Substable t) => TSubst -> TScheme t -> TScheme t
-schemeForceApplySubst s (TScheme qvars t) = TScheme qvars (applySubst s t)
+schemeForceApplySubst s (TScheme qvars t) = TScheme qvars' t'
+    where qvars' = Set.toList $ Set.fromList qvars `Set.intersection` (freeTypeVars t')
+          t' = applySubst s t
 
 
 newtype VarId = VarId Int

@@ -17,13 +17,14 @@ module Infernu.Infer
 import           Control.Monad      (foldM, forM)
 import           Data.Foldable      (Foldable (..))
 import           Data.Functor       ((<$>))
+import           Data.Traversable   (mapM)
 
 import           Data.Map.Lazy      (Map)
 import qualified Data.Map.Lazy      as Map
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as Set
-import           Prelude            hiding (foldr, sequence)
+import           Prelude            hiding (foldr, mapM, sequence)
 
 import           Data.List          (intercalate)
 
@@ -292,7 +293,7 @@ unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do
   m <- getVarInstances
   -- TODO suboptimal - some of the sets may be identical
-  let equivalenceSets = mapMaybe (`Map.lookup` m) tvs
+  let equivalenceSets = Set.toList . Set.fromList $ mapMaybe (`Map.lookup` m) tvs
       unifyAll' equivs =
           do  let equivsL = Set.toList equivs
               unifyAll a . tracePretty "equivalence:" $ map qualType equivsL
