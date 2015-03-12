@@ -178,7 +178,7 @@ class VarNames a where
 
 instance VarNames (TVarName) where
   freeTypeVars = Set.singleton
-  mapVarNames f x = f x
+  mapVarNames f = f
 
 instance VarNames (TBody) where
   mapVarNames f (TVar x) = TVar $ f x
@@ -258,7 +258,7 @@ instance VarNames (FType (Fix FType)) where
 
 ----------------------------------------------------------------------
 
-type TSubst = Map.Map TVarName (Type)
+type TSubst = Map.Map TVarName Type
 
 nullSubst :: TSubst
 nullSubst = Map.empty
@@ -324,7 +324,7 @@ instance Substable Type where
     case t of
      TBody (TVar n) -> substT' n t
      TRow r -> Fix $ TRow $ applySubst s r
-     _ -> if ft `elem` (Map.elems s)
+     _ -> if ft `elem` Map.elems s
           then ft
           else Fix $ fmap (applySubst s) t
      where substT' n defaultT = fromMaybe (Fix defaultT) $ Map.lookup n s
@@ -395,7 +395,7 @@ schemeEmpty :: t -> TScheme t
 schemeEmpty t = TScheme [] $ qualEmpty t
 
 schemeFromQual :: TQual t -> TScheme t
-schemeFromQual q = TScheme [] q
+schemeFromQual = TScheme []
 
 type TypeScheme = TScheme Type
 
@@ -435,7 +435,7 @@ instance Substable t => Substable (TPred t) where
 -- >>> freeTypeVars $ sc [1] (Fix $ TBody $ TNumber)
 -- fromList []
 instance VarNames t => VarNames (TScheme t) where
-  freeTypeVars (TScheme qvars t) = (freeTypeVars t) `Set.difference` Set.fromList qvars
+  freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
 instance (VarNames t, Substable t) => Substable (TScheme t) where
@@ -450,7 +450,7 @@ schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.de
 -- Useful for un-generalizing mutable variables
 schemeForceApplySubst :: (VarNames t, Substable t) => TSubst -> TScheme t -> TScheme t
 schemeForceApplySubst s (TScheme qvars t) = TScheme qvars' t'
-    where qvars' = Set.toList $ Set.fromList qvars `Set.intersection` (freeTypeVars t')
+    where qvars' = Set.toList $ Set.fromList qvars `Set.intersection` freeTypeVars t'
           t' = applySubst s t
 
 
@@ -511,10 +511,10 @@ emptyInferState = InferState { nameSource = NameSource 2
                                                                                    ] })
                                          , (ClassName "Plus", Class { classInstances =
                                                                               [ TScheme { schemeVars = []
-                                                                                        , schemeType = qualEmpty $ Fix $ TBody $ TNumber
+                                                                                        , schemeType = qualEmpty $ Fix $ TBody TNumber
                                                                                         }
                                                                               , TScheme { schemeVars = []
-                                                                                        , schemeType = qualEmpty $ Fix $ TBody $ TString
+                                                                                        , schemeType = qualEmpty $ Fix $ TBody TString
                                                                                         }
                                                                               ] })
                                          ]
@@ -531,11 +531,11 @@ instance VarNames InferState where
 
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
-                       , mainSubst = s `composeSubst` (mainSubst is)
-                       , varInstances = Map.fromList $ concatMap (\(k,v) -> entries k v) $ Map.assocs $ varInstances is }
-      where updatedSet v = (applySubst s v) `Set.union` v
-            entries k v = (k, v') : (map (, v') $ substedKeyEntries k)
-                          where v' = updatedSet v
+                       , mainSubst = s `composeSubst` mainSubst is
+                       , varInstances = Map.fromList $ concatMap entries $ Map.assocs $ varInstances is }
+      where updatedSet v = applySubst s v `Set.union` v
+            entries (k, v) = (k, v') : map (, v') (substedKeyEntries k)
+                where v' = updatedSet v
             substedKeyEntries k = case applySubst s (Fix $ TBody $ TVar k) of
                                       Fix (TBody (TVar m)) -> if m == k then [] else [m]
                                       _ -> []

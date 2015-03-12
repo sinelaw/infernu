@@ -81,7 +81,7 @@ inferType env expr = do
   unifyPending
   s <- getMainSubst
   st <- getState
-  traceLog (">> " ++ pretty expr ++ " -- inferred :: " ++ (pretty $ applySubst s t))
+  traceLog (">> " ++ pretty expr ++ " -- inferred :: " ++ pretty (applySubst s t))
   traceLog ("   infer state: " ++ prettyTab 3 st)
   return (applySubst s t, fmap (applySubst s) e)
 
@@ -91,7 +91,7 @@ inferType' _ (ELit a lit) = do
                     LitNumber _ -> TNumber
                     LitBoolean _ -> TBoolean
                     LitString _ -> TString
-                    LitRegex _ _ _ -> TRegex
+                    LitRegex{} -> TRegex
                     LitUndefined -> TUndefined
                     LitNull -> TNull
   return (qualEmpty t, ELit (a, qualEmpty t) lit)
@@ -108,15 +108,15 @@ inferType' env (EAbs a argNames e2) =
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
      (t1, e1') <- inferType env e1
-     traceLog ("EApp: Inferred type for func expr: " ++ pretty t1)
+     traceLog $ "EApp: Inferred type for func expr: " ++ pretty t1
      argsTE <- accumInfer env eArgs
-     traceLog ("EApp: Inferred types for func args: " ++ (intercalate ", " $ map pretty argsTE))
+     traceLog $ "EApp: Inferred types for func args: " ++ intercalate ", " (map pretty argsTE)
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:tArgs
      unify a (qualType t1) (Fix $ TFunc (map qualType tArgs) tvar)
-     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds))
+     traceLog $ "Inferred preds: " ++ intercalate ", " (map pretty preds)
      tvar' <- do  pred' <- unifyPredsL a preds
                   tvarSubsted <- applyMainSubst tvar
                   return $ TQual pred' tvarSubsted
@@ -130,7 +130,7 @@ inferType' env (ENew a e1 eArgs) =
      let rargsTE = reverse argsTE
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
-         preds = concatMap qualPred $ t1:(map fst argsTE)
+         preds = concatMap qualPred $ t1 : map fst argsTE
      unify a (qualType t1) (Fix $ TFunc tArgs resT)
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> fresh
@@ -165,7 +165,7 @@ inferType' env expr@(EAssign a n expr1 expr2) =
      (tRest, expr2') <- inferType env expr2
      traceLog $ "EAssign lvalueT: " ++ pretty lvalueT
      traceLog $ "EAssign Invoking unifyAllInstances on scheme: " ++ pretty lvalueScheme
-     instancePreds <- (unifyAllInstances a $ getQuantificands lvalueScheme)
+     instancePreds <- unifyAllInstances a $ getQuantificands lvalueScheme
      preds <- unifyPredsL a $ concat $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
      -- update the variable scheme, removing perhaps some quantified tvars
      varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
@@ -201,9 +201,9 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      idxTVarName <- fresh
      let elemType = Fix . TBody . TVar $ elemTVarName
 --     unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
-     unify a (qualType tArr) $ Fix $ TBody $ TVar $ arrTVarName
+     unify a (qualType tArr) $ Fix $ TBody $ TVar arrTVarName
      (tId, eIdx') <- inferType env eIdx
-     unify a (qualType tId) $ Fix $ TBody $ TVar $ idxTVarName
+     unify a (qualType tId) $ Fix $ TBody $ TVar idxTVarName
      (tExpr1, expr1') <- inferType env expr1
      unify a (qualType tExpr1) elemType
      -- TODO: BUG here, because elemTVarName never has any var instances due to the predicates usage here.
@@ -222,7 +222,7 @@ inferType' env (EArray a exprs) =
      return (t, EArray (a,t) $ map snd te)
 inferType' env (ETuple a exprs) =
   do te <- accumInfer env exprs
-     let t = TQual (concat $ map (qualPred . fst) te) $ Fix . TCons TTuple . reverse $ map (qualType . fst) te
+     let t = TQual (concatMap (qualPred . fst) te) $ Fix . TCons TTuple . reverse $ map (qualType . fst) te
      return (t, ETuple (a,t) $ map snd te)
 inferType' env (EStringMap a exprs') =
   do let exprs = map snd exprs'
@@ -239,7 +239,7 @@ inferType' env (ERow a isOpen propExprs) =
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          accumRowProp' row ((propName, propExpr), propType) =
            do ts <- generalize propExpr env propType
-              return $ TRowProp propName (ts) row
+              return $ TRowProp propName ts row
      rowType <- qualEmpty . Fix . TRow <$> foldM  accumRowProp' rowEnd' propNamesTypes
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (EIfThenElse a ePred eThen eElse) =
@@ -304,11 +304,12 @@ unifyAllInstances a tvs = do
 createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
     where allTVars :: TypeScheme -> Set TVarName
-          allTVars (TScheme qvars t) = freeTypeVars t `Set.union` (Set.fromList qvars)
+          allTVars (TScheme qvars t) = freeTypeVars t `Set.union` Set.fromList qvars
 
           addVarScheme' :: Map EVarName VarId -> (EVarName, TypeScheme) -> Infer (Map EVarName VarId)
           addVarScheme' m (name, tscheme) =
-            do allocNames <- forM (Set.toList $ allTVars tscheme) $ \tvName -> (fresh >>= return . (tvName,))
+            do allocNames <- forM (Set.toList $ allTVars tscheme)
+                             $ \tvName -> (tvName,) <$> fresh
                addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 
