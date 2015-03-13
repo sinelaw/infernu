@@ -447,7 +447,7 @@ instance VarNames t => VarNames (TScheme t) where
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
 
 instance (VarNames t, Substable t) => Substable (TScheme t) where
-    applySubst = schemeQApplySubst -- schemeForceApplySubst
+    applySubst = schemeForceApplySubst
 
 -- | Substitution on TScheme that doesn't touch quantified variables
 -- Useful for normal substitution

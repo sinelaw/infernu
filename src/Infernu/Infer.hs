@@ -208,11 +208,11 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      (tExpr1, expr1') <- inferType env expr1
      unify a (qualType tExpr1) elemType
      -- TODO: BUG here, because elemTVarName never has any var instances due to the predicates usage here.
-     traceLog "EIndexAssign - applying unifyAllInstances"
-     instancePred <- unifyAllInstances a [elemTVarName]
+     --traceLog "EIndexAssign - applying unifyAllInstances"
+     --instancePred <- unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
      let curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
-     preds <- unifyPredsL a $ concat $ ((curPred:instancePred):) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
+     preds <- unifyPredsL a $ concat $ ([curPred]:) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
      let tRes = TQual preds $ qualType tExpr2
      return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
 inferType' env (EArray a exprs) =
