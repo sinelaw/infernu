@@ -190,6 +190,7 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
           Nothing -> rank0Unify
        _ -> rank0Unify
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
+     traceLog "EPropAssign - applying unifyAllInstances"
      instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
      preds <- unifyPredsL a $ concat $ (instancePred:) $ map qualPred [objT, rvalueT, expr2T] -- TODO review
      let tRes = TQual preds $ qualType expr2T
@@ -207,6 +208,7 @@ inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
      (tExpr1, expr1') <- inferType env expr1
      unify a (qualType tExpr1) elemType
      -- TODO: BUG here, because elemTVarName never has any var instances due to the predicates usage here.
+     traceLog "EIndexAssign - applying unifyAllInstances"
      instancePred <- unifyAllInstances a [elemTVarName]
      (tExpr2, expr2') <- inferType env expr2
      let curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
@@ -292,11 +294,14 @@ indexAccessPred arrTVarName elemTVarName idxTVarName =
 unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do
   m <- getVarInstances
+  traceLog $ "unifyAllInstances: " ++ pretty a ++ " Unifying all instances of tvars: " ++ intercalate ", " (map pretty tvs)
   -- TODO suboptimal - some of the sets may be identical
   let equivalenceSets = Set.toList . Set.fromList $ mapMaybe (`Map.lookup` m) tvs
       unifyAll' equivs =
           do  let equivsL = Set.toList equivs
-              unifyAll a . tracePretty "equivalence:" $ map qualType equivsL
+                  qequivsL = map qualType equivsL
+              traceLog $ "unifyAllInstances - equivalence:" ++ pretty qequivsL
+              unifyAll a qequivsL
               return $ concatMap qualPred equivsL
   pred' <- concat <$> mapM unifyAll' equivalenceSets
   unifyPredsL a pred'

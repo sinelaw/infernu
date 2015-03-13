@@ -352,10 +352,12 @@ instantiateVar a n env = do
 -- TODO add tests for monotypes
 unsafeGeneralize :: TypeEnv -> QualType -> Infer TypeScheme
 unsafeGeneralize tenv t = do
-  s <- getMainSubst
-  let t' = applySubst s t
-  unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
-  return $ TScheme (Set.toList unboundVars) t'
+    traceLog $ "Generalizing: " ++ pretty t
+    s <- getMainSubst
+    let t' = applySubst s t
+    unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
+    traceLog $ "Generalization result: unbound vars = " ++ pretty unboundVars ++ ", type = " ++ pretty t'
+    return $ TScheme (Set.toList unboundVars) t'
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = False
