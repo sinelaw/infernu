@@ -1,7 +1,7 @@
 function f(x) { return x; }
 
-var x = 0;
+var x = { v: 0 };
 
-x = f(3);
+x.v = f(3);
 
 f('a');

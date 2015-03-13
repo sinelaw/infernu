@@ -1,7 +1,7 @@
 function f(x) { return x; }
 
-var x = 0;
+var x = [];
 
-x = f(3);
+x[0] = f(3);
 
 f('a');
