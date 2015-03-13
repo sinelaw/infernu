@@ -49,8 +49,7 @@ unify :: UnifyF
 unify = decycledUnify
 
 -- | Unifies given types, using the namedTypes from the infer state
---
--- >>> let p = Pos.initialPos "<dummy>"
+-- >>> let p = emptySource
 -- >>> let u x y = runInfer $ unify p x y >> getMainSubst
 -- >>> let du x y = unify p x y >> getMainSubst
 -- >>> let fromRight (Right x) = x
@@ -69,12 +68,12 @@ unify = decycledUnify
 -- Right (fromList [(0,Fix (TRow (TRowEnd (Just (RowTVar 1)))))])
 --
 -- >>> u (Fix $ TBody $ TVar 0) (Fix $ TRow $ TRowProp "x" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd $ Just $ RowTVar 1))
--- Right (fromList [(0,Fix (TRow (TRowProp "x" (TScheme {schemeVars = [], schemeType = Fix (TBody TNumber), schemePred = TPredTrue}) (TRowEnd (Just (RowTVar 1))))))])
+-- Right (fromList [(0,Fix (TRow (TRowProp "x" (TScheme {schemeVars = [], schemeType = TQual {qualPred = [], qualType = Fix (TBody TNumber)}}) (TRowEnd (Just (RowTVar 1))))))])
 --
 -- >>> let row1 z = (Fix $ TRow $ TRowProp "x" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd z))
 -- >>> let sCloseRow = fromRight $ u (row1 $ Just $ RowTVar 1) (row1 Nothing)
 -- >>> pretty $ applySubst sCloseRow (row1 $ Just $ RowTVar 1)
--- "{x: TNumber}"
+-- "{x: Number}"
 --
 -- Simple recursive type:
 --

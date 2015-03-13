@@ -139,14 +139,14 @@ addNamedType tid t scheme = do
 -- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (mkNamedType 0 [])) (mkNamedType 1 [], schemeEmpty (mkNamedType 1 []))
 -- True
 -- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 0 []]))
---                             (mkNamedType 1 [], schemeEmpty (Fix $ TCons TFunc [Fix $ TBody TNumber, mkNamedType 1 []]))
+--     areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TFunc [Fix $ TBody TNumber] (mkNamedType 0 [])))
+--                             (mkNamedType 1 [], schemeEmpty (Fix $ TFunc [Fix $ TBody TNumber] (mkNamedType 1 [])))
 -- :}
 -- True
 --  
 -- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (Fix $ TCons TFunc [Fix $ TBody $ TVar 10, mkNamedType 0 [Fix $ TBody $ TVar 10]]) TPredTrue)
---                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (Fix $ TCons TFunc [Fix $ TBody $ TVar 11, mkNamedType 1 [Fix $ TBody $ TVar 11]]) TPredTrue)
+--     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 10] (mkNamedType 0 [Fix $ TBody $ TVar 10])))
+--                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 11] (mkNamedType 1 [Fix $ TBody $ TVar 11])))
 -- :}
 -- True
 replaceFixQual
@@ -273,7 +273,7 @@ unrollName a tid ts =
 --     applySubstInfer $ Map.singleton 0 (Fix $ TBody TString)
 --     varSchemes <$> get
 -- :}
--- Right (fromList [(VarId 3,TScheme {schemeVars = [0], schemeType = TQual {qualPred = [], qualType = Fix (TFunc [Fix (TBody TString)] Fix (TBody (TVar 1)))}})])
+-- Right (fromList [(VarId 3,TScheme {schemeVars = [], schemeType = TQual {qualPred = [], qualType = Fix (TFunc [Fix (TBody TString)] Fix (TBody (TVar 1)))}})])
 --
 applySubstInfer :: TSubst -> Infer ()
 applySubstInfer s =
@@ -341,8 +341,13 @@ instantiateVar a n env = do
 --
 -- 3. result: forall 2. 1 -> 2
 --
--- >>> runInfer $ generalize (ELit "bla" LitUndefined) Map.empty (qualEmpty $ Fix $ TFunc [Fix $ TBody (TVar 0)] (Fix $ TBody (TVar 0)))
+-- >>> let expr = ELit "foo" LitUndefined
+--
+-- >>> runInfer $ generalize expr Map.empty (qualEmpty $ Fix $ TFunc [Fix $ TBody (TVar 0)] (Fix $ TBody (TVar 0)))
 -- Right (TScheme {schemeVars = [0], schemeType = TQual {qualPred = [], qualType = Fix (TFunc [Fix (TBody (TVar 0))] Fix (TBody (TVar 0)))}})
+--
+-- >>> runInfer $ generalize expr Map.empty (TQual [TPredIsIn (ClassName "Bla") (Fix $ TBody (TVar 1))] (Fix $ TBody (TVar 0)))
+-- Right (TScheme {schemeVars = [0,1], schemeType = TQual {qualPred = [TPredIsIn {predClass = ClassName "Bla", predType = Fix (TBody (TVar 1))}], qualType = Fix (TBody (TVar 0))}})
 --
 -- TODO add tests for monotypes
 unsafeGeneralize :: TypeEnv -> QualType -> Infer TypeScheme

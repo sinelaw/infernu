@@ -419,7 +419,7 @@ instance Substable t => Substable (TPred t) where
     applySubst s (TPredIsIn n t) = TPredIsIn n $ applySubst s t
 
 -- | VarNames instance for TScheme
--- >>> let sc v t = TScheme v t TPredTrue
+-- >>> let sc v t = TScheme v (qualEmpty t)
 -- >>> freeTypeVars $ sc [0, 1] (Fix $ TBody $ TVar 2)
 -- fromList [2]
 -- >>> freeTypeVars $ sc [0, 1] (Fix $ TBody $ TVar 1)
@@ -434,6 +434,14 @@ instance Substable t => Substable (TPred t) where
 -- fromList []
 -- >>> freeTypeVars $ sc [1] (Fix $ TBody $ TNumber)
 -- fromList []
+-- >>> freeTypeVars $ TScheme [0, 1] (TQual [TPredIsIn (ClassName "Bla") (Fix $ TBody $ TVar 0)] (Fix $ TBody $ TVar 0))
+-- fromList []
+-- >>> freeTypeVars $ TScheme [0, 1] (TQual [TPredIsIn (ClassName "Bla") (Fix $ TBody $ TVar 0)] (Fix $ TBody $ TVar 2))
+-- fromList [2]
+-- >>> freeTypeVars $ TScheme [0, 1] (TQual [TPredIsIn (ClassName "Bla") (Fix $ TBody $ TVar 2)] (Fix $ TBody $ TVar 2))
+-- fromList [2]
+-- >>> freeTypeVars $ TScheme [0, 1] (TQual [TPredIsIn (ClassName "Bla") (Fix $ TBody $ TVar 2)] (Fix $ TBody $ TVar 0))
+-- fromList [2]
 instance VarNames t => VarNames (TScheme t) where
   freeTypeVars (TScheme qvars t) = freeTypeVars t `Set.difference` Set.fromList qvars
   mapVarNames f (TScheme qvars t) = TScheme (map f qvars) (mapVarNames f t)
@@ -521,8 +529,16 @@ emptyInferState = InferState { nameSource = NameSource 2
                              }
 
 -- | VarNames instance for InferState
--- >>> mapVarNames (\k -> k + 1) $ emptyInferState { varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])] }
--- InferState {nameSource = NameSource {lastName = 0}, mainSubst = fromList [], varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])], namedTypes = fromList []}
+-- >>> :{
+-- varInstances
+-- $ mapVarNames (\k -> k + 1)
+-- $ emptyInferState { varInstances = Map.fromList [ (0, Set.fromList [ qualEmpty $ Fix $ TBody $ TVar 0, qualEmpty $ Fix $ TBody $ TVar 1])
+--                                                 , (1, Set.fromList [ qualEmpty $ Fix $ TBody $ TVar 0
+--                                                                    , TQual [TPredIsIn (ClassName "Bla") (Fix $ TBody $ TVar 3)] (Fix $ TBody $ TVar 1)
+--                                                                    ])
+--                                                 ]}
+-- :}
+-- fromList [(1,fromList [TQual {qualPred = [], qualType = Fix (TBody (TVar 1))},TQual {qualPred = [], qualType = Fix (TBody (TVar 2))}]),(2,fromList [TQual {qualPred = [], qualType = Fix (TBody (TVar 1))},TQual {qualPred = [TPredIsIn {predClass = ClassName "Bla", predType = Fix (TBody (TVar 4))}], qualType = Fix (TBody (TVar 2))}])]
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is
@@ -541,7 +557,7 @@ instance Substable InferState where
                                       _ -> []
             
 -- | Adds a pair of equivalent items to an equivalence map.
---
+-- >>> import Infernu.Pretty
 -- >>> let m1 = addEquivalence 1 2 Map.empty
 -- >>> pretty m1
 -- "Map (b => Set {b, c}, c => Set {b, c})"
