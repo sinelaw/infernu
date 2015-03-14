@@ -190,9 +190,9 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
           Nothing -> rank0Unify
        _ -> rank0Unify
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
-     traceLog "EPropAssign - applying unifyAllInstances"
-     instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
-     preds <- unifyPredsL a $ concat $ (instancePred:) $ map qualPred [objT, rvalueT, expr2T] -- TODO review
+     --traceLog "EPropAssign - applying unifyAllInstances"
+     --instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
+     preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
      let tRes = TQual preds $ qualType expr2T
      return (tRes, EPropAssign (a, tRes) objExpr' n expr1' expr2')
 inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
