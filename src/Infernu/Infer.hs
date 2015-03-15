@@ -18,7 +18,7 @@ import           Control.Monad      (foldM, forM)
 import           Data.Foldable      (Foldable (..))
 import           Data.Functor       ((<$>))
 import           Data.Traversable   (mapM)
-
+import qualified Data.Graph.Inductive as Graph
 import           Data.Map.Lazy      (Map)
 import qualified Data.Map.Lazy      as Map
 import           Data.Maybe         (mapMaybe)
@@ -294,9 +294,9 @@ indexAccessPred arrTVarName elemTVarName idxTVarName =
 unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do
   m <- getVarInstances
+       
   traceLog $ "unifyAllInstances: " ++ pretty a ++ " Unifying all instances of tvars: " ++ intercalate ", " (map pretty tvs)
-  -- TODO suboptimal - some of the sets may be identical
-  let equivalenceSets = Set.toList . Set.fromList $ mapMaybe (`Map.lookup` m) tvs
+  let equivalenceSets = map Set.fromList $ filter (not . null) $ map (mapMaybe $ Graph.lab m) $ map (flip Graph.bfs m) tvs
       unifyAll' equivs =
           do  let equivsL = Set.toList equivs
                   qequivsL = map qualType equivsL

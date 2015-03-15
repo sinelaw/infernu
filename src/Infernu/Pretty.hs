@@ -10,6 +10,7 @@ import qualified Data.Char       as Char
 import qualified Data.Digits     as Digits
 import           Data.List       (intercalate)
 import qualified Data.Map.Lazy   as Map
+import qualified Data.Graph.Inductive      as Graph
 
 import qualified Data.Set        as Set
 import qualified Text.Parsec.Pos as Pos
@@ -193,6 +194,9 @@ instance Pretty VarId where
 instance (Ord t, VarNames t, Pretty t) => Pretty (Class t) where
     prettyTab n c = "{ instances = [" ++ s' ++ "] }"
         where s' = intercalate ", " . map (prettyTab n) $ classInstances c
+
+instance (Show a, Show b) => Pretty (Graph.Gr a b) where
+    prettyTab _ = Graph.prettify
                   
 instance Pretty InferState where
   prettyTab t (InferState ns sub vs vi tn cs pu) = "InferState { nameSource: "

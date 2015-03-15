@@ -63,7 +63,7 @@ import           Data.Foldable             (Foldable (..), foldr)
 import qualified Data.Map.Lazy             as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
-
+import qualified Data.Graph.Inductive      as Graph
 import           Data.Traversable          (Traversable (..))
 import           Prelude                   hiding (foldr)
 import qualified Text.Parsec.Pos           as Pos
@@ -479,7 +479,7 @@ data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TypeScheme
-                             , varInstances :: Map.Map TVarName (Set.Set QualType)
+                             , varInstances :: Graph.Gr QualType ()
                              , namedTypes   :: Map.Map TypeId (Type, TypeScheme)
                              , classes      :: Map.Map ClassName (Class Type)
                              , pendingUni   :: Set.Set (Source, Type, (ClassName, Set.Set TypeScheme))
@@ -490,7 +490,7 @@ emptyInferState :: InferState
 emptyInferState = InferState { nameSource = NameSource 2
                              , mainSubst = nullSubst
                              , varSchemes = Map.empty
-                             , varInstances = Map.empty
+                             , varInstances = Graph.empty
                              , namedTypes = Map.empty
                              , pendingUni = Set.empty
                              , classes = Map.fromList
@@ -542,19 +542,14 @@ emptyInferState = InferState { nameSource = NameSource 2
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is
-                        , varInstances = Map.fromList $ map (\(k,v) -> (f k, Set.map (mapVarNames f) v)) $ Map.assocs $ varInstances is
+                        , varInstances = Graph.nmap (mapVarNames f) $ varInstances is
                         }
 
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
                        , mainSubst = s `composeSubst` mainSubst is
-                       , varInstances = Map.fromList $ concatMap entries $ Map.assocs $ varInstances is }
-      where updatedSet v = applySubst s v `Set.union` v
-            entries (k, v) = (k, v') : map (, v') (substedKeyEntries k)
-                where v' = updatedSet v
-            substedKeyEntries k = case applySubst s (Fix $ TBody $ TVar k) of
-                                      Fix (TBody (TVar m)) -> if m == k then [] else [m]
-                                      _ -> []
+                       , varInstances = Graph.nmap (applySubst s)  $ varInstances is
+                       }
             
 -- | Adds a pair of equivalent items to an equivalence map.
 -- >>> import Infernu.Pretty
@@ -569,18 +564,11 @@ instance Substable InferState where
 -- "Map (b => Set {b, c}, c => Set {b, c}, e => Set {e, f}, f => Set {e, f})"
 -- >>> pretty $ addEquivalence 1 4 $ addEquivalence 4 5 m1
 -- "Map (b => Set {b, c, e, f}, c => Set {b, c, e, f}, e => Set {b, c, e, f}, f => Set {b, c, e, f})"
-addEquivalence :: TVarName -> TVarName -> Map.Map TVarName (Set.Set QualType) -> Map.Map TVarName (Set.Set QualType)
-addEquivalence x y m = foldr (\k m' -> Map.insert k updatedSet m') m setTVars
-    where updatedSet :: Set.Set QualType
-          updatedSet = Set.insert (qualEmpty $ Fix $ TBody $ TVar x) . Set.insert (qualEmpty $ Fix $ TBody $ TVar y) $ Set.union (getSet x) (getSet y)
-          getSet item = fromMaybe Set.empty $ Map.lookup item m
-          setTVars :: [TVarName]
-          setTVars = mapVarNames'' $ Set.toList updatedSet
-          mapVarNames'' :: [QualType] -> [TVarName]
-          mapVarNames'' [] = []
-          mapVarNames'' (TQual _ (Fix (TBody (TVar n))) : ts) = n : mapVarNames'' ts
-          mapVarNames'' (_:ts) = mapVarNames'' ts
-
+addEquivalence :: TVarName -> TVarName -> Graph.Gr QualType () -> Graph.Gr QualType ()
+addEquivalence x y gr = Graph.insEdge (x,y,()) . insTVar x . insTVar y $ gr
+    where insTVar tv g = if Graph.gelem tv g
+                         then g
+                         else Graph.insNode (tv, qualEmpty $ Fix . TBody $ TVar tv) g
 
 
 #ifdef QUICKCHECK
