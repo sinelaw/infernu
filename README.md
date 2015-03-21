@@ -84,7 +84,7 @@ Given the following function:
 	    return {data: x};
 	}
 
-Infernu infer the following type:
+Infernu infers the following type:
 
     a.(b -> {data: b})
 
