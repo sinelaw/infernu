@@ -2,13 +2,11 @@
 
 ## Overview
 
+Infernu is a type checker for JavaScript. Since JavaScript is dynamically and weakly typed, it makes no sense to talk about "type errors" in arbitrary JavaScript code. Consequently Infernu makes assumptions about the code and expects it to follow certain rules that are not required by plain JavaScript (for example, implicit coercions such as `3 + 'a'` are not allowed.)
+
 Infernu's type system is designed for writing dynamic-looking code in a safe statically type-checked environment. Type annotations are not required (though they would be nice to support, for various reasons). Instead, Infernu *infers* the types of expressions by examining the code. If the inferred types contradict each other, Infernu reports the contradiction as an error.
 
-To make type inference possible and the type system useful for detecting bugs, Infernu places restrictions on JS programs that are otherwise valid. In other words, Infernu is a **subset of JavaScript** by nature of its static type system.
-
-Fortunately, with a good type system the restriction can be small. On the other hand, unfortunately, supporting more and more dynamic idioms safely requires an increasingly complicated type system. Infernu tries to strike a balance between type system complexity and dynamic-style coding flexibility.
-
-Currently, Infernu doesn't support user-defined types. The types described later are all built-in types. They correspond to built-in JavaScript types.
+Infernu places restrictions on JS programs that are otherwise valid. In other words, Infernu is a **subset of JavaScript**. Infernu tries to strike a balance between type system complexity and dynamic-style coding flexibility.
 
 **Notation:** Concrete types are capitalized; type variables are lowercase letters (a, b, c, etc.)
 
