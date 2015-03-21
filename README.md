@@ -26,7 +26,7 @@ Polymorphism is value restricted, ML-style.
 Equi-recursive types are constrained to at least include a row type in the recursion to prevent inference of evil recursive types.
 
 
-## Example
+## Examples
 
 **Note**: An ongoing goal is to improve readability of type signatures. 
 
@@ -65,9 +65,9 @@ For example:
 
 Infernu infers:
 
-    (this: {data: TNumber, ..l} -> TNumber)
+    {data: TNumber, ..l}.(() -> TNumber)
 
-In words: a function which expects `this` to be an object with at least one property, "data" of type number. It returns a number.
+In words: a function which expects `this` to be an object with at least one property, "data" of type number. It takes no arguments (hence the empty `()`). It returns a number.
 
 If we call a function that needs `this` incorrectly, Infernu will be angry:
 
@@ -86,9 +86,9 @@ Given the following function:
 
 Infernu infer the following type:
 
-    ((this: a, b) -> {data: b})
+    a.(b -> {data: b})
 
-In words: A function that takes anything for its `this`, and an argument of any type, call it `b`. It returns an object containing a single field, `data` of the same type `b` as the argument.
+In words: A function that takes anything for its `this`, and an argument of any type `b`. It returns an object containing a single field, `data` of the same type `b` as the argument.
 
 ### Row-type polymorphism (static duck typing)
 
@@ -100,11 +100,26 @@ Given the following function:
 
 Infernu infers:
 
-    ((this: h, {data: i, ..j}) -> i)
+    h.({data: i, ..j} -> i)
 
-In words: a function taking any type for `this`, and a parameter that contains **at least one property**, named "data" that has some type `i` (could be any type). The function returns the same type `i` as the data property.
+In words: a function taking any type `h` for `this`, and a parameter that contains **at least one property**, named "data" that has some type `i` (could be any type). The function returns the same type `i` as the data property.
 
-TODO: More examples
+
+### Type Classes
+
+The basic example is for the `+` operator:
+
+    function add(x,y) { return x + y; }
+
+The type for `add` is:
+
+    Plus a => (a,a) -> a
+
+Meaning: given any type `a` that is an instance of the `Plus` type class, the function takes two `a`s and returns an `a`.
+
+The two instances of `Plus` currently defined are the types `Number` and `String`.
+
+
 
 ------------
 

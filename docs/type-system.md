@@ -39,12 +39,12 @@ Type variables represent a type that is not fully constrained to any particular 
 * Sometimes a type variable is constrained by a type class predicate, such as `Plus a => (a, a) -> a` (the type of the `+` operator). See *type classes* below.
 
 
-### Quantified vs. Unknown Type Variables
+### Polymorphic vs. Free Type Variables
 
-There are two cases were type variables are needed: 
+There are two cases where type variables are needed: 
 
-* A *quantified* type variable is **allowed to vary**. For example, a function that can take any type for its argument and returns a String, can be represented as `a -> String` but the type variable `a` must be allowed to vary. Being "allowed to vary" means: if we use this function in a way that forces `a` to be, say, the type `Number`, doesn't mean that now `a` will always be `Number`: other pieces of code can use our function in a different way, having `a` be whatever other type. A type variable such as this `a` is known as *universally quantified* (or "foralled"). The type of that function is really `forall a. a -> String`, or "given any type, call it `a`, this function will have the type `a -> String`" (Currently the pretty-printing mechanism of Infernu doesn't print out the "forall" parts).
-* A *free* (or non-quantified) type variable is used when a certain type is not known. If we add more code to the program we may end up determining what the type variable should represent, for example some type variable `b` that appears throughout the code before the change, may turn out to be a `String` due to a new line of code that uses it as such.
+* A *polymorphic* type variable is **allowed to vary**. For example, a function that can take any type for its argument and returns a String, can be represented as `a -> String` but the type variable `a` must be allowed to vary. Being "allowed to vary" means: if we use this function in a way that forces `a` to be, say, the type `Number`, doesn't mean that now `a` will always be `Number`: other pieces of code can use our function in a different way, having `a` be whatever other type. A polymorphic type variable such as this `a` is known as *universally quantified* (or "foralled"). The type of that function is really `forall a. a -> String`, or "given any type, call it `a`, this function will have the type `a -> String`" (Currently the pretty-printing mechanism of Infernu doesn't print out the "forall" parts).
+* A *free* (or non-polymorphic) type variable is used when a certain type is not known. If we add more code to the program we may end up determining what the type variable should represent, for example some type variable `b` that appears throughout the code before the change, may turn out to be a `String` due to a new line of code that uses it as such.
 
 Free type variables are not very useful, but they represent code that can be made generic (for example by wrapping it in a function).
 
