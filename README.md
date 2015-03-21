@@ -13,8 +13,11 @@ See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing
 * Full type inference: no type annotations necessary.
 * Parametric polymorphism (aka "generics"), based on Hindley-Milner type inference.
 * Row-type polymorphism, otherwise known as "static duck typing".
+* Simple type classes (which allow for example correct support of JS `+` and `[]` operators).
 * Recursive types for true representation of object-oriented methods.
 * Correct handling of JS's `this` dynamic scoping rules.
+
+For more information see [Infernu's Type System](docs/type-system.md).
 
 Support for type annotations for specifically constraining or for documentation is planned. 
 

@@ -113,7 +113,7 @@ Aside from `Plus`, Infernu also defines another type class: `Indexable`. Indexab
 
 * `Indexable ([a], Number, a)` - arrays, where the container is an array `[a]` of elements with type `a`, and the index type is `Number`.
 * `Indexable (Map a, String, a)` - string maps, where the container is a map from string to `a`, the index type is `String`, and the element type is `a`.
-* `Indexable (String, Number, String)` - strings are indexable too: the "container" is a string, the index is a number and the elements at each position are (length-1) strings (since JS has no character type: it may be interesting to add them to Infernu).
+* `Indexable (String, Number, String)` - strings are indexable too: the "container" is a string, the index is a number and the elements at each position are (single-character) strings (since JS has no character type: it may be interesting to add them to Infernu).
 
 
 ## Polymorphic methods / rank-2 row types
