@@ -139,7 +139,10 @@ TODO
 
 ## Equi-recursive types
 
+Equi-recursive types are constrained to at least include a row type in the recursion to prevent inference of evil recursive types.
+
 TODO
+
 
 <!--  LocalWords:  Damas Hindley Milner equi foralled forall Indexable
  -->

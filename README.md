@@ -19,16 +19,9 @@ See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing
 
 For more information see [Infernu's Type System](docs/type-system.md).
 
-Support for type annotations for specifically constraining or for documentation is planned. 
-
-Polymorphism is value restricted, ML-style.
-
-Equi-recursive types are constrained to at least include a row type in the recursion to prevent inference of evil recursive types.
-
+**Note**: Currently, all types are inferred. Support for type annotations for specifically constraining or for documentation is planned. 
 
 ## Examples
-
-**Note**: An ongoing goal is to improve readability of type signatures. 
 
 ### Basic
 
@@ -39,7 +32,7 @@ JavaScript:
 
 Infernu infers (for arrNums):
 
-	[TNumber]
+	[Number]
 
 That is, an array of numbers.
 
@@ -49,7 +42,7 @@ Objects:
 
 Inferred type:
 
-    {something: TString, value: TNumber}
+    {something: String, value: Number}
 
 That is, an object with two properties: 'something', of type string, and 'value' of type number.
 
@@ -65,14 +58,14 @@ For example:
 
 Infernu infers:
 
-    {data: TNumber, ..l}.(() -> TNumber)
+    {data: Number, ..l}.(() -> Number)
 
 In words: a function which expects `this` to be an object with at least one property, "data" of type number. It takes no arguments (hence the empty `()`). It returns a number.
 
 If we call a function that needs `this` incorrectly, Infernu will be angry:
 
     > useThisData();
-	Error: Could not unify: {data: TNumber, ..a} with TUndefined
+	Error: Could not unify: {data: Number, ..a} with Undefined
 
 Because we called `useThisData` without a preceding object property access (e.g. `obj.useThisData`), it will get `undefined` for `this`. Infernu is telling us that our expected type for `this` is not unifiable with the type `undefined`.
 
@@ -107,6 +100,8 @@ In words: a function taking any type `h` for `this`, and a parameter that contai
 
 ### Type Classes
 
+See [here](docs/type-system.md#type-classes) for more about Infernu's type classes.
+
 The basic example is for the `+` operator:
 
     function add(x,y) { return x + y; }
@@ -140,7 +135,7 @@ The two instances of `Plus` currently defined are the types `Number` and `String
 - [ ] add support for CommonJS modules
 - [ ] deal better with inferred polymorphic object properties - requires full rank-n unification
 
-<!--  LocalWords:  JS polymorphism Hindley Milner JS's Equi num arrNums TNumber TString getData
+<!--  LocalWords:  JS polymorphism Hindley Milner JS's Equi num arrNums Number String getData
  -->
-<!--  LocalWords:  useThisData TUndefined unifiable makeData TODO decls paren CommonJS
+<!--  LocalWords:  useThisData Undefined unifiable makeData TODO decls paren CommonJS
  -->
