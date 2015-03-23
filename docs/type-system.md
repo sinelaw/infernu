@@ -1,6 +1,6 @@
 # Infernu's Type System
 
-# EARLY DRAFT
+# EARLY DRAFT - Comments welcome (github issues or via other medium)
 
 ## Overview
 
