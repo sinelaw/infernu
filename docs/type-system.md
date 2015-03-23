@@ -1,5 +1,7 @@
 # Infernu's Type System
 
+# EARLY DRAFT
+
 ## Overview
 
 Infernu is a type checker for JavaScript. Since JavaScript is dynamically and weakly typed, it makes no sense to talk about "type errors" in arbitrary JavaScript code. Consequently Infernu makes assumptions about the code and expects it to follow certain rules that are not required by plain JavaScript (for example, implicit coercions such as `3 + 'a'` are not allowed.)
@@ -47,6 +49,21 @@ There are two cases where type variables are needed:
 * A *free* (or non-polymorphic) type variable is used when a certain type is not known. If we add more code to the program we may end up determining what the type variable should represent, for example some type variable `b` that appears throughout the code before the change, may turn out to be a `String` due to a new line of code that uses it as such.
 
 Free type variables are not very useful, but they represent code that can be made generic (for example by wrapping it in a function).
+
+### Polymorphism and Mutable Variables
+
+In short: variables that are assigned to beyond the declaration (mutable variables) are restricted to a non-polymorphic type. Also, some immutable variables are also restricted to non-polymorphic types, for example if they are declared to be an array (because an array is itself mutable).
+
+(You may skip this if you don't care about type inference details.)
+
+#### Value Restriction
+
+There is a well known difficulty in combining inference of polymorphic types with mutability (usually reference cells). In Standard ML and family (including OCaml) the issue is handled by the *value restriction*, which prevents some bindings (term variables) from being generalized to a polymorphic type. The criteria for preventing polymorphism of a binding is a simple syntactic rule (in OCaml this was elaborated, if I understand correctly).
+
+#### Immutability Assumption
+
+In Infernu, the value restriction isn't enough: unlike ML-family languages, Infernu's AST includes *mutable bindings*. In other languages bindings are actually not variables - they are immutable names of values which themselves could be mutable (such as a reference cell). In Infernu, bindings and reference cells are one and the same. Every name binding can be assigned to, hence the name "variable" is accurate. Treating all JS variables as mutable reference cells would render polymorphism degenerate: all variables would be value-restricted to monomorphic types. Instead, Infernu's type inference algorithm assumes that a variable is immutable unless it's assigned to (beyond the variable declaration). If a variable is assigned to, so that it "turns out to be mutable", we then restrict it to monomorphic types.
+
 
 ## Built-in Parameterized Types
 
