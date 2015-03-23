@@ -21,12 +21,17 @@ errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
 errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES3PP.prettyPrint expr)
 
 foldStmts :: Show a => [ES3.Statement a] -> Exp (IsGen, a) -> Exp (IsGen, a)
-foldStmts [] k = k
-foldStmts [x] k = fromStatement x k
-foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
+foldStmts [] expr = expr
+foldStmts [x] expr = fromStatement x expr
+foldStmts (x:xs) expr = fromStatement x (foldStmts xs expr)
 
+-- Doesn't carry context over from one statement to the next (good for branching)
+parallelStmts :: Show a => a -> [ES3.Statement a] -> Exp (IsGen, a) -> Exp (IsGen, a)
+parallelStmts z [] expr = expr
+parallelStmts z stmts expr = ETuple (gen z) $ expr : map (flip fromStatement $ empty z) stmts
+    
 chainExprs :: Show a => a -> Exp (IsGen, a) -> (Exp (IsGen, a) -> Exp (IsGen, a)) -> Exp (IsGen, a) -> Exp (IsGen, a)
-chainExprs a init' getK k = ELet (gen a) poo init' $ getK k
+chainExprs a init' getExpr expr = ELet (gen a) poo init' $ getExpr expr
 
 singleStmt :: Show a => a -> Exp a -> Exp a -> Exp a
 singleStmt a exp' = ELet a poo exp'
@@ -42,16 +47,18 @@ fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
 fromStatement (ES3.ExprStmt z e) = singleStmt (gen z) $ fromExpression e
 -- TODO: The if/while/do conversion is hacky
-fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ foldStmts [thenS, elseS]
+fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ parallelStmts z [thenS, elseS]
 fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement thenS
 fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
 fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
 fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
-fromStatement (ES3.TryStmt _ stmt mCatch mFinally) = foldStmts $ [stmt] ++ catchS ++ finallyS
-  where catchS = case mCatch of
-                  Just (ES3.CatchClause _ _ s) -> [s]
-                  Nothing -> []
+-- try/catch/finally are indepdendent branches that shouldn't be sharing context. catch is a like an
+-- abstraction over the (optional) exception-bound name.
+fromStatement (ES3.TryStmt z stmt mCatch mFinally) = chainExprs z catchExpr $ parallelStmts z ([stmt] ++ finallyS)
+  where catchExpr = case mCatch of
+                        Just (ES3.CatchClause _ (ES3.Id z e) s) -> EAbs (gen z) [e] (fromStatement s $ empty z)
+                        Nothing -> empty z
         finallyS = case mFinally of
                     Just f -> [f]
                     Nothing -> []
@@ -72,7 +79,7 @@ fromStatement (ES3.ForStmt z init' test increment body) = case init' of
                    Nothing -> body'
                    Just increment' -> chainExprs z (fromExpression increment') body'
 
-fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray (gen z) tests) . foldStmts $ concatMap getCaseBody cases
+fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray (gen z) tests) . parallelStmts z $ concatMap getCaseBody cases
     where tests = fromExpression switch : mapMaybe (fmap fromExpression . getCaseTest) cases
           getCaseTest (ES3.CaseDefault _ _) = Nothing
           getCaseTest (ES3.CaseClause _ test' _) = Just test'
