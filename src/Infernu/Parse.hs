@@ -167,8 +167,10 @@ fromExpression (ES3.CallExpr z expr argExprs) =
   case expr of
    ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') var propName) var
      where var = fromExpression varExpr
-   ES3.DotRef z' objExpr (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') obj propName) obj
+   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet (gen z') objVarName obj $ appExpr (Just propName) (EProp (src z') objVar propName) objVar
      where obj = fromExpression objExpr
+           objVar = EVar (gen z') objVarName
+           objVarName = "_/obj/_"
    _ -> appExpr Nothing (fromExpression expr) (ELit (gen z) LitUndefined)
   where appExpr (Just "call") _ obj = (EApp (src z) obj (map fromExpression argExprs)) -- TODO: may be wrong if object expression is not a function!
         appExpr _ funcExpr thisExpr = (EApp (src z) funcExpr (thisExpr : map fromExpression argExprs))
