@@ -6,14 +6,16 @@ import           Control.Monad               (forM, when)
 import           Data.Functor                ((<$>))
 import qualified Data.Set                    as Set
 import qualified Language.ECMAScript3.Parser as ES3Parser
+import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
 
-import           Infernu.Parse                (translate)
+import           Infernu.Options (Options(..))
+import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
-import           Infernu.Infer                (getAnnotations, runTypeInference, minifyVars)
-import           Infernu.Pretty               (pretty)
-import           Infernu.Types                (TypeError(..), QualType, IsGen(..), Source(..))
+import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
+import           Infernu.Pretty              (pretty)
+import           Infernu.Types               (IsGen (..), QualType, Source (..), TypeError (..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -31,15 +33,22 @@ indexList = zip [1..]
 checkSource :: String -> Either TypeError [(Source, QualType)]
 checkSource src = case ES3Parser.parseFromString src of
                    Left parseError -> Left $ TypeError { source = Source (IsGen True, Pos.initialPos "<global>"), message = show parseError }
-                   Right expr -> fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap Source $ translate $ ES3.unJavaScript expr
+                   Right expr -> -- case ES3.isValid expr of
+                                 --     False -> Left $ TypeError { source = Source (IsGen True, Pos.initialPos "<global>"), message = "Invalid syntax" }
+                                 --     True ->
+                                 fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap Source $ translate $ ES3.unJavaScript expr
 
-checkFiles :: Bool -> [String] -> IO (Either TypeError [(Source, QualType)])
-checkFiles showCore fileNames = do
+checkFiles :: Options -> [String] -> IO (Either TypeError [(Source, QualType)])
+checkFiles options fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   let expr' = fmap Source $ translate $ expr
       expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
-  when showCore $ putStrLn $ pretty expr'
+  case res of
+      Left _ -> return ()
+      Right _ ->
+          do  when (optShowParsed options) $ putStrLn $ show $ ES3Pretty.prettyPrint expr
+              when (optShowCore options) $ putStrLn $ pretty expr'
   return res
 
 annotatedSource :: [(Source, QualType)] -> [String] -> String

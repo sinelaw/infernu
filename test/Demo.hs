@@ -5,6 +5,7 @@ import           Data.Functor       ((<$>))
 import           Data.List          (intercalate)
 import           Infernu.Infer      (pretty)
 import           Infernu.Util       (checkFiles)
+import           Infernu.Options    (defaultOptions)
 import           System.Environment (getArgs)
 
 isRight :: Either a b -> Bool
@@ -15,7 +16,7 @@ main :: IO ()
 main = do
   args <- getArgs
   let [shouldPassS, fileName] = args
-  res <- fmap last <$> checkFiles True [fileName]
+  res <- fmap last <$> checkFiles defaultOptions [fileName]
   let shouldPass = if shouldPassS == "y" then id else not
       typeChecked = isRight res
       message = case res of
