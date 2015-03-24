@@ -41,14 +41,11 @@ checkSource src = case ES3Parser.parseFromString src of
 checkFiles :: Options -> [String] -> IO (Either TypeError [(Source, QualType)])
 checkFiles options fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
+  when (optShowParsed options) $ putStrLn $ show $ ES3Pretty.prettyPrint expr
   let expr' = fmap Source $ translate $ expr
-      expr'' = fmap minifyVars $ runTypeInference expr'
+  when (optShowCore options) $ putStrLn $ pretty expr'
+  let expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
-  case res of
-      Left _ -> return ()
-      Right _ ->
-          do  when (optShowParsed options) $ putStrLn $ show $ ES3Pretty.prettyPrint expr
-              when (optShowCore options) $ putStrLn $ pretty expr'
   return res
 
 annotatedSource :: [(Source, QualType)] -> [String] -> String
