@@ -154,14 +154,43 @@ For example, Infernu defines the built-in type class `Plus`. The types `Number` 
 
 Back to our `add` function, the type would be: `Plus a => (a, a) -> a` or "given any type `a` that is an instance of the `Plus` type class, the type of this function is `(a,a) -> a`.
 
+### Type Classes are Closed
+
+Currently all type classes in Infernu are *closed*. Every type class has a pre-determined set of instances, and no other types can be made an instance. Closed type classes are useful for inference, because they allow determining the full set of types that inhabit a given set of constraints. The `Indexable` multi-parameter type class below shows how closed type classes are useful.
+
 ### Indexable
 
-Aside from `Plus`, Infernu also defines another type class: `Indexable`. Indexable takes three parameters: the "container" type, an "index" type, and an "element" type. Instances of indexable are:
+Aside from `Plus`, Infernu also defines another type class: `Indexable`. Indexable takes three parameters: the **container** type, an **index** type, and an **element** type. Instances of indexable are:
 
 * `Indexable ([a], Number, a)` - arrays, where the container is an array `[a]` of elements with type `a`, and the index type is `Number`.
 * `Indexable (Map a, String, a)` - string maps, where the container is a map from string to `a`, the index type is `String`, and the element type is `a`.
 * `Indexable (String, Number, String)` - strings are indexable too: the "container" is a string, the index is a number and the elements at each position are (single-character) strings (since JS has no character type: it may be interesting to add them to Infernu).
 
+Example of using the bracket syntax to read:
+
+```javascript
+//Indexable (c, d, b) => a.((c, d) -> b)
+function getAt(thing, i) {
+    return thing[i];
+}
+```
+
+The bracket get expression `thing[i]` requires the three types involved (container, index, element) together to be an instance of `Indexable`.
+
+The `Indexable` type class simplifies inference because it's a *closed* type class. A somewhat contrived example:
+
+```javascript
+//a.((Map b, String) -> b)
+function getByKey(thing, key) {
+    if (key === 'timestamp') {
+        // timestamp deprecated in favor of betterTimestamp
+        return thing['betterTimestamp'];
+    }
+    return thing[key];
+}
+```
+
+Because there are only three possible instances of `Indexable` and only one of them has strings as index types (middle type parameter), Infernu can deduce the exact types involved: `thing` must be a `Map`, it cannot be an array or a string. If the `Indexable` type class wasn't closed, we would have to allow arbitrary unknown instances that may have strings as index types.
 
 ## Polymorphic methods / rank-2 row types
 
