@@ -15,7 +15,7 @@ main :: IO ()
 main = do
   args <- getArgs
   let [shouldPassS, fileName] = args
-  res <- fmap last <$> checkFiles [fileName]
+  res <- fmap last <$> checkFiles True [fileName]
   let shouldPass = if shouldPassS == "y" then id else not
       typeChecked = isRight res
       message = case res of

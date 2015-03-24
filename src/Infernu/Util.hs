@@ -2,7 +2,7 @@
 module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 
 import           Control.Arrow               (second)
-import           Control.Monad               (forM)
+import           Control.Monad               (forM, when)
 import           Data.Functor                ((<$>))
 import qualified Data.Set                    as Set
 import qualified Language.ECMAScript3.Parser as ES3Parser
@@ -33,15 +33,13 @@ checkSource src = case ES3Parser.parseFromString src of
                    Left parseError -> Left $ TypeError { source = Source (IsGen True, Pos.initialPos "<global>"), message = show parseError }
                    Right expr -> fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap Source $ translate $ ES3.unJavaScript expr
 
-checkFiles :: [String] -> IO (Either TypeError [(Source, QualType)])
-checkFiles fileNames = do
+checkFiles :: Bool -> [String] -> IO (Either TypeError [(Source, QualType)])
+checkFiles showCore fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   let expr' = fmap Source $ translate $ expr
       expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
-#ifdef TRACE
-  putStrLn $ pretty expr'
-#endif
+  when showCore $ putStrLn $ pretty expr'
   return res
 
 annotatedSource :: [(Source, QualType)] -> [String] -> String
