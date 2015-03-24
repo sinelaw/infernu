@@ -2,6 +2,36 @@
 
 # EARLY DRAFT - Comments welcome (github issues or via other medium)
 
+## Quick Summary
+
+Infernu's type system is polymorphic and structural. It is built to allow the compiler to infer all types without any annotations by the user.
+
+The type system features:
+
+* Full type inference: the most generic type is always inferred without help from the user.
+* Parametric polymorphism (aka "generics"), based on Hindley-Milner type inference.
+* Row-type polymorphism, otherwise known as "static duck typing" or structural typing.
+* Simple type classes (which allow for example correct support of JS `+` and `[]` operators), allowing for ad-hoc polymorphism.
+* Recursive types for true representation of object-oriented methods.
+* Correct handling of JS's `this` dynamic scoping rules.
+* Polymorphic "methods" are supported, so rows may have rank-2 types.
+* Mutability is not represented in the types, but affects type inference (polymorphism is restricted for mutable variables).
+
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+## Contents
+
+- [Overview](#overview)
+- [Primitive Types](#primitive-types)
+- [Generics, or Parametric Polymorphism](#generics-or-parametric-polymorphism)
+- [Type Variables](#type-variables)
+- [Built-in Parameterized Types](#built-in-parameterized-types)
+- [Functions](#functions)
+- [Row types](#row-types)
+- [Type Classes](#type-classes)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Overview
 
 Infernu is a type checker for JavaScript. Since JavaScript is dynamically and weakly typed, it makes no sense to talk about "type errors" in arbitrary JavaScript code. Consequently Infernu makes assumptions about the code and expects it to follow certain rules that are not required by plain JavaScript (for example, implicit coercions such as `3 + 'a'` are not allowed.)
