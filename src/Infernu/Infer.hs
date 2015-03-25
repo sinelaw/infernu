@@ -28,7 +28,7 @@ import           Prelude            hiding (foldr, mapM, sequence)
 
 import           Data.List          (intercalate)
 
-import qualified Infernu.Builtins   as Builtins
+import qualified Infernu.Builtins.Operators   as Operators
 import           Infernu.InferState
 import           Infernu.Lib        (safeLookup)
 import           Infernu.Log
@@ -440,5 +440,5 @@ test e = case runTypeInference e of
 
 
 runTypeInference :: Exp Source -> Either TypeError (Exp (Source, QualType))
-runTypeInference e = runInfer $ typeInference Builtins.builtins e
+runTypeInference e = runInfer $ typeInference Operators.builtins e
 

@@ -1,5 +1,5 @@
 {-# LANGUAGE TupleSections #-}
-module Infernu.BuiltinRegex
+module Infernu.Builtins.Regex
        (regexRowType)
        where
 

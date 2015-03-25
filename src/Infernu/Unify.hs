@@ -23,8 +23,9 @@ import qualified Data.Set             as Set
 import           Prelude              hiding (foldl, foldr, mapM, sequence)
 
 
-import           Infernu.BuiltinArray (arrayRowType)
-import           Infernu.BuiltinRegex (regexRowType)
+import           Infernu.Builtins.Array (arrayRowType)
+import           Infernu.Builtins.Regex (regexRowType)
+import           Infernu.Builtins.String (stringRowType)
 import           Infernu.Decycle
 import           Infernu.InferState
 import           Infernu.Lib          (matchZip)
@@ -38,6 +39,7 @@ import           Infernu.Types
 tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
 tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
 tryMakeRow (TBody TRegex) = Just <$> regexRowType
+tryMakeRow (TBody TString) = Just <$> stringRowType
 tryMakeRow _ = return Nothing
 
 ----------------------------------------------------------------------

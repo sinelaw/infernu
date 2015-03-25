@@ -23,9 +23,10 @@ flag trace
 
 library
   hs-source-dirs:      src
-  exposed-modules:   Infernu.BuiltinArray
-                     , Infernu.BuiltinRegex
-                     , Infernu.Builtins
+  exposed-modules:   Infernu.Builtins.Array
+                     , Infernu.Builtins.Operators
+                     , Infernu.Builtins.String
+                     , Infernu.Builtins.Regex
                      , Infernu.Decycle
                      , Infernu.Fix
                      , Infernu.Infer

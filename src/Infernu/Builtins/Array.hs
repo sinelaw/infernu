@@ -1,5 +1,5 @@
 {-# LANGUAGE TupleSections #-}
-module Infernu.BuiltinArray
+module Infernu.Builtins.Array
        (arrayRowType)
        where
 

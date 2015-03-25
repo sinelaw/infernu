@@ -1,4 +1,4 @@
-module Infernu.Builtins
+module Infernu.Builtins.Operators
        (builtins)
        where
 
