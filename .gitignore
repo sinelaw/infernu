@@ -14,3 +14,6 @@ cabal.sandbox.config
 
 *.dyn*
 TAGS
+docs/
+*.orig
+
