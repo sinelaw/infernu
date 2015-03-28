@@ -28,10 +28,20 @@ import           Prelude                    hiding (foldr, sequence, mapM)
 import           Infernu.Pretty
 import           Infernu.Types
 import           Infernu.Log
-
+import qualified Infernu.Builtins.TypeClasses
     
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a
+
+emptyInferState :: InferState
+emptyInferState = InferState { nameSource = NameSource 2
+                             , mainSubst = nullSubst
+                             , varSchemes = Map.empty
+                             , varInstances = Graph.empty
+                             , namedTypes = Map.empty
+                             , pendingUni = Set.empty
+                             , classes = Map.fromList Infernu.Builtins.TypeClasses.typeClasses
+                             }
 
 runInferWith :: InferState -> Infer a -> Either TypeError a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns

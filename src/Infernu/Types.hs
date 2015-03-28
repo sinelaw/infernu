@@ -25,7 +25,6 @@ module Infernu.Types
        , FType(..)
        , TypeError(..)
        , InferState(..)
-       , emptyInferState
        , RowTVar(..)
        , getRowTVar
        , liftRowTVar
@@ -486,47 +485,6 @@ data InferState = InferState { nameSource   :: NameSource
                              }
                    deriving (Show, Eq)
 
-emptyInferState :: InferState
-emptyInferState = InferState { nameSource = NameSource 2
-                             , mainSubst = nullSubst
-                             , varSchemes = Map.empty
-                             , varInstances = Graph.empty
-                             , namedTypes = Map.empty
-                             , pendingUni = Set.empty
-                             , classes = Map.fromList
-                                         [ (ClassName "Indexable", Class { classInstances =
-                                                                                   [ TScheme { schemeVars = [0]
-                                                                                             , schemeType = qualEmpty
-                                                                                                            $ Fix $ TCons TTuple
-                                                                                                            [ Fix $ TCons TArray [Fix $ TBody $ TVar 0]
-                                                                                                            , Fix $ TBody TNumber
-                                                                                                            , Fix $ TBody $ TVar 0 ]
-                                                                                             }
-                                                                                   , TScheme { schemeVars = [1]
-                                                                                             , schemeType = qualEmpty
-                                                                                                            $ Fix $ TCons TTuple
-                                                                                                            [ Fix $ TCons TStringMap [Fix $ TBody $ TVar 1]
-                                                                                                            , Fix $ TBody TString
-                                                                                                            , Fix $ TBody $ TVar 1 ]
-                                                                                             }
-                                                                                   , TScheme { schemeVars = []
-                                                                                             , schemeType = qualEmpty
-                                                                                                            $ Fix $ TCons TTuple
-                                                                                                            [ Fix $ TBody TString
-                                                                                                            , Fix $ TBody TNumber
-                                                                                                            , Fix $ TBody TString ]
-                                                                                             }
-                                                                                   ] })
-                                         , (ClassName "Plus", Class { classInstances =
-                                                                              [ TScheme { schemeVars = []
-                                                                                        , schemeType = qualEmpty $ Fix $ TBody TNumber
-                                                                                        }
-                                                                              , TScheme { schemeVars = []
-                                                                                        , schemeType = qualEmpty $ Fix $ TBody TString
-                                                                                        }
-                                                                              ] })
-                                         ]
-                             }
 
 -- | VarNames instance for InferState
 -- >>> :{
