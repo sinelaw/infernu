@@ -51,7 +51,14 @@ fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
 fromStatement (ES3.ExprStmt z e) = singleStmt (gen z) $ fromExpression e
 -- TODO: The if/while/do conversion is hacky
-fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ parallelStmts z [thenS, elseS]
+fromStatement s@(ES3.IfStmt z pred' thenS elseS) = --chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ parallelStmts z [thenS, elseS]
+    case pred' of
+        ES3.InfixExpr _ ES3.OpStrictEq (ES3.PrefixExpr _ ES3.PrefixTypeof (ES3.VarRef _ (ES3.Id _ n))) (ES3.StringLit _ typeName) -> \e -> ETypeCase (src z) n type' (fromStatement thenS e) (fromStatement elseS e)
+            where type' = Fix $ TBody $ case typeName of
+                                            "string" -> TString
+                                            "number" -> TNumber
+                                            _ -> errorNotSupported ("type guard: " ++ typeName) z s
+        _ -> chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ parallelStmts z [thenS, elseS]
 fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement thenS
 fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
 fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS

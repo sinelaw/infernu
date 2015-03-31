@@ -111,6 +111,7 @@ data Exp a = EVar a EVarName
            | EIndex a (Exp a) (Exp a)
              -- TODO consider better options for causing rows to become closed outside the 'new' call
            | ENew a (Exp a) [Exp a]
+           | ETypeCase a EVarName Type (Exp a) (Exp a) -- TODO: allow multiple cases [(Type, Exp a)]
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------

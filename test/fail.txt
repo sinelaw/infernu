@@ -3,3 +3,4 @@
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  < y valid/nothis-as-param.js
 // FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error:  |   Failed y valid/prop-polymorphic-assign2-this.js
 // FAIL valid/prop-polymorphic-assign3.js:4:1: Error:  |   Failed unif y valid/prop-polymorphic-assign3.js
+// FAIL valid/typeguard.js:5:3: Error:  |   Failed unifying:  dc.(Stri y valid/typeguard.js

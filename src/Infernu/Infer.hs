@@ -273,7 +273,16 @@ inferType' env (EIndex a eArr eIdx) =
      preds <- unifyPredsL a $ (curPred:) $ concatMap qualPred [tArr, tId] -- TODO review
      let tRes = TQual preds $ qualType elemType'
      return (tRes, EIndex (a, tRes)  eArr' eIdx')
-
+inferType' env (ETypeCase a n expectedType bodyExpr elseExpr) =
+  do bodyEnv <- addVarScheme env n $ schemeEmpty expectedType
+     (bodyExprT, bodyExpr') <- inferType bodyEnv bodyExpr
+     -- TODO: check that generalized->instantiated current type of variable 'n' can be unified with bodyExprT
+     (elseExprT, elseExpr') <- inferType env elseExpr
+     unify a (qualType bodyExprT) (qualType elseExprT)
+     preds <- unifyPredsL a $ concatMap qualPred [bodyExprT, elseExprT]
+     let tRes = TQual preds $ qualType bodyExprT
+     return (tRes, ETypeCase (a, tRes) n expectedType bodyExpr' elseExpr')
+     
 indexAccessPred :: TVarName -> TVarName -> TVarName -> TPred Type
 indexAccessPred arrTVarName elemTVarName idxTVarName =
     let --elemType = mkv elemTVarName

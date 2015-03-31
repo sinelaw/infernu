@@ -90,7 +90,8 @@ instance Pretty (Exp a) where
   prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
   prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
   prettyTab t (EStringMap _ exprs) = "<" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ " => " ++ prettyTab t v) exprs) ++ ">"
-
+  prettyTab t (ETypeCase _ n type' e1 e2) = "(typecase " ++ pretty n ++ " :: " ++ pretty type' ++ " ? " ++ prettyTab t e1 ++ " : " ++ prettyTab t e2 ++ ")"
+                                     
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + (n - 1))
 
