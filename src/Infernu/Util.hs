@@ -3,7 +3,6 @@ module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 
 import           Control.Arrow               (second)
 import           Control.Monad               (forM, when)
-import           Data.Functor                ((<$>))
 import qualified Data.Set                    as Set
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
