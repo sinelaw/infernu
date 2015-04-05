@@ -71,5 +71,7 @@ builtins = Map.fromList [
   ("String",       ts [1] $ Fix $ TFunc [Fix $ TBody $ TUndefined, Fix $ TBody $ TVar 1] (Fix $ TBody TString)),
   ("Number",       ts [1] $ Fix $ TFunc [Fix $ TBody $ TUndefined, Fix $ TBody $ TVar 1] (Fix $ TBody TNumber)),
   ("Boolean",      ts [1] $ Fix $ TFunc [Fix $ TBody $ TUndefined, Fix $ TBody $ TVar 1] (Fix $ TBody TBoolean)),
-  ("NaN",          ts [] tNumber)
+  ("NaN",          ts [] tNumber),
+  ("Infinity",     ts [] tNumber),
+  ("undefined",    ts [] $ Fix $ TBody TUndefined)
   ]
