@@ -9,9 +9,15 @@ var _u = {
     }
 };
 
+
+
 var p = [];
-//_u.each([1,2,3], function(e,i,l) { p.push(e * e); });
-// would give an obscure error:
+
+function test(f) {
+    _u.each([1,2,3], f);
+}
+
+
 _u.each([1,2,3], function(e,i,l) { p.push(e + 'aba'); });
 
 p;
