@@ -1,6 +1,6 @@
-// FAIL valid/new-func.js:7:5: Error: Could not unify: {bla: a, ..b} with {} y valid/new-func.js
-// FAIL valid/nothis-as-obj-param.js:10:7: Error: Could not unify: {f: <Df>.(Number -> a), ..b} with Undefined y valid/nothis-as-obj-param.js
-// FAIL valid/nothis-as-param.js:12:7: Error: Could not unify: {f: <Dk>.(Number -> a)} with Undefined y valid/nothis-as-param.js
-// FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error: Could not unify: forall ck. ck.(ck -> ck) with a.(b -> b) y valid/prop-polymorphic-assign2-this.js
-// FAIL valid/prop-polymorphic-assign3.js:4:1: Error: Could not unify: forall c`. c`.(Number -> Number) with a.(b -> b) y valid/prop-polymorphic-assign3.js
+// FAIL valid/new-func.js:7:5: Error: Could not unify: |     {bla: a, ..b} |   With: |     {} y valid/new-func.js
+// FAIL valid/nothis-as-obj-param.js:10:7: Error: Could not unify: |     {f: <Df>.(Number -> a), ..b} |   With: |     Undefined y valid/nothis-as-obj-param.js
+// FAIL valid/nothis-as-param.js:12:7: Error: Could not unify: |     {f: <Dk>.(Number -> a)} |   With: |     Undefined y valid/nothis-as-param.js
+// FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error: Could not unify: |     forall ck. ck.(ck -> ck) |   With: |     a.(b -> b) y valid/prop-polymorphic-assign2-this.js
+// FAIL valid/prop-polymorphic-assign3.js:4:1: Error: Could not unify: |     forall c`. c`.(Number -> Number) |   With: |     a.(b -> b) y valid/prop-polymorphic-assign3.js
 // FAIL  n invalid/rank-2-method.js

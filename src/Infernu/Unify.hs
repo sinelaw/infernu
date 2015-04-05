@@ -178,7 +178,7 @@ unify'' (Just recurse) a t1 t2 =
      unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
-unificationError pos x y = throwError pos $ "Could not unify: " ++ pretty a ++ " with " ++ pretty b
+unificationError pos x y = throwError pos $ "Could not unify:\n    " ++ prettyTab 1 a ++ "\n  With:\n    " ++ prettyTab 1 b
   where [a, b] = minifyVars [x, y]
 
 assertNoPred :: QualType -> Infer Type
@@ -430,10 +430,10 @@ unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
             []         -> do t' <- applyMainSubst t
                              throwError a $ concat ["Could not find matching instance of "
                                                    , pretty className
-                                                   , " for type "
-                                                   , pretty t'
-                                                   , ", errors include: "
-                                                   , intercalate "\n    " $ "" : map (pretty . snd) unifyResults ]
+                                                   , " for type:\n    "
+                                                   , prettyTab 1 t'
+                                                   , "\n  errors include: "
+                                                   , intercalate "\n\n  " $ "" : map (pretty . snd) unifyResults ]
             [newState] -> setState newState >> return Nothing
             _          -> return . Just . (\x -> (a, t, (ClassName className, x))) . Set.fromList . map fst $ survivors
 
