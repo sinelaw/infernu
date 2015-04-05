@@ -427,12 +427,13 @@ unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
         unifyResults <- forM (Set.toList tss) $ \instScheme -> (instScheme, ) <$> runSubInfer (unifAction instScheme >> getState)
         let survivors = filter (isRight . snd) unifyResults
         case rights $ map snd survivors of
-            []         -> throwError a $ concat ["Could not find matching instance of "
-                                                , pretty className
-                                                , " for type "
-                                                , pretty t
-                                                , ", errors include: "
-                                                , intercalate "\n" $ map (pretty . snd) unifyResults ]
+            []         -> do t' <- applyMainSubst t
+                             throwError a $ concat ["Could not find matching instance of "
+                                                   , pretty className
+                                                   , " for type "
+                                                   , pretty t'
+                                                   , ", errors include: "
+                                                   , intercalate "\n    " $ "" : map (pretty . snd) unifyResults ]
             [newState] -> setState newState >> return Nothing
             _          -> return . Just . (\x -> (a, t, (ClassName className, x))) . Set.fromList . map fst $ survivors
 

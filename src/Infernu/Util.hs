@@ -1,8 +1,8 @@
 {-# LANGUAGE CPP #-}
 module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 
-import           Control.Arrow               (second)
 import           Control.Monad               (forM, when)
+import Data.Maybe (isJust, catMaybes)
 import qualified Data.Set                    as Set
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
@@ -14,7 +14,7 @@ import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
 import           Infernu.Pretty              (pretty)
-import           Infernu.Types               (IsGen (..), QualType, Source (..), TypeError (..))
+import           Infernu.Types               (GenInfo (..), QualType, Source (..), TypeError (..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -31,9 +31,9 @@ indexList = zip [1..]
 
 checkSource :: String -> Either TypeError [(Source, QualType)]
 checkSource src = case ES3Parser.parseFromString src of
-                   Left parseError -> Left $ TypeError { source = Source (IsGen True, Pos.initialPos "<global>"), message = show parseError }
+                   Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing, Pos.initialPos "<global>"), message = show parseError }
                    Right expr -> -- case ES3.isValid expr of
-                                 --     False -> Left $ TypeError { source = Source (IsGen True, Pos.initialPos "<global>"), message = "Invalid syntax" }
+                                 --     False -> Left $ TypeError { source = Source (GenInfo True, Pos.initialPos "<global>"), message = "Invalid syntax" }
                                  --     True ->
                                  fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap Source $ translate $ ES3.unJavaScript expr
 
@@ -48,9 +48,10 @@ checkFiles options fileNames = do
   return res
 
 annotatedSource :: [(Source, QualType)] -> [String] -> String
-annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unIsGen $ filterGen xs) indexedSource
+annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode
-        unIsGen :: [(Source, QualType)] -> [(Pos.SourcePos, QualType)]
-        unIsGen = map (\(Source (_, s), q) -> (s, q))
-        filterGen = filter (\(Source (IsGen g, _), _) -> not g)
-        prettyRes = Set.toList . Set.fromList . fmap (second pretty)
+        unGenInfo :: [(Source, QualType)] -> [(String, Pos.SourcePos, QualType)]
+        unGenInfo = catMaybes . map (\(Source (g, s), q) -> fmap (\n -> (n, s, q)) $ declName g)
+        filterGen :: [(Source, QualType)] -> [(Source, QualType)]
+        filterGen = filter (\(Source (g, _), _) -> not . isGen $ g)
+        prettyRes = Set.toList . Set.fromList . fmap (\(n, s, q) -> (s, pretty n ++ " : " ++ pretty q))

@@ -47,7 +47,7 @@ pretty :: Pretty a => a -> String
 pretty = prettyTab 0
 
 instance Pretty Source where
-    prettyTab _ (Source (IsGen isGen, pos)) = pretty pos ++ (if isGen then "*" else "")
+    prettyTab _ (Source (genInfo, pos)) = pretty pos ++ (if isGen genInfo then "*" else "") ++ (maybe "" (\x -> pretty x ++ " : ") $ declName genInfo)
          
 instance Pretty LitVal where
   prettyTab _ (LitNumber x) = show x
@@ -146,7 +146,7 @@ prettyType _ (TCons (TName name) _) = "<" ++ pretty name ++ ">" -- : " ++ (unwor
 prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
 prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
 prettyType t (TRow list) = "{"
-                          ++ intercalate ", " (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
+                          ++ intercalate (",\n" ++ tab (t + 1)) (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
                           ++ (case r of
                                FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
                                FlatRowEndRec tid ts -> ", " ++ prettyTab t (Fix $ TCons (TName tid) ts) -- TODO
@@ -186,8 +186,8 @@ instance (Pretty k) => Pretty (Set.Set k) where
 instance Pretty Pos.SourcePos where
     prettyTab _ p = Pos.sourceName p ++ ":" ++ show (Pos.sourceLine p) ++ ":" ++ show (Pos.sourceColumn p)
 
-instance Pretty IsGen where
-    prettyTab _ (IsGen g) = show g
+instance Pretty GenInfo where
+    prettyTab _ g = show g
     
 instance Pretty TypeError where
   prettyTab _ (TypeError s m) = pretty s ++ ": Error: " ++ m

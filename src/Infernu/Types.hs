@@ -9,7 +9,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Infernu.Types
-       (IsGen(..)
+       (GenInfo(..)
        , Source(..)
        , emptySource
        , Exp(..)
@@ -53,6 +53,7 @@ module Infernu.Types
        , addEquivalence
        , VarNames(freeTypeVars, mapVarNames)
        , EPropName
+       , mapTopAnnotation
 #ifdef QUICKCHECK
        , runAllTests
 #endif
@@ -77,8 +78,8 @@ import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary (Arbitrary (..))
 #endif
 
-newtype IsGen = IsGen Bool
-              deriving (Show, Eq, Ord)
+data GenInfo = GenInfo { isGen :: Bool, declName :: Maybe String }
+             deriving (Show, Eq, Ord)
 
 type EVarName = String
 type EPropName = String
@@ -113,7 +114,7 @@ data Exp a = EVar a EVarName
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
-
+                      
 type TVarName = Int
 
 data TBody = TVar TVarName
@@ -151,11 +152,11 @@ data FType t = TBody TBody
 
 type Type = Fix FType
 
-newtype Source = Source (IsGen, Pos.SourcePos)
+newtype Source = Source (GenInfo, Pos.SourcePos)
                deriving (Show, Eq, Ord)
 
 emptySource :: Source
-emptySource = Source (IsGen True, Pos.initialPos "")
+emptySource = Source (GenInfo True Nothing, Pos.initialPos "")
                
 data TypeError = TypeError { source :: Source, message :: String }
                deriving (Show, Eq, Ord)
@@ -526,6 +527,30 @@ addEquivalence x y gr = Graph.insEdge (x,y,()) . insTVar x . insTVar y $ gr
                          then g
                          else Graph.insNode (tv, qualEmpty $ Fix . TBody $ TVar tv) g
 
+
+----------------------------------------------------------------------
+-- TODO: Horrible, terrible boilerplate. get rid of it.
+mapTopAnnotation :: (a -> a) -> Exp a -> Exp a
+mapTopAnnotation f expr =
+    case expr of
+        (EVar a b) -> EVar (f a) b
+        (EApp a x y) -> EApp (f a) x y
+        (EAbs a x y) -> EAbs (f a) x y
+        (ELet a x y z) -> ELet (f a) x y z
+        (ELit a x) -> ELit (f a) x
+        (EAssign a x y z) -> EAssign (f a) x y z
+        (EPropAssign a x y z v) -> EPropAssign (f a) x y z v
+        (EIndexAssign a x y z v) -> EIndexAssign (f a) x y z v
+        (EArray a x) -> EArray (f a) x
+        (ETuple a x) -> ETuple (f a) x
+        (ERow a x y) -> ERow (f a) x y
+        (EStringMap a x) -> EStringMap (f a) x
+        (EIfThenElse a x y z) -> EIfThenElse (f a) x y z
+        (EProp a x y) -> EProp (f a) x y
+        (EIndex a x y) -> EIndex (f a) x y
+        (ENew a x y) -> ENew (f a) x y
+
+----------------------------------------------------------------------
 
 #ifdef QUICKCHECK
 -- Test runner
