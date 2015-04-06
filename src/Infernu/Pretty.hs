@@ -190,7 +190,7 @@ instance Pretty GenInfo where
     prettyTab _ g = show g
     
 instance Pretty TypeError where
-  prettyTab _ (TypeError s m) = pretty s ++ ": Error: " ++ m
+  prettyTab t (TypeError s m) = prettyTab t s ++ ": Error: " ++ prettyTab (t+1) m
 
 instance Pretty NameSource where
   prettyTab _ = show

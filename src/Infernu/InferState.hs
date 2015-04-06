@@ -7,8 +7,8 @@ module Infernu.InferState
 
 import           Control.Monad              (foldM, forM, forM_, liftM2, when)
 import           Control.Monad.Trans        (lift)
-import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT)
-import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify)
+import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT, bimapEitherT)
+import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify, mapStateT)
 import           Data.Foldable              (Foldable (..), msum)
 import           Data.Traversable              (Traversable (..))
 import qualified Data.Graph.Inductive      as Graph
@@ -84,6 +84,9 @@ failWithM action err = do
   result <- action
   failWith result err
 
+mapError :: (TypeError -> TypeError) -> Infer a -> Infer a
+mapError f ma = mapStateT (bimapEitherT f id) ma
+           
 getVarSchemeByVarId :: VarId -> Infer (Maybe TypeScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
 

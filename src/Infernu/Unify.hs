@@ -167,6 +167,19 @@ decycledUnify = decycle3 unify''
 unlessEq :: (Monad m, Eq a) => a -> a -> m () -> m ()
 unlessEq x y = unless (x == y)
 
+mkTypeErrorMessage :: Pretty a => a -> a -> Maybe TypeError -> [Char]
+mkTypeErrorMessage t1 t2 mte =
+    concat [ "\n"
+           , "  Failed unifying:  "
+           , prettyTab 6 t1
+           , "\n"
+           , "             With:  "
+           , prettyTab 6 t2
+           , case mte of
+                 Nothing -> ""
+                 Just te -> "\n  Reason:\n" ++ prettyTab 2 (message te)
+           ]
+    
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ "breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2
 unify'' (Just recurse) a t1 t2 =
@@ -175,10 +188,13 @@ unify'' (Just recurse) a t1 t2 =
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
      traceLog $ "unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2
-     unify' recurse a t1' t2'
+     let wrap' te = TypeError { source = source te,
+                                message = mkTypeErrorMessage t1 t2 (Just te)
+                              }
+     mapError wrap' $ unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
-unificationError pos x y = throwError pos $ "Could not unify:\n    " ++ prettyTab 1 a ++ "\n  With:\n    " ++ prettyTab 1 b
+unificationError pos x y = throwError pos $ mkTypeErrorMessage a b Nothing
   where [a, b] = minifyVars [x, y]
 
 assertNoPred :: QualType -> Infer Type
@@ -418,7 +434,12 @@ unifyPredsL a ps = catMaybes <$>
 isRight :: Either a b -> Bool
 isRight (Right _) = True
 isRight _  = False
-             
+
+catLefts :: [Either a b] -> [a]
+catLefts [] = []
+catLefts (Left a:xs) = a:(catLefts xs)
+catLefts (Right _:xs) = catLefts xs
+                        
 unifyAmbiguousEntry :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer (Maybe (Source, Type, (ClassName, Set TypeScheme)))
 unifyAmbiguousEntry (a, t, (ClassName className, tss)) = 
     do  let unifAction ts =
@@ -428,12 +449,14 @@ unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
         let survivors = filter (isRight . snd) unifyResults
         case rights $ map snd survivors of
             []         -> do t' <- applyMainSubst t
-                             throwError a $ concat ["Could not find matching instance of "
-                                                   , pretty className
-                                                   , " for type:\n    "
+                             throwError a $ concat [ intercalate "\n\n" $ "" : (map (prettyTab 2 . message) . catLefts $ map snd $ unifyResults)
+                                                   , "\n\n"
+                                                   , "While trying to find matching instance of typeclass "
+                                                   , "\n    "
+                                                   , prettyTab 1 className
+                                                   , "\nfor type:\n    "
                                                    , prettyTab 1 t'
-                                                   , "\n  errors include: "
-                                                   , intercalate "\n\n  " $ "" : map (pretty . snd) unifyResults ]
+                                                   ]
             [newState] -> setState newState >> return Nothing
             _          -> return . Just . (\x -> (a, t, (ClassName className, x))) . Set.fromList . map fst $ survivors
 
