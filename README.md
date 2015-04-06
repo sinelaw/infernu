@@ -1,10 +1,8 @@
-# Infernu, type inference and checking for JavaScript
+# Infernu
 
 *(Formerly known as Inferno / Safe JS / SJS)*
 
 A type inference and checker for JavaScript.
-
-This project is an ongoing effort to produce a practical tool for statically verifying JavaScript code. The type system is designed to support a **safe subset of JS**, not a super set of JS. That is, some otherwise valid JS code will not pass type checking with Infernu. The reason for not allowing the dynamic behavior of JS, is to **guarantee more safety** and (as a bonus) allows fully unambiguous type inference.
 
 See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing-sjs-a-type-inferer-and-checker-for-javascript/) for a short discussion comparing infernu to **other type checkers**.
 
@@ -19,7 +17,27 @@ See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing
 
 For more information see [Infernu's Type System](docs/type-system.md).
 
-**Note**: Currently, all types are inferred. Support for type annotations for specifically constraining or for documentation is planned. 
+## Installation
+
+1. Install Haskell's **cabal** package manager. See [Haskell.org](https://www.haskell.org/downloads) for some installation options. On ubuntu, I recommend using [Herbert V. Riedel's ppa](https://launchpad.net/~hvr/+archive/ubuntu/ghc).
+2. Clone this repository.
+
+Then run:
+
+    cabal update
+    cd infernu
+    cabal install
+
+The `infernu` executable will be installed to your `~/.cabal/bin`. You may want to add it to your `PATH`.
+
+If you have trouble in the last command due to package incompatibilities, use a **cabal sandbox**:
+
+    cd infernu
+    cabal sandbox init
+    cabal install
+
+The `infernu` executable will be placed in `infernu/.cabal-sandbox/bin`
+
 
 ## Examples
 
@@ -30,9 +48,10 @@ JavaScript:
 	var num = 2;
 	var arrNums = [num, num];
 
-Infernu infers (for arrNums):
+Infernu infers:
 
-	[Number]
+    //  num : Number
+    //  arrNums : [Number]
 
 That is, an array of numbers.
 
@@ -42,7 +61,8 @@ Objects:
 
 Inferred type:
 
-    {something: String, value: Number}
+    //  obj : {something: String,
+               value: Number}
 
 That is, an object with two properties: 'something', of type string, and 'value' of type number.
 
@@ -58,14 +78,16 @@ For example:
 
 Infernu infers:
 
-    {data: Number, ..l}.(() -> Number)
+    //       useThisData : {data: Number, ..a}.(() -> Number)
 
-In words: a function which expects `this` to be an object with at least one property, "data" of type number. It takes no arguments (hence the empty `()`). It returns a number.
+In words: a function which expects `this` to be an object with at least one property, "data" of type `Number`. It takes no arguments (hence the empty `()`). It returns a `Number`.
 
 If we call a function that needs `this` incorrectly, Infernu will be angry:
 
-    > useThisData();
-	Error: Could not unify: {data: Number, ..a} with Undefined
+    Error: Could not unify:
+        {data: Number, ..a}
+      With:
+        Undefined
 
 Because we called `useThisData` without a preceding object property access (e.g. `obj.useThisData`), it will get `undefined` for `this`. Infernu is telling us that our expected type for `this` is not unifiable with the type `undefined`.
 
@@ -106,9 +128,9 @@ The basic example is for the `+` operator:
 
     function add(x,y) { return x + y; }
 
-The type for `add` is:
+The type for `add` is inferred to be:
 
-    Plus a => (a,a) -> a
+    //       add : Plus b => a.((b, b) -> b)
 
 Meaning: given any type `a` that is an instance of the `Plus` type class, the function takes two `a`s and returns an `a`.
 

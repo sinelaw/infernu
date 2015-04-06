@@ -17,6 +17,8 @@ The type system features:
 * Polymorphic "methods" are supported, so rows may have rank-2 types.
 * Mutability is not represented in the types, but affects type inference (polymorphism is restricted for mutable variables).
 
+**Note**: Currently, all types are inferred. Support for type annotations for specifically constraining or for documentation is planned. 
+
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 ## Contents
