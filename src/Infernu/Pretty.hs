@@ -146,7 +146,7 @@ prettyType _ (TCons (TName name) _) = "<" ++ pretty name ++ ">" -- : " ++ (unwor
 prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
 prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
 prettyType t (TRow list) = "{"
-                          ++ intercalate (",\n" ++ tab (t + 1)) (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
+                          ++ intercalate (",\n  " ++ tab t) (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
                           ++ (case r of
                                FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
                                FlatRowEndRec tid ts -> ", " ++ prettyTab t (Fix $ TCons (TName tid) ts) -- TODO
