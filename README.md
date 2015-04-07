@@ -1,10 +1,10 @@
 # Infernu
 
-*(Formerly known as Inferno / Safe JS / SJS)*
-
-A type inference and checker for JavaScript.
+Static type inference for JavaScript.
 
 See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing-sjs-a-type-inferer-and-checker-for-javascript/) for a short discussion comparing infernu to **other type checkers**.
+
+*(Formerly known as Inferno / Safe JS / SJS)*
 
 **Features:**
 
