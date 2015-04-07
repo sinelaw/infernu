@@ -177,7 +177,8 @@ mkTypeErrorMessage t1 t2 mte =
            , prettyTab 6 t2
            , case mte of
                  Nothing -> ""
-                 Just te -> "\n  Reason:\n" ++ prettyTab 2 (message te)
+                         --   "             With:  "
+                 Just te -> "\n          Because:  " ++ prettyTab 2 (message te)
            ]
     
 unify'' :: Maybe UnifyF -> UnifyF
@@ -323,25 +324,26 @@ unifyRowPropertyBiased = unifyRowPropertyBiased' unify
 -- 2. If the LHS is a function type quantified only on the type of 'this'
 --
 unifyRowPropertyBiased' :: UnifyF -> Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
-unifyRowPropertyBiased' recurse a errorAction (tprop1s, tprop2s) =
-   do traceLog ("Unifying row properties: " ++ pretty tprop1s ++ " ~ " ++ pretty tprop2s)
+unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
+   do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
       let crap = Fix $ TBody TUndefined
-          unifySchemes' = do traceLog ("Unifying props: " ++ pretty tprop1s ++ " ~~ " ++ pretty tprop2s)
-                             tprop1 <- instantiate tprop1s
-                             tprop2 <- instantiate tprop2s
+          unifySchemes' = do traceLog ("Unifying schemes: " ++ pretty scheme1s ++ " ~~ " ++ pretty scheme2s)
+                             scheme1T <- instantiate scheme1s
+                             scheme2T <- instantiate scheme2s
                              -- TODO unify predicates properly (review this) - specificaly (==)
                              -- should prevent cycles!
---                             Pred.unify (unify a) (qualPred tprop1) (qualPred tprop2)
+                             --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
                              -- TODO do something with pred'
-                             recurse a (qualType tprop1) (qualType tprop2)
+                             unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
+                             recurse a (qualType scheme1T) (qualType scheme2T)
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
-            case tprop1s of
+            case scheme1s of
              TScheme [] _ -> True
              _ -> False
       -- TODO should do biased type scheme unification here
-      unless (areEquivalentNamedTypes (crap, tprop1s) (crap, tprop2s))
-          $ if isSimpleScheme || (length (schemeVars tprop1s) == length (schemeVars tprop2s)) -- isSimpleScheme
+      unless (areEquivalentNamedTypes (crap, scheme1s) (crap, scheme2s))
+          $ if isSimpleScheme || (length (schemeVars scheme1s) == length (schemeVars scheme2s)) -- isSimpleScheme
             then unifySchemes'
             else errorAction
 
