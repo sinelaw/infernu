@@ -161,15 +161,15 @@ addNamedType tid t scheme = do
 --                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 11] (mkNamedType 1 [Fix $ TBody $ TVar 11])))
 -- :}
 -- True
-replaceFixQual
-  :: (Functor f, Eq (f (Fix f))) =>
-     f (Fix f) -> f (Fix f) -> TQual (Fix f) -> TQual (Fix f)
-replaceFixQual src dest (TQual preds t) = TQual (map (\p -> p { predType = replaceFix src dest $ predType p}) preds) (replaceFix src dest t)
-
 areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
 areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = applySubst subst $ replaceFixQual (unFix t1) (unFix t2) $ schemeType s1 })
   where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
 
+-- | Returns a TQual with the `src` type replaced everywhere with the `dest` type.
+replaceFixQual :: (Functor f, Eq (f (Fix f))) => f (Fix f) -> f (Fix f) -> TQual (Fix f) -> TQual (Fix f)
+replaceFixQual src dest (TQual preds t) = TQual (map (replacePredType' $ replaceFix src dest) preds) (replaceFix src dest t)
+    where replacePredType' f p = p { predType = f $ predType p } -- TODO needs some lens goodness
+                
 -- Checks if a given type variable appears in the given type *only* as a parameter to a recursive
 -- type name.  If yes, returns the name of recursive types (and position within) in which it
 -- appears; otherwise returns Nothing.
