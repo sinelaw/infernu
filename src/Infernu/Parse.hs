@@ -165,7 +165,7 @@ fromExpression (ES3.ObjectLit z props) = let stringProps = map (fromPropString .
                                             else ERow (src z) False $ map (fromProp *** fromExpression) props
 fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex (src z) (fromExpression arrExpr) (fromExpression indexExpr)
 fromExpression (ES3.VarRef z name) = EVar (src z) $ ES3.unId name
-fromExpression (ES3.CondExpr z ePred eThen eElse) = EIfThenElse (src z) (fromExpression ePred) (fromExpression eThen) (fromExpression eElse)
+fromExpression (ES3.CondExpr z ePred eThen eElse) = ECase (src z) (fromExpression ePred) [(LitBoolean True, fromExpression eThen), (LitBoolean False, fromExpression eElse)]
 fromExpression (ES3.CallExpr z expr argExprs) =
   -- Instead of simply translating, here we also do some specific simplification by defining
   -- (adding an ELet) for the object expression if the function is a method call.

@@ -104,7 +104,7 @@ data Exp a = EVar a EVarName
            | ETuple a [Exp a]
            | ERow a Bool [(EPropName, Exp a)]
            | EStringMap a [(String, Exp a)]
-           | EIfThenElse a (Exp a) (Exp a) (Exp a) -- TODO replace with ECase
+           | ECase a (Exp a) [(LitVal, Exp a)]
            | EProp a (Exp a) EPropName
              -- TODO EIndex should not be part of the AST. should be a builtin function using
              -- pattern matching instead
@@ -545,7 +545,7 @@ mapTopAnnotation f expr =
         (ETuple a x) -> ETuple (f a) x
         (ERow a x y) -> ERow (f a) x y
         (EStringMap a x) -> EStringMap (f a) x
-        (EIfThenElse a x y z) -> EIfThenElse (f a) x y z
+        (ECase a x ys) -> ECase (f a) x ys
         (EProp a x y) -> EProp (f a) x y
         (EIndex a x y) -> EIndex (f a) x y
         (ENew a x y) -> ENew (f a) x y

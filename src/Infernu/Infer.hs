@@ -230,7 +230,7 @@ inferType' env (EStringMap a exprs') =
      elemType <- Fix . TBody . TVar <$> fresh
      te <- accumInfer env exprs
      let types = map (qualType . fst) te
-     unifyl unify a $ zip (elemType:types) types
+     unifyAll a $ elemType:types
      let t = qualEmpty . Fix $ TCons TStringMap [elemType]
      return (t, EStringMap (a,t) $ zip (map fst exprs') (map snd te))
 inferType' env (ERow a isOpen propExprs) =
@@ -243,13 +243,16 @@ inferType' env (ERow a isOpen propExprs) =
               return $ TRowProp propName ts row
      rowType <- qualEmpty . Fix . TRow <$> foldM  accumRowProp' rowEnd' propNamesTypes
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
-inferType' env (EIfThenElse a ePred eThen eElse) =
-  do (tp, ePred') <- inferType env ePred
-     unify a (Fix $ TBody TBoolean) (qualType tp)
-     (tThen, eThen') <- inferType env eThen
-     (tElse, eElse') <- inferType env eElse
-     unify a (qualType tThen) (qualType tElse)
-     return (tThen, EIfThenElse (a, tThen) ePred' eThen' eElse')
+inferType' env (ECase a ePred eBranches) =
+  do (eType, ePred') <- inferType env ePred
+     infPatterns <- accumInfer env $ map (ELit a . fst) eBranches
+     let patternTypes = map (qualType . fst) infPatterns
+     unifyAll a $ (qualType eType):patternTypes
+     infBranches <- accumInfer env $ map snd eBranches
+     let branchTypes = map (qualType . fst) infBranches
+     unifyAll a branchTypes
+     let tRes = fst $ head infBranches -- TODO unsafe head
+     return (tRes, ECase (a, tRes) ePred' $ zip (map fst eBranches) (map snd infBranches))
 inferType' env (EProp a eObj propName) =
   do (tObj, eObj') <- inferType env eObj
      rowVar <- RowTVar <$> fresh
