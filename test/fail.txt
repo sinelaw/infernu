@@ -1,4 +1,4 @@
-// FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  dw.(({}.( y valid/new-func.js
+// FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  dw.(({ |  y valid/new-func.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  < y valid/nothis-as-param.js
 // FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error:  |   Failed y valid/prop-polymorphic-assign2-this.js

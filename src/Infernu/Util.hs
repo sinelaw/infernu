@@ -21,9 +21,18 @@ zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
 zipByPos _  [] = []
 zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
-                                            then ("/*" ++ (intercalate "\n" . map (\l -> indentToColumn (Pos.sourceColumn pos) ++ l) $ lines s) ++ " */") : zipByPos ps xs'
+                                            then formattedAnnotation : zipByPos ps xs'
                                             else x : zipByPos ps' xs
-    where indentToColumn n = replicate (n - 3) ' '
+    where indentToColumn n = replicate (n-1) ' '
+          isMultiline = length sLines > 1
+          sLines = lines s
+          formattedAnnotation = if isMultiline
+                                then ("/*"
+                                      ++ indentToColumn (Pos.sourceColumn pos - 2)
+                                      ++ head sLines
+                                      ++ "\n"
+                                      ++ (intercalate "\n" . map (\l -> indentToColumn (Pos.sourceColumn pos) ++ l) $ tail sLines) ++ " */")
+                                else "//" ++ indentToColumn (Pos.sourceColumn pos - 2) ++ s
 
 
 indexList :: [a] -> [(Int, a)]

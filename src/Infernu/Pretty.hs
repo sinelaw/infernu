@@ -149,13 +149,13 @@ prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) 
 prettyType _ (TCons (TName name) _) = "<" ++ pretty name ++ ">" -- : " ++ (unwords $ map (prettyTab n) ts) ++ ">"
 prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
 prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
-prettyType t (TRow list) = "{"
-                          ++ intercalate (",\n  " ++ tab t) (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
+prettyType t (TRow list) = "{\n" ++ tab (t+1)
+                          ++ intercalate (",\n" ++ tab (t+1)) (map (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v) (Map.toList props))
                           ++ (case r of
                                FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
-                               FlatRowEndRec tid ts -> ", " ++ prettyTab t (Fix $ TCons (TName tid) ts) -- TODO
+                               FlatRowEndRec tid ts -> ", " ++ prettyTab (t+1) (Fix $ TCons (TName tid) ts) -- TODO
                              )
-                          ++ "}"
+                          ++ "\n" ++ tab t ++ "}"
   where (props, r) = flattenRow list
 
 instance Pretty ClassName where
