@@ -4,9 +4,8 @@ function memoize(toKeyString, f) {
 
     return function memed(x) {
         var key = toKeyString(x);
-        mem[key] = mem[key] || [];
-        if (mem[key].length < 1) { mem[key] = [f(memed, x)]; }
-        return mem[key][0];
+        mem[key] = mem[key] || f(memed, x);
+        return mem[key];
     };
 }
 
