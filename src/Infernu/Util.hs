@@ -2,14 +2,15 @@
 module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 
 import           Control.Monad               (forM, when)
-import Data.Maybe (isJust, catMaybes)
+import           Data.Maybe                  (catMaybes)
+import           Data.List                   (intercalate)
 import qualified Data.Set                    as Set
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
 
-import           Infernu.Options (Options(..))
+import           Infernu.Options             (Options(..))
 import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
@@ -20,7 +21,7 @@ zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
 zipByPos _  [] = []
 zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
-                                            then ("//" ++ indentToColumn (Pos.sourceColumn pos) ++ s) : zipByPos ps xs'
+                                            then ("/*" ++ (intercalate "\n" . map (\l -> indentToColumn (Pos.sourceColumn pos) ++ l) $ lines s) ++ " */") : zipByPos ps xs'
                                             else x : zipByPos ps' xs
     where indentToColumn n = replicate (n - 3) ' '
 
