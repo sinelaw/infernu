@@ -135,7 +135,8 @@ hasReturn (ES3.VarDeclStmt _ _) = False
 hasReturn (ES3.FunctionStmt _ _ _ _) = False
 hasReturn (ES3.ReturnStmt _ _) = True
 
-                                
+
+addDecl :: Show a => a -> String -> Exp (GenInfo, a) -> Exp (GenInfo, a)                                
 addDecl z name expr = Log.trace ("addDecl: " ++ show res) res
     where res = mapTopAnnotation (const $ decl z name) expr 
                                  

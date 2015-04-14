@@ -11,32 +11,14 @@ import           Infernu.Lib (safeLookup)
 func :: Type -> Type -> Type -> Type
 func this x y = Fix $ TFunc [this, x] y
 
-funcN :: [Fix FType] -> Fix FType -> Fix FType
-funcN xs tres = Fix $ TFunc xs tres
-
 string :: Type
 string = Fix $ TBody TString
 
 number :: Type
 number = Fix $ TBody TNumber
-
-regex :: Type
-regex = Fix $ TBody TRegex
         
-undef :: Type
-undef = Fix $ TBody TUndefined
-
-array :: Type -> Type
-array t = Fix $ TCons TArray [t]
-
-boolean :: Fix FType
-boolean = Fix $ TBody TBoolean
-
 ts :: t -> TScheme t
 ts t = TScheme [] $ qualEmpty t
-
-tvar :: TVarName -> Type
-tvar = Fix . TBody . TVar
 
 stringProps :: [(String, TypeScheme)]
 stringProps = 
