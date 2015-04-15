@@ -19,6 +19,30 @@ For more information see [Infernu's Type System](docs/type-system.md).
 
 ## Installation
 
+### Quick and Dirty
+
+    git clone git@github.com:sinelaw/infernu.git
+    cd infernu/
+    cabal install
+
+Usage: see `infernu --help`
+    
+Quick example usage:
+
+    echo 'function getLength(x) { return x.length; }' > getLength.js
+
+    infernu getLength.js
+
+Output:
+
+```javascript
+    //       getLength : a.({length: b, ..c} -> b)
+    function getLength(x) { return x.length; }
+```
+
+
+### A bit more detailed instructions
+
 1. Install Haskell's **cabal** package manager. See [Haskell.org](https://www.haskell.org/downloads) for some installation options. On ubuntu, I recommend using [Herbert V. Riedel's ppa](https://launchpad.net/~hvr/+archive/ubuntu/ghc).
 2. Clone this repository.
 
@@ -37,6 +61,7 @@ If you have trouble in the last command due to package incompatibilities, use a 
     cabal install
 
 The `infernu` executable will be placed in `infernu/.cabal-sandbox/bin`
+
 
 
 ## Examples
