@@ -1,3 +1,4 @@
+/* @flow */
 // 'f' is a function that takes a recursion function, and the current value. It should call the recursion function instead of itself when it needs to recurse.
 function memoize(toKeyString, f) {
     var mem = {};
