@@ -1,18 +1,43 @@
 name:                infernu
-version:             0.1.0.0
--- synopsis:
--- description:
--- license:
+version:             0.0.0.0
+synopsis:            Type inference and checker for JavaScript (experimental)
+description:         This version is highly experimental and may set your computer on fire (also, a lot of JS is not supported yet, so it may not be very useful.)
+                     .
+                     Infernu is a type checker for JavaScript. Since JavaScript is dynamically and weakly typed, it makes no sense to talk about "type errors" in arbitrary JavaScript code.
+                     .
+                     Consequently Infernu makes assumptions about the code and expects it to follow certain rules that
+                     are not required by plain JavaScript (for example, implicit coercions such as `3 + 'a'` are not
+                     allowed.)
+                     .
+                     Infernu's type system is designed for writing dynamic-looking code in a safe statically type-checked
+                     environment. Type annotations are not required (though they would be nice to support, for various
+                     reasons). Instead, Infernu *infers* the types of expressions by examining the code. If the inferred
+                     types contradict each other, Infernu reports the contradiction as an error.
+                     .
+                     Infernu places restrictions on JS programs that are otherwise valid. In other words, Infernu is a
+                     **subset of JavaScript**. Infernu tries to strike a balance between type system complexity and
+                     dynamic-style coding flexibility.
+                     .
+                     See the .md files included in the package for more information.
+                     
+license:             GPL-2
+homepage:            https://github.com/sinelaw/infernu
+bug-reports:         https://github.com/sinelaw/infernu/issues
 license-file:        LICENSE
 author:              Noam Lewis
 maintainer:          jones.noamle@gmail.com
-copyright:           Noam Lewis, 2014
+copyright:           Noam Lewis, 2014-2015
 -- category:
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
+stability:           experimental
 
+source-repository head
+  type: git
+  location: git@github.com:sinelaw/infernu.git
 
+                     
 flag quickcheck
   default: False
   manual: True
