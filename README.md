@@ -1,6 +1,6 @@
 # Infernu
 
-Static type inference for JavaScript.
+Static type inference for JavaScript. (In early development.)
 
 See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing-sjs-a-type-inferer-and-checker-for-javascript/) for a short discussion comparing infernu to **other type checkers**.
 
