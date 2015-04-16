@@ -267,6 +267,11 @@ unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
                        recurse a tres2 tres1
 
             where loop' [] = return ()
+                  -- This allows passing any value as a function's argument which should have type
+                  -- 'undefined' added to deal with 'this' being inferred to be 'undefined' if a
+                  -- function is ever called without a 'this'.  allows us to call standalone
+                  -- functions even when as a method dispatch (obj.f) that DOES pass a non-undefined
+                  -- 'this'.
                   loop' ((Fix (TBody TUndefined), _):ts') = loop' ts'
                   loop' ((x,y):ts') =
                       do  recurse a x y
