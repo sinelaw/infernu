@@ -140,7 +140,7 @@ prettyType n (TFunc ts tres) = wrapThis this $ "(" ++ args ++ " -> " ++ prettyTa
                 [] -> (Nothing, nakedSingleOrTuple nonThisArgs)
                 (this_:_) -> (Just this_, nakedSingleOrTuple nonThisArgs)
         wrapThis Nothing s = s
-        wrapThis (Just (Fix (TBody TUndefined))) s = s
+        wrapThis (Just (Fix (TBody TUndefined))) s = s -- undefined as a function's parameter type (including 'this') is allowed to unify with any input parameter.
         wrapThis (Just t) s = prettyTab n t ++ "." ++ s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
