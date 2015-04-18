@@ -7,7 +7,6 @@ import qualified Text.Parsec.Pos     as Pos
 
 import           Infernu.Infer       (pretty)
 import           Infernu.Options     (Options (..), opts)
-import           Infernu.Pretty      (Pretty (..))
 import           Infernu.Types       (QualType, Source (..))
 import           Infernu.Util
 

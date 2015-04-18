@@ -5,16 +5,14 @@
 module Infernu.InferState
        where
 
+import           Data.Foldable              (msum)
 import           Control.Monad              (foldM, forM, forM_, liftM2, when)
 import           Control.Monad.Trans        (lift)
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT, bimapEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify, mapStateT)
-import           Data.Foldable              (Foldable (..), msum)
-import           Data.Traversable              (Traversable (..))
-import           Data.Monoid (mappend)
 import qualified Data.Graph.Inductive      as Graph
     
-import           Data.Functor               ((<$>))
+
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
 -- import           Data.Map.Lazy              (Map)
@@ -24,7 +22,7 @@ import           Data.Set                   (Set)
 import           Prelude                    hiding (foldr, sequence, mapM)
 
 
-
+import           Infernu.Prelude
 import           Infernu.Pretty
 import           Infernu.Types
 import           Infernu.Log

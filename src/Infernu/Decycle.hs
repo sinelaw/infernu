@@ -4,7 +4,7 @@
 
 module Infernu.Decycle(decycleOn, decycle, decycle2, decycle3) where
 
-import Data.Functor((<$>))
+import Infernu.Prelude
 import qualified Data.Set as Set
 
 -- | A fix for functions that terminates recursive cycles

@@ -59,20 +59,18 @@ module Infernu.Types
 #endif
        ) where
 
-import           Data.Foldable             (Foldable (..), foldr)
 import qualified Data.Map.Lazy             as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
 import qualified Data.Graph.Inductive      as Graph
-import           Data.Traversable          (Traversable (..))
-import           Prelude                   hiding (foldr)
 import qualified Text.Parsec.Pos           as Pos
 
 import           Infernu.Fix               (Fix (..), replaceFix)
+import           Infernu.Prelude
+import Prelude ()
 
 #ifdef QUICKCHECK
 import           Data.DeriveTH
-import           Data.Functor              ((<$>))
 import           Data.Map.Lazy             (Map)
 import qualified Data.Map.Lazy             as Map
 import           Test.QuickCheck           (choose, resize)

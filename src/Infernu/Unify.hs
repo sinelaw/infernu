@@ -7,11 +7,7 @@ module Infernu.Unify
 
 
 import           Control.Monad        (forM, forM_, when, unless)
-import           Data.Foldable        (Foldable (..))
-import           Data.Functor         ((<$>))
 import           Data.List            (intercalate)
-import           Data.Monoid          (Monoid (..))
--- import           Data.Traversable     (Traversable (..))
 
 import           Data.Either          (rights)
 import           Data.Map.Lazy        (Map)
@@ -23,6 +19,7 @@ import qualified Data.Set             as Set
 import           Prelude              hiding (foldl, foldr, mapM, sequence)
 
 
+import           Infernu.Prelude
 import           Infernu.Builtins.Array (arrayRowType)
 import           Infernu.Builtins.Regex (regexRowType)
 import           Infernu.Builtins.String (stringRowType)
@@ -385,12 +382,6 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Source -> [(Type, Type)] -> Infer ()
 unifyl r a = mapM_ $ uncurry $ r a
-
-newtype OrBool = OrBool { unOrBool :: Bool }
-                 deriving (Eq, Show, Ord)
-instance Monoid OrBool where
-  mempty = OrBool False
-  (OrBool x) `mappend` (OrBool y) = OrBool (x || y)
 
 -- | Checks if a type var name appears as a free type variable nested somewhere inside a row type.
 --

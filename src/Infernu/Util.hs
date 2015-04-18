@@ -2,7 +2,6 @@
 module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 
 import           Control.Monad               (forM, when)
-import           Data.Functor                ((<$>))
 import           Data.Maybe                  (catMaybes)
 import           Data.List                   (intercalate)
 import qualified Data.Set                    as Set
@@ -11,6 +10,7 @@ import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
 
+import           Infernu.Prelude
 import           Infernu.Options             (Options(..))
 import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
