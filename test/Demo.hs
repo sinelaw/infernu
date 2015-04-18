@@ -1,6 +1,7 @@
 module Demo where
 
 import           Data.Bool          (bool)
+import           Data.Functor       ((<$>))
 import           Data.List          (intercalate)
 import           Infernu.Infer      (pretty)
 import           Infernu.Util       (checkFiles)

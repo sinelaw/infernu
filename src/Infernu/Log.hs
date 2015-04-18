@@ -6,6 +6,7 @@ module Infernu.Log
        (trace, tracePretty, traceLog, traceLogVal)
        where
 
+import Control.Applicative (Applicative(..))
 import           Infernu.Pretty
 
 

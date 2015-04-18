@@ -2,6 +2,7 @@
 module Infernu.Util (checkFiles, annotatedSource, checkSource) where
 
 import           Control.Monad               (forM, when)
+import           Data.Functor                ((<$>))
 import           Data.Maybe                  (catMaybes)
 import           Data.List                   (intercalate)
 import qualified Data.Set                    as Set

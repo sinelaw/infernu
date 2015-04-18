@@ -11,8 +11,10 @@ import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT, bim
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify, mapStateT)
 import           Data.Foldable              (Foldable (..), msum)
 import           Data.Traversable              (Traversable (..))
+import           Data.Monoid (mappend)
 import qualified Data.Graph.Inductive      as Graph
     
+import           Data.Functor               ((<$>))
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
 -- import           Data.Map.Lazy              (Map)

@@ -16,6 +16,7 @@ module Infernu.Infer
 
 import           Control.Monad      (foldM, forM)
 import           Data.Foldable      (Foldable (..))
+import           Data.Functor       ((<$>))
 import           Data.Traversable   (mapM)
 import qualified Data.Graph.Inductive as Graph
 import           Data.Map.Lazy      (Map)
@@ -281,7 +282,7 @@ inferType' env (EIndex a eArr eIdx) =
 
 indexAccessPred :: TVarName -> TVarName -> TVarName -> TPred Type
 indexAccessPred arrTVarName elemTVarName idxTVarName =
-    let --elemType = mkv elemTVarName
+    let elemType = mkv elemTVarName
         mkv = Fix . TBody . TVar
     in
      TPredIsIn (ClassName "Indexable") (Fix $ TCons TTuple
