@@ -1,5 +1,5 @@
 name:                infernu
-version:             0.0.0.0
+version:             0.0.0.1
 synopsis:            Type inference and checker for JavaScript (experimental)
 description:         This version is highly experimental and may set your computer on fire (also, a lot of JS is not supported yet, so it may not be very useful.)
                      .
