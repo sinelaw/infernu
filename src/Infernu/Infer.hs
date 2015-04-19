@@ -57,7 +57,7 @@ closeRowList (TRowEnd _) = TRowEnd Nothing
 -- >>> pretty $ closeRow (Fix $ TFunc [Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "a.a" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2))] (Fix $ TBody TString))
 -- "{a: {a.a: Number, ..b}, ..c}.(() -> String)"
 closeRow :: Type -> Type
-closeRow (Fix (TRow r)) = Fix . TRow $ closeRowList r
+closeRow (Fix (TRow l r)) = Fix . TRow (fmap (++"*") l) $ closeRowList r
 closeRow t = t
 
 ----------------------------------------------------------------------
@@ -122,6 +122,10 @@ inferType' env (EApp a e1 eArgs) =
      return (tvar', EApp (a, tvar') e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1
+     let label e' = case e' of
+                        EVar _ n -> Just n
+                        ELet _ _ _ e'' -> label e''
+                        _ -> Nothing
      argsTE <- accumInfer env eArgs
      thisT <- Fix . TBody . TVar <$> fresh
      resT <- Fix . TBody . TVar <$> fresh
@@ -132,13 +136,16 @@ inferType' env (ENew a e1 eArgs) =
      unify a (qualType t1) (Fix $ TFunc tArgs resT)
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> fresh
-     unify a (Fix . TRow . TRowEnd $ Just rowConstraintVar) thisT
+     unify a (Fix . TRow Nothing . TRowEnd $ Just rowConstraintVar) thisT
      -- close the row type
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
      unify a thisT (closeRow resolvedThisT)
      -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
      preds' <- unifyPredsL a preds
-     let thisT' = TQual preds' thisT
+     let thisT' = TQual preds' thisTLabeled
+         thisTLabeled = case resolvedThisT of
+                            Fix (TRow Nothing rl) -> Fix $ TRow (label e1) rl
+                            _ -> resolvedThisT
      return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
@@ -177,9 +184,9 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
      let rvalueScheme = schemeFromQual rvalueT -- generalize expr1 env rvalueT
-         rank0Unify = unify a (qualType objT) $ Fix . TRow $ TRowProp n rvalueScheme $ TRowEnd (Just rowTailVar)
+         rank0Unify = unify a (qualType objT) $ Fix . TRow Nothing $ TRowProp n rvalueScheme $ TRowEnd (Just rowTailVar)
      case unFix (qualType objT) of
-       TRow trowList ->
+       TRow _ trowList ->
          case Map.lookup n . fst $ flattenRow trowList of
           -- lvalue is known to be a property with some scheme
           Just lvalueScheme ->
@@ -241,7 +248,7 @@ inferType' env (ERow a isOpen propExprs) =
          accumRowProp' row ((propName, propExpr), propType) =
            do ts <- generalize propExpr env propType
               return $ TRowProp propName ts row
-     rowType <- qualEmpty . Fix . TRow <$> foldM  accumRowProp' rowEnd' propNamesTypes
+     rowType <- qualEmpty . Fix . TRow Nothing <$> foldM  accumRowProp' rowEnd' propNamesTypes
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (ECase a eTest eBranches) =
   do (eType, eTest') <- inferType env eTest
@@ -261,7 +268,7 @@ inferType' env (EProp a eObj propName) =
          --case unFix (qualType tObj) of
 --                  TRow tRowList -> --TODO
 --                  _ -> schemeEmpty . Fix . TBody . TVar <$> fresh
-     unify a (Fix . TRow $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)) (qualType tObj)
+     unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)) (qualType tObj)
      propType <- instantiate propTypeScheme
      return (propType, EProp (a,propType) eObj' propName)
 inferType' env (EIndex a eArr eIdx) =

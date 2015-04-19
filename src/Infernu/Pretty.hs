@@ -76,7 +76,7 @@ instance Pretty (Exp a) where
                                   ++ prettyTab (t+1) e'
                                   ++ "\n" ++ tab (t+1)
                                   ++ case eBody of
-                                         (ELet _ nb e1b e2b) -> letLine nb e1b e2b
+                                         ELet _ nb e1b e2b -> letLine nb e1b e2b
                                          _ -> pretty " in " ++ prettyTab (t+1) eBody
   prettyTab t (ELit _ l) = prettyTab t l
   prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab (t+1) ++ prettyTab (t+1) e2
@@ -149,13 +149,17 @@ prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) 
 prettyType _ (TCons (TName name) _) = "<" ++ pretty name ++ ">" -- : " ++ (unwords $ map (prettyTab n) ts) ++ ">"
 prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
 prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
-prettyType t (TRow list) = "{"
-                          ++ body'
-                          ++ (case r of
-                               FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
-                               FlatRowEndRec tid ts -> ", " ++ prettyTab (t+1) (Fix $ TCons (TName tid) ts) -- TODO
-                             )
-                          ++ "}"
+prettyType t (TRow label list) =
+    concat [ case label of
+                 Just l' -> l' ++ "="
+                 Nothing -> ""
+           , "{"
+           , body'
+           , case r of
+                  FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
+                  FlatRowEndRec tid ts -> ", " ++ prettyTab (t+1) (Fix $ TCons (TName tid) ts) -- TODO
+           , "}"
+           ]
   where (props, r) = flattenRow list
         printProp' = (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v)
         body' = case Map.toList props of

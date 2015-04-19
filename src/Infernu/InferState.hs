@@ -184,7 +184,7 @@ isRecParamOnly n1 typeId t1 =
    TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
    TFunc ts tres -> (isRecParamOnly n1 Nothing) tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
-   TRow rlist -> isRecParamRecList n1 rlist
+   TRow _ rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
              case rlist' of
               TRowEnd _ -> Just []
@@ -210,7 +210,7 @@ replaceRecType typeId newTypeId indexToDrop t1 =
                                           else t1
             TCons n subTs -> Fix $ TCons n $ mapTs' subTs
             TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
-            TRow rlist -> Fix $ TRow $ go rlist
+            TRow l rlist -> Fix $ TRow l $ go rlist
              where go rlist' =
                      case rlist' of
                       TRowEnd _ -> rlist'

@@ -281,17 +281,17 @@ unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
                           loop' ts'
      
 -- | Type constructor vs. row type
-unify' r a (TRow tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
-unify' r a t1@(TCons _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
-unify' r a (TRow tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
-unify' r a t1@(TBody _)   (TRow tRowList)  = unifyTryMakeRow r a False tRowList t1
-unify' r a (TRow tRowList) t2@(TFunc _ _)  = unifyTryMakeRow r a True  tRowList t2
-unify' r a t1@(TFunc _ _)  (TRow tRowList) = unifyTryMakeRow r a False tRowList t1
+unify' r a (TRow _ tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TCons _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
+unify' r a (TRow _ tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TBody _)   (TRow _ tRowList)  = unifyTryMakeRow r a False tRowList t1
+unify' r a (TRow _ tRowList) t2@(TFunc _ _)  = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TFunc _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
 
 
 -- | Two row types
 -- TODO: un-hackify!
-unify' recurse a t1@(TRow row1) t2@(TRow row2) =
+unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
   unlessEq t1 t2 $ do
      let (m2, r2) = flattenRow row2
          names2 = Set.fromList $ Map.keys m2
@@ -315,13 +315,17 @@ unify' recurse a t1@(TRow row1) t2@(TRow row2) =
 
 unifyTryMakeRow :: UnifyF -> Source -> Bool -> TRowList Type -> FType Type -> Infer ()
 unifyTryMakeRow r a leftBiased tRowList t2 =
-  do let tRow = TRow tRowList
+  do let tRow = TRow Nothing tRowList
      res <- tryMakeRow t2
      case res of
       Nothing -> unificationError a tRow t2
       Just rowType -> if leftBiased
-                      then r a (Fix tRow) (Fix $ TRow rowType)
-                      else r a (Fix $ TRow rowType) (Fix tRow)
+                      then r a (Fix tRow) row'
+                      else r a row' (Fix tRow)
+         where row' = Fix $ TRow label' rowType
+               label' = case t2 of
+                            TCons cons _ -> Just $ pretty cons
+                            _ -> Just $ pretty t2
 
 
 unifyRowPropertyBiased :: Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
@@ -369,12 +373,12 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
            rowTail = case r2 of
                       FlatRowEndTVar (Just _) -> FlatRowEndTVar $ Just r
                       _ -> r2
---                                              fmap (const r) r2
-           in1NotIn2row = tracePretty "in1NotIn2row" $ Fix . TRow . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
+           in1NotIn2row = Fix . TRow Nothing . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
 
+       traceLog $ "in1NotIn2row" ++ pretty in1NotIn2row
        case r2 of
          FlatRowEndTVar Nothing -> if Set.null in1NotIn2
-                    then varBind a (getRowTVar r) (Fix $ TRow $ TRowEnd Nothing)
+                    then varBind a (getRowTVar r) (Fix $ TRow Nothing $ TRowEnd Nothing)
                     else unificationError a t1 t2
          FlatRowEndTVar (Just r2') -> recurse a in1NotIn2row (Fix . TBody . TVar $ getRowTVar r2')
          FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TCons (TName tid) ts)
@@ -398,9 +402,9 @@ unifyl r a = mapM_ $ uncurry $ r a
 isInsideRowType :: TVarName -> Type -> Set Type
 isInsideRowType n (Fix t) =
   case t of
-   TRow t' -> if n `Set.member` freeTypeVars t'
-              then Set.singleton $ Fix t
-              else Set.empty
+   TRow _ t' -> if n `Set.member` freeTypeVars t'
+                then Set.singleton $ Fix t
+                else Set.empty
    _ -> foldr (\x l -> isInsideRowType n x `Set.union` l) Set.empty t
 --   _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 

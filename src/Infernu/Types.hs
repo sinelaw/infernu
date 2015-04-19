@@ -147,7 +147,9 @@ data FType t = TBody TBody
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
              | TFunc [t] t 
-             | TRow (TRowList t)
+               -- | Row types have an optional label, so that structural (non-nominal) types can
+               -- have a name. The label has no effect on type checking.
+             | TRow (Maybe String) (TRowList t)
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type Type = Fix FType
@@ -232,11 +234,11 @@ instance VarNames t => VarNames (TRowList t) where
 -- fromList [3]
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
-  freeTypeVars (Fix (TRow trlist)) = freeTypeVars trlist
+  freeTypeVars (Fix (TRow _ trlist)) = freeTypeVars trlist
   freeTypeVars (Fix t) = freeTypeVars' t
 
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
-  mapVarNames f (Fix (TRow trlist)) = Fix $ TRow $ mapVarNames f trlist
+  mapVarNames f (Fix (TRow l trlist)) = Fix $ TRow l (mapVarNames f trlist)
   mapVarNames f (Fix t) = Fix $ mapVarNames' f t
 
 instance VarNames (FType (Fix FType)) where
@@ -321,7 +323,7 @@ instance Substable Type where
   applySubst s ft@(Fix t) =
     case t of
      TBody (TVar n) -> substT' n t
-     TRow r -> Fix $ TRow $ applySubst s r
+     TRow l r -> Fix $ TRow l $ applySubst s r
      _ -> if ft `elem` Map.elems s
           then ft
           else Fix $ fmap (applySubst s) t
@@ -359,7 +361,7 @@ instance Substable (TRowList Type) where
   applySubst s t@(TRowEnd (Just (RowTVar tvarName))) =
     case Map.lookup tvarName s of
       Nothing -> t
-      Just (Fix (TRow tRowList)) -> tRowList
+      Just (Fix (TRow _ tRowList)) -> tRowList
       Just (Fix (TCons (TName tid) ts)) -> TRowRec tid ts
       Just (Fix (TBody (TVar n))) -> TRowEnd $ Just $ RowTVar n
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
