@@ -179,15 +179,15 @@ inferType' env expr@(EAssign a n expr1 expr2) =
      --
      let tRest' = TQual preds $ qualType tRest
      return (tRest', EAssign (a, tRest') n expr1' expr2')
-inferType' env (EPropAssign a objExpr n expr1 expr2) =
+inferType' env (EPropAssign a objExpr prop expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
      let rvalueScheme = schemeFromQual rvalueT -- generalize expr1 env rvalueT
-         rank0Unify = unify a (qualType objT) $ Fix . TRow Nothing $ TRowProp n rvalueScheme $ TRowEnd (Just rowTailVar)
+         rank0Unify = unify a (qualType objT) $ Fix . TRow Nothing $ TRowProp prop rvalueScheme $ TRowEnd (Just rowTailVar)
      case unFix (qualType objT) of
        TRow _ trowList ->
-         case Map.lookup n . fst $ flattenRow trowList of
+         case Map.lookup prop . fst $ flattenRow trowList of
           -- lvalue is known to be a property with some scheme
           Just lvalueScheme ->
             do generalizedRvalue <- generalize expr1 env rvalueT
@@ -199,27 +199,7 @@ inferType' env (EPropAssign a objExpr n expr1 expr2) =
      --instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
      preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
      let tRes = TQual preds $ qualType expr2T
-     return (tRes, EPropAssign (a, tRes) objExpr' n expr1' expr2')
-inferType' env (EIndexAssign a eArr eIdx expr1 expr2) =
-  do (tArr, eArr') <- inferType env eArr
-     elemTVarName <- fresh
-     arrTVarName <- fresh
-     idxTVarName <- fresh
-     let elemType = Fix . TBody . TVar $ elemTVarName
---     unify a (qualType tArr) $ Fix $ TCons TArray [elemType]
-     unify a (qualType tArr) $ Fix $ TBody $ TVar arrTVarName
-     (tId, eIdx') <- inferType env eIdx
-     unify a (qualType tId) $ Fix $ TBody $ TVar idxTVarName
-     (tExpr1, expr1') <- inferType env expr1
-     unify a (qualType tExpr1) elemType
-     -- TODO: BUG here, because elemTVarName never has any var instances due to the predicates usage here.
-     --traceLog "EIndexAssign - applying unifyAllInstances"
-     --instancePred <- unifyAllInstances a [elemTVarName]
-     (tExpr2, expr2') <- inferType env expr2
-     let curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
-     preds <- unifyPredsL a $ concat $ ([curPred]:) $ map qualPred [tArr, tId, tExpr1, tExpr2] -- TODO review
-     let tRes = TQual preds $ qualType tExpr2
-     return (tRes , EIndexAssign (a, tRes)  eArr' eIdx' expr1' expr2')
+     return (tRes, EPropAssign (a, tRes) objExpr' prop expr1' expr2')
 inferType' env (EArray a exprs) =
   do tv <- Fix . TBody . TVar <$> fresh
      te <- accumInfer env exprs
@@ -247,7 +227,7 @@ inferType' env (ERow a isOpen propExprs) =
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          accumRowProp' row ((propName, propExpr), propType) =
            do ts <- generalize propExpr env propType
-              return $ TRowProp propName ts row
+              return $ TRowProp (TPropName propName) ts row
      rowType <- qualEmpty . Fix . TRow Nothing <$> foldM  accumRowProp' rowEnd' propNamesTypes
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (ECase a eTest eBranches) =
@@ -271,35 +251,6 @@ inferType' env (EProp a eObj propName) =
      unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)) (qualType tObj)
      propType <- instantiate propTypeScheme
      return (propType, EProp (a,propType) eObj' propName)
-inferType' env (EIndex a eArr eIdx) =
-  do (tArr, eArr') <- inferType env eArr
-     elemTVarName <- fresh
-     arrTVarName <- fresh
-     idxTVarName <- fresh
-     unify a (qualType tArr) (Fix $ TBody $ TVar arrTVarName)
-     (tId, eIdx') <- inferType env eIdx
-     unify a (qualType tId) (Fix $ TBody $ TVar idxTVarName)
-     let elemType' = qualEmpty $ Fix $ TBody $ TVar elemTVarName
-         curPred = indexAccessPred arrTVarName elemTVarName idxTVarName
-     preds <- unifyPredsL a $ (curPred:) $ concatMap qualPred [tArr, tId] -- TODO review
-     let tRes = TQual preds $ qualType elemType'
-     return (tRes, EIndex (a, tRes)  eArr' eIdx')
-
-indexAccessPred :: TVarName -> TVarName -> TVarName -> TPred Type
-indexAccessPred arrTVarName elemTVarName idxTVarName =
-    let --elemType = mkv elemTVarName
-        mkv = Fix . TBody . TVar
-    in
-     TPredIsIn (ClassName "Indexable") (Fix $ TCons TTuple
-                                        [ mkv arrTVarName
-                                        , mkv idxTVarName
-                                        , mkv elemTVarName
-                                        ])
-                                          -- Fix $ TCons TArray [elemType])
-    -- , TPredIsIn "Index"
-    --  `mkAnd` TPredEq idxTVarName (Fix $ TBody TNumber))
-    -- `mkOr` (TPredEq arrTVarName (Fix $ TCons TStringMap [elemType])
-    --         `mkAnd` TPredEq idxTVarName (Fix $ TBody TString))
 
 unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do

@@ -81,7 +81,6 @@ instance Pretty (Exp a) where
   prettyTab t (ELit _ l) = prettyTab t l
   prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab (t+1) ++ prettyTab (t+1) e2
   prettyTab t (EPropAssign _ obj n e1 e2) = prettyTab t obj ++ "." ++ prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab (t+1) ++ prettyTab (t+1) e2
-  prettyTab t (EIndexAssign _ obj i e1 e2) = prettyTab t obj ++ "[" ++ prettyTab t i ++ "] := " ++ prettyTab t e1 ++ ";\n" ++ tab (t+1) ++ prettyTab (t+1) e2
   prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
   prettyTab t (ERow _ isOpen props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ (if isOpen then ", " else "") ++ "}"
@@ -91,7 +90,6 @@ instance Pretty (Exp a) where
                                           ++ " -> "
                                           ++ prettyTab (t+1) branch
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
-  prettyTab t (EIndex _ e1 e2) = prettyTab t e1 ++ "[" ++ prettyTab t e2 ++ "]"
   prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
   prettyTab t (EStringMap _ exprs) = "<" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ " => " ++ prettyTab t v) exprs) ++ ">"
 
@@ -167,6 +165,11 @@ prettyType t (TRow label list) =
                     [p] -> printProp' p
                     ps -> "\n" ++ tab (t+1) ++ intercalate (",\n" ++ tab (t+1)) (map printProp' ps) ++ "\n" ++ tab t
 
+instance Pretty TProp where
+    prettyTab t (TPropName n) = prettyTab t n
+    prettyTab _ TPropGetIndex = "get[]"
+    prettyTab _ TPropSetIndex = "set[]"
+                                
 instance Pretty ClassName where
     prettyTab _ (ClassName c) = c
                     

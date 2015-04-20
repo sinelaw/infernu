@@ -60,8 +60,11 @@ arrayProps elemType = let aType = array elemType in
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
 arrayRowType :: Type -> Infer (TRowList Type)
-arrayRowType elemType = foldM addProp (TRowEnd Nothing) $ arrayProps elemType
-  where addProp rowlist (name, propTS) =
+arrayRowType elemType = TRowProp TPropSetIndex (ts $ funcN [aType, number, elemType] undef)
+                        . TRowProp TPropGetIndex (ts $ func aType number elemType)
+                        <$> (foldM addProp (TRowEnd Nothing) $ arrayProps elemType)
+  where aType = array elemType
+        addProp rowlist (name, propTS) =
           do allocNames <- forM (schemeVars propTS) $ \tvName -> (fresh >>= return . (tvName,))
              let ts' = mapVarNames (safeLookup allocNames) propTS
-             return $ TRowProp name ts' rowlist
+             return $ TRowProp (TPropName name) ts' rowlist

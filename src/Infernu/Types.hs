@@ -29,6 +29,7 @@ module Infernu.Types
        , getRowTVar
        , liftRowTVar
        , FlatRowEnd(..)
+       , TProp(..)
        , TRowList(..)
        , ClassName(..)
        , Class(..)
@@ -98,17 +99,13 @@ data Exp a = EVar a EVarName
            | ELet a EVarName (Exp a) (Exp a)
            | ELit a LitVal
            | EAssign a EVarName (Exp a) (Exp a)
-           | EPropAssign a (Exp a) EPropName (Exp a) (Exp a)
-           | EIndexAssign a (Exp a) (Exp a) (Exp a) (Exp a)
+           | EPropAssign a (Exp a) TProp (Exp a) (Exp a)
            | EArray a [Exp a]
            | ETuple a [Exp a]
            | ERow a Bool [(EPropName, Exp a)]
            | EStringMap a [(String, Exp a)]
            | ECase a (Exp a) [(LitVal, Exp a)]
-           | EProp a (Exp a) EPropName
-             -- TODO EIndex should not be part of the AST. should be a builtin function using
-             -- pattern matching instead
-           | EIndex a (Exp a) (Exp a)
+           | EProp a (Exp a) TProp
              -- TODO consider better options for causing rows to become closed outside the 'new' call
            | ENew a (Exp a) [Exp a]
              deriving (Show, Eq, Ord, Functor, Foldable)
@@ -137,7 +134,10 @@ liftRowTVar :: (TVarName -> TVarName) -> RowTVar -> RowTVar
 liftRowTVar f (RowTVar x) = RowTVar (f x)
 
 -- | Row type.
-data TRowList t = TRowProp EPropName (TScheme t) (TRowList t)
+data TProp = TPropName EPropName | TPropGetIndex | TPropSetIndex
+           deriving (Show, Eq, Ord)
+
+data TRowList t = TRowProp TProp (TScheme t) (TRowList t)
                 | TRowEnd (Maybe RowTVar)
                 | TRowRec TypeId [t]
                   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
@@ -343,14 +343,14 @@ sortRow row = row -- TODO implement
 
 data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) | FlatRowEndRec TypeId [t]
 
-flattenRow :: TRowList t -> (Map.Map EPropName (TScheme t), FlatRowEnd t)
+flattenRow :: TRowList t -> (Map.Map TProp (TScheme t), FlatRowEnd t)
 flattenRow = flattenRow' (Map.empty, FlatRowEndTVar Nothing)
-    where flattenRow' :: (Map.Map EPropName (TScheme t), FlatRowEnd t) -> TRowList t -> (Map.Map EPropName (TScheme t), FlatRowEnd t)
+    where flattenRow' :: (Map.Map TProp (TScheme t), FlatRowEnd t) -> TRowList t -> (Map.Map TProp (TScheme t), FlatRowEnd t)
           flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
           flattenRow' (m,_) (TRowEnd r') = (m, FlatRowEndTVar r')
           flattenRow' (m,_) (TRowRec tid ts) = (m, FlatRowEndRec tid ts)
 
-unflattenRow :: Map.Map EPropName (TScheme t) -> FlatRowEnd t -> (EPropName -> Bool) -> TRowList t
+unflattenRow :: Map.Map TProp (TScheme t) -> FlatRowEnd t -> (TProp -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) rend m
   where rend = case r of
           FlatRowEndTVar r' -> TRowEnd r'
@@ -542,14 +542,12 @@ mapTopAnnotation f expr =
         (ELit a x) -> ELit (f a) x
         (EAssign a x y z) -> EAssign (f a) x y z
         (EPropAssign a x y z v) -> EPropAssign (f a) x y z v
-        (EIndexAssign a x y z v) -> EIndexAssign (f a) x y z v
         (EArray a x) -> EArray (f a) x
         (ETuple a x) -> ETuple (f a) x
         (ERow a x y) -> ERow (f a) x y
         (EStringMap a x) -> EStringMap (f a) x
         (ECase a x ys) -> ECase (f a) x ys
         (EProp a x y) -> EProp (f a) x y
-        (EIndex a x y) -> EIndex (f a) x y
         (ENew a x y) -> ENew (f a) x y
 
 ----------------------------------------------------------------------
