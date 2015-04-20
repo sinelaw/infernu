@@ -1,6 +1,8 @@
+// FAIL valid/mutability/array-of-polyfuncs.js:11:7: Error:  |   Faile y valid/mutability/array-of-polyfuncs.js
 // FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  dw.(({}.( y valid/new-func.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  < y valid/nothis-as-param.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
+// FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (dn -> e y valid/promise.js
 // FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error:  |   Failed y valid/prop-polymorphic-assign2-this.js
 // FAIL valid/prop-polymorphic-assign3.js:4:1: Error:  |   Failed unif y valid/prop-polymorphic-assign3.js
