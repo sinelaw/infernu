@@ -165,14 +165,15 @@ The two instances of `Plus` currently defined are the types `Number` and `String
 
 ------------
 
-## TODO
+## Pending discussion
 
-- [ ] consider adding sum types with guards as pattern matchers. required because some functions, like array index access, can return 'undefined' (e.g. if index is out of range)
+Things that maybe need to be done, but have major drawbacks:
+
+- [ ] consider adding sum types with guards as pattern matchers. required because some functions, like array index access, can return 'undefined' (e.g. if index is out of range) - breaks parametricity and complicates the inference greatly.
 - [ ] allow empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
-- [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...`
+- [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...` - requires non-local context to deteremine the type of a constructor function.
 - [ ] find a reasonable solution for optional parameters - perhaps using an implicit "Maybe"-like type or implicit type unions, and require guards?
 - [ ] when concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere)
-- [ ] BUG: top-level type of naked object `{a:3}` isn't shown unless it is wrapped in a paren `({a:3})`.
 - [ ] support `arguments` (a tuple?) and function `bind`
 - [ ] Should we treat functions as objects with properties? the only properties they have are: length (very weird! we might as well leave it out), and call/bind/apply (which need special handling)
 
