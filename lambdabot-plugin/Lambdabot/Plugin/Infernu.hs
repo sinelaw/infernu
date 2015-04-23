@@ -15,7 +15,7 @@ import qualified Language.ECMAScript3.Syntax as ES3
 import           Infernu.Infer                (getAnnotations, minifyVars,
                                               pretty, runTypeInference)
 import           Infernu.Parse                (translate)
-import           Infernu.Types (IsGen(..), Source(..))
+import           Infernu.Types (GenInfo(..), Source(..))
 
 infernuPlugin :: Module ()
 infernuPlugin = newModule
@@ -37,5 +37,5 @@ sayType rest = case  runTypeInference . fmap Source . translate . ES3.unJavaScri
                               Left e' -> pretty e'
                               Right [] -> show "There is nothing there."
                               Right xs -> pretty . minifyVars . snd $ head $ filterGen xs
-                                  where filterGen = filter (\(Source (IsGen g, _), _) -> not g)
+                                  where filterGen = filter (\(Source (GenInfo g _, _), _) -> not g)
 
