@@ -6,7 +6,11 @@ import           Infernu.Types
 
 typeClasses =
     [
-      (ClassName "Plus", Class { classInstances =
+      (ClassName "Pattern", Class { classInstances =
+                                    [ schemeEmpty $ Fix $ TBody TRegex
+                                    , schemeEmpty $ Fix $ TBody TString
+                                    ]})
+    , (ClassName "Plus", Class { classInstances =
                                          [ schemeEmpty $ Fix $ TBody TNumber
                                          , schemeEmpty $ Fix $ TBody TString
                                          ]})

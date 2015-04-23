@@ -12,7 +12,7 @@ import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT, bim
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify, mapStateT)
 import qualified Data.Graph.Inductive      as Graph
     
-
+import qualified Data.List                  as List
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
 -- import           Data.Map.Lazy              (Map)
@@ -224,7 +224,7 @@ allocNamedType n t =
   do typeId <- TypeId <$> fresh
      let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          target = replaceFix (TBody (TVar n)) namedType t
-     scheme <- unsafeGeneralize Map.empty $ qualEmpty target
+     (scheme, ps) <- unsafeGeneralize Map.empty $ qualEmpty target
      traceLog $ "===> Generated scheme for mu type: " ++ pretty scheme
      currentNamedTypes <- filter (areEquivalentNamedTypes (Fix namedType, scheme)) . map snd . Map.toList . namedTypes <$> get
      case currentNamedTypes of
@@ -362,14 +362,17 @@ instantiateVar a n env = do
 -- Right (TScheme {schemeVars = [0,1], schemeType = TQual {qualPred = [TPredIsIn {predClass = ClassName "Bla", predType = Fix (TBody (TVar 1))}], qualType = Fix (TBody (TVar 0))}})
 --
 -- TODO add tests for monotypes
-unsafeGeneralize :: TypeEnv -> QualType -> Infer TypeScheme
+unsafeGeneralize :: TypeEnv -> QualType -> Infer (TypeScheme, [TPred Type])
 unsafeGeneralize tenv t = do
     traceLog $ "Generalizing: " ++ pretty t
     s <- getMainSubst
     let t' = applySubst s t
-    unboundVars <- Set.difference (freeTypeVars t') <$> getFreeTVars tenv
+        ftvs = freeTypeVars t'
+    unboundVars <- Set.difference ftvs <$> getFreeTVars tenv
     traceLog $ "Generalization result: unbound vars = " ++ pretty unboundVars ++ ", type = " ++ pretty t'
-    return $ TScheme (Set.toList unboundVars) t'
+    let t'' = TQual { qualPred = qvarPreds, qualType = qualType t' }
+        (qvarPreds, floatedPreds) = List.partition (\p -> Set.null $ freeTypeVars p `Set.intersection` unboundVars) $ qualPred t'
+    return $ (TScheme (Set.toList unboundVars) t', floatedPreds)
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar _ _)        = False
@@ -388,9 +391,9 @@ isExpansive (EProp _ e _)  = isExpansive e
 isExpansive (ENew _ _ _) = True
 
 
-generalize :: Exp a -> TypeEnv -> QualType -> Infer TypeScheme
+generalize :: Exp a -> TypeEnv -> QualType -> Infer (TypeScheme, [TPred Type])
 generalize exp' env t = if isExpansive exp'
-                        then return $ TScheme [] t
+                        then return $ (TScheme [] t, [])
                         else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName

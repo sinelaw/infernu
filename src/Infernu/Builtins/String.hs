@@ -11,6 +11,9 @@ import           Infernu.Lib (safeLookup)
 func :: Type -> Type -> Type -> Type
 func this x y = Fix $ TFunc [this, x] y
 
+funcN :: [Fix FType] -> Fix FType -> Fix FType
+funcN xs tres = Fix $ TFunc xs tres
+
 string :: Type
 string = Fix $ TBody TString
 
@@ -19,6 +22,11 @@ number = Fix $ TBody TNumber
         
 ts :: t -> TScheme t
 ts t = TScheme [] $ qualEmpty t
+
+tvar :: TVarName -> Type
+tvar = Fix . TBody . TVar
+
+withTypeClass n t t' = TQual { qualPred = [TPredIsIn { predClass = ClassName n, predType = t }], qualType = t' }
 
 stringProps :: [(String, TypeScheme)]
 stringProps = 
@@ -39,7 +47,8 @@ stringProps =
 --     type M RegexGlobal = [String]
 -- 
 --  , ("match", ts $ func string regex
-    
+
+  , ("replace", TScheme [0] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars

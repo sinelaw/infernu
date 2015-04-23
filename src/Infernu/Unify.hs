@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Infernu.Unify
-       (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL, unifyPending)
+       (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL, unifyPending, tryMakeRow)
        where
 
 
@@ -338,8 +338,11 @@ unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
                              -- should prevent cycles!
                              --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
                              -- TODO do something with pred'
-                             unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
+                             --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
                              recurse a (qualType scheme1T) (qualType scheme2T)
+                             preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
+                             preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
+                             when (preds1' /= preds2') $ errorAction
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
             case scheme1s of
@@ -424,9 +427,12 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
 unifyAll :: Source -> [Type] -> Infer ()
 unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 
-
+-- | Tries to minimize a set of constraints by finding ones that can be unambiguously refined to a
+-- specific type. Updates the state (subst) to reflect the found substitutions, and for those
+-- constraints that could not be disambiguated - records them as pending disambiguities. Returns the
+-- filtered list of yet-to-be-resolved predicates.
 unifyPredsL :: Source -> [TPred Type] -> Infer [TPred Type]
-unifyPredsL a ps = catMaybes <$>
+unifyPredsL a ps = Set.toList . Set.fromList . catMaybes <$>
     do  forM ps $ \p@(TPredIsIn className t) ->
                   do  entry <- ((a,t,) . (className,) . Set.fromList . classInstances) <$> lookupClass className
                                `failWithM` throwError a ("Unknown class: " ++ pretty className ++ " in pred list: " ++ pretty ps)
@@ -445,7 +451,19 @@ catLefts :: [Either a b] -> [a]
 catLefts [] = []
 catLefts (Left a:xs) = a:(catLefts xs)
 catLefts (Right _:xs) = catLefts xs
-                        
+
+-- | Given a type and a set of possible typeclass instances, tries to find an unambiguous
+-- unification that works for this type.
+--
+-- (classname is used for error reporting)
+--
+-- If none of the possible instances of the typeclass can unify with the given type, fails.
+--
+-- If there is is more than one possible instance, returns the subset of possible instances.
+--
+-- If there is exactly one possible instance, applies the unification to the current state and
+-- returns Nothing.
+--
 unifyAmbiguousEntry :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer (Maybe (Source, Type, (ClassName, Set TypeScheme)))
 unifyAmbiguousEntry (a, t, (ClassName className, tss)) = 
     do  let unifAction ts =

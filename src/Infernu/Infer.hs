@@ -32,7 +32,7 @@ import           Infernu.Lib        (safeLookup)
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyRowPropertyBiased, unifyl)
+import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyRowPropertyBiased, unifyl, tryMakeRow)
 
 
 
@@ -152,10 +152,10 @@ inferType' env (ELet a n e1 e2) =
      recEnv <- addVarScheme env n $ schemeEmpty recType
      (t1, e1') <- inferType recEnv e1
      unify a (qualType t1) recType
-     t' <- generalize e1 env t1
+     (t', preds) <- generalize e1 env t1
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
-     preds' <- unifyPredsL a $ concatMap qualPred [t1, t2]
+     preds' <- unifyPredsL a $ preds ++ concatMap qualPred [t1, t2]
      let resT = TQual preds' $ qualType t2
      return (resT, ELet (a, resT) n e1' e2')
 -- | Handling of mutable variable assignment.
@@ -171,33 +171,35 @@ inferType' env expr@(EAssign a n expr1 expr2) =
      traceLog $ "EAssign lvalueT: " ++ pretty lvalueT
      traceLog $ "EAssign Invoking unifyAllInstances on scheme: " ++ pretty lvalueScheme
      instancePreds <- unifyAllInstances a $ getQuantificands lvalueScheme
-     preds <- unifyPredsL a $ concat $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest] -- TODO should update variable scheme
      -- update the variable scheme, removing perhaps some quantified tvars
      varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
-     updatedScheme <- generalize expr1 env (schemeType lvalueScheme)
+     (updatedScheme, floatedPreds) <- generalize expr1 env (schemeType lvalueScheme)
      _ <- setVarScheme env n updatedScheme varId
      --
+     preds <- unifyPredsL a $ floatedPreds ++ (concat $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest]) -- TODO should update variable scheme
      let tRest' = TQual preds $ qualType tRest
      return (tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr prop expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     let rvalueScheme = schemeFromQual rvalueT -- generalize expr1 env rvalueT
-         rank0Unify = unify a (qualType objT) $ Fix . TRow Nothing $ TRowProp prop rvalueScheme $ TRowEnd (Just rowTailVar)
-     case unFix (qualType objT) of
-       TRow _ trowList ->
-         case Map.lookup prop . fst $ flattenRow trowList of
-          -- lvalue is known to be a property with some scheme
-          Just lvalueScheme ->
-            do generalizedRvalue <- generalize expr1 env rvalueT
-               unifyRowPropertyBiased a rank0Unify (lvalueScheme, generalizedRvalue)
-          Nothing -> rank0Unify
-       _ -> rank0Unify
+     let rank0Unify rvalueScheme = unify a (qualType objT) $ Fix . TRow Nothing $ TRowProp prop rvalueScheme $ TRowEnd (Just rowTailVar)
+         rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
+     (action, floatedPreds) <- case unFix (qualType objT) of
+           TRow _ trowList ->
+             case Map.lookup prop . fst $ flattenRow trowList of
+              -- lvalue is known to be a property with some scheme
+              Just lvalueScheme ->
+                do (generalizedRvalue, floatedPreds') <- generalize expr1 env rvalueT
+                   (,floatedPreds') <$> unifyRowPropertyBiased a (rank0Unify rvalueSchemeFloated) (lvalueScheme, generalizedRvalue)
+                   --(,floatedPreds') <$> rank0Unify generalizedRvalue
+              Nothing -> (,qualPred rvalueT) <$> rank0Unify rvalueSchemeFloated
+           _ -> (,qualPred rvalueT) <$> rank0Unify rvalueSchemeFloated
+     traceLog ("Floated preds: " ++ pretty floatedPreds) 
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
      --traceLog "EPropAssign - applying unifyAllInstances"
      --instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
-     preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
+     preds <- unifyPredsL a $ floatedPreds ++ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
      let tRes = TQual preds $ qualType expr2T
      return (tRes, EPropAssign (a, tRes) objExpr' prop expr1' expr2')
 inferType' env (EArray a exprs) =
@@ -225,10 +227,11 @@ inferType' env (ERow a isOpen propExprs) =
      endVar <- RowTVar <$> fresh
      let propNamesTypes = zip propExprs (reverse $ map fst te)
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
-         accumRowProp' row ((propName, propExpr), propType) =
-           do ts <- generalize propExpr env propType
-              return $ TRowProp (TPropName propName) ts row
-     rowType <- qualEmpty . Fix . TRow Nothing <$> foldM  accumRowProp' rowEnd' propNamesTypes
+         accumRowProp' (row, floatedPs') ((propName, propExpr), propType) =
+           do (ts, floatedPs) <- generalize propExpr env propType
+              return $ (TRowProp (TPropName propName) ts row, floatedPs' ++ floatedPs)
+     (rowType', floatedPreds) <- foldM  accumRowProp' (rowEnd', []) propNamesTypes
+     let rowType = TQual { qualPred = floatedPreds, qualType = Fix . TRow Nothing $ rowType' }
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (ECase a eTest eBranches) =
   do (eType, eTest') <- inferType env eTest
@@ -243,13 +246,29 @@ inferType' env (ECase a eTest eBranches) =
      return (tRes, ECase (a, tRes) eTest' $ zip (map fst eBranches) (map snd infBranches))
 inferType' env (EProp a eObj propName) =
   do (tObj, eObj') <- inferType env eObj
-     rowVar <- RowTVar <$> fresh
-     propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> fresh
-         --case unFix (qualType tObj) of
---                  TRow tRowList -> --TODO
---                  _ -> schemeEmpty . Fix . TBody . TVar <$> fresh
-     unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme $ TRowEnd (Just rowVar)) (qualType tObj)
-     propType <- instantiate propTypeScheme
+     -- This is a hack to make it easier to support higher-rank row properties.  We require to have
+     -- determined the type of eObj "good enough" for us to find if it has the required property or
+     -- not.  Otherwise we must assume the property is a monotype.
+     let propTypeIfMono =
+             do traceLog $ "Failed to find prop: " ++ pretty propName ++ " in type: " ++ pretty tObj
+                rowTail <- TRowEnd . Just . RowTVar <$> fresh
+                propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> fresh
+                unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme $ rowTail) (qualType tObj)
+                instantiate propTypeScheme
+
+         propTypefromTRow tRowList =
+             case Map.lookup propName . fst $ flattenRow tRowList of
+                 Just knownPropTypeScheme -> instantiate knownPropTypeScheme
+                 Nothing -> propTypeIfMono
+         
+     rowType <- case unFix (qualType tObj) of
+                    TRow _ tRowList -> return $ Just tRowList
+                    _ -> tryMakeRow $ unFix (qualType tObj)
+     propType <-
+         case rowType of
+             Just tRowList -> propTypefromTRow tRowList
+             _ -> propTypeIfMono
+     
      return (propType, EProp (a,propType) eObj' propName)
 
 unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
