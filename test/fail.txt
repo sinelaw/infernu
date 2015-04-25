@@ -7,3 +7,4 @@
 // FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (dh -> e y valid/promise.js
 // FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error:  |   Failed y valid/prop-polymorphic-assign2-this.js
 // FAIL valid/prop-polymorphic-assign3.js:4:1: Error:  |   Failed unif y valid/prop-polymorphic-assign3.js
+// FAIL  n invalid/rank-2-method-b.js
