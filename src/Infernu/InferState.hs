@@ -329,14 +329,16 @@ instantiateVar a n env = do
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
   tracePretty ("Instantiated var '" ++ pretty n ++ "' with scheme: " ++ pretty scheme ++ " to") <$> instantiate scheme
 
-instantiateToSkolems :: TypeScheme -> Infer QualType
-instantiateToSkolems (TScheme tvs t) =
+instantiateToSkolems :: Bool -> TypeScheme -> Infer QualType
+instantiateToSkolems isContra (TScheme tvs t) =
     do allocNames <- Map.fromList <$> allocTVarInstances tvs
-       let replaceVars' (Fix t@(TBody (TVar n))) = Fix $ case Map.lookup n allocNames of
-                                                             Nothing -> t
-                                                             Just n' -> (TBody (TSkolem n'))
-           replaceVars' (Fix t) = Fix $ fmap replaceVars' t
-       return $ t { qualType = replaceVars' (qualType t) }
+       let replaceVars' contra (Fix t@(TBody (TVar n))) = Fix $ case Map.lookup n allocNames of
+                                                                    Nothing -> t
+                                                                    Just n' -> (TBody (constructor n'))
+               where constructor = if contra then TSkolem else TVar
+           replaceVars' contra (Fix t@(TFunc args res)) = Fix $ TFunc (map (Fix . fmap (replaceVars' $ contra) . unFix) args) (Fix . fmap (replaceVars' $ not contra) $ unFix res)
+           replaceVars' contra (Fix t) = Fix $ fmap (replaceVars' contra) t
+       return $ t { qualType = replaceVars' isContra (qualType t) }
        
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all

@@ -335,30 +335,20 @@ unifyRowPropertyBiased = unifyRowPropertyBiased' unify
 unifyRowPropertyBiased' :: UnifyF -> Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
 unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
-      let crap = Fix $ TBody TUndefined
-          unifySchemes' = do traceLog ("Unifying schemes: " ++ pretty scheme1s ++ " ~~ " ++ pretty scheme2s)
-                             scheme1T <- instantiateToSkolems scheme1s
-                             scheme2T <- instantiate scheme2s
-                             -- TODO unify predicates properly (review this) - specificaly (==)
-                             -- should prevent cycles!
-                             --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
-                             -- TODO do something with pred'
-                             --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
-                             recurse a (qualType scheme1T) (qualType scheme2T)
-                             preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
-                             preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
-                             when (preds1' /= preds2') $ errorAction
-                             return ()
-          isSimpleScheme =
-            -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
-            case scheme1s of
-             TScheme [] _ -> True
-             _ -> False
-      -- TODO should do biased type scheme unification here
-      unless (areEquivalentNamedTypes (crap, scheme1s) (crap, scheme2s))
-          $ if isSimpleScheme || (length (schemeVars scheme1s) == length (schemeVars scheme2s)) -- isSimpleScheme
-            then unifySchemes'
-            else errorAction
+      scheme1T <- instantiateToSkolems True scheme1s
+      scheme2T <- instantiateToSkolems False scheme2s
+      traceLog $ "Instantiated skolems: " ++ pretty scheme1T
+      traceLog $ "                      " ++ pretty scheme2T
+      -- TODO unify predicates properly (review this) - specificaly (==)
+      -- should prevent cycles!
+      --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
+      -- TODO do something with pred'
+      --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
+      recurse a (qualType scheme1T) (qualType scheme2T)
+      preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
+      preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
+      -- may be wrong, for example if unification reults in the elimination of some type class (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it shouldn't fail)
+      when (preds1' /= preds2') $ errorAction
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
                -> (x, Set TProp, Map TProp TypeScheme)
