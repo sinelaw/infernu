@@ -115,7 +115,7 @@ data Exp a = EVar a EVarName
                       
 type TVarName = Int
 
-data TBody = TVar TVarName
+data TBody = TVar TVarName | TSkolem TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
              deriving (Show, Eq, Ord)
 

@@ -214,6 +214,11 @@ unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
 
+-- | Skolem type "variables"
+unify' _ a t1@(TBody (TSkolem n1)) t2@(TBody (TSkolem n2)) = if n1 == n2 then return () else unificationError a t1 t2
+unify' _ a t1 t2@(TBody (TSkolem n)) = unificationError a t1 t2
+unify' _ a t1@(TBody (TSkolem n)) t2 = unificationError a t1 t2
+                                
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
@@ -332,7 +337,7 @@ unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
       let crap = Fix $ TBody TUndefined
           unifySchemes' = do traceLog ("Unifying schemes: " ++ pretty scheme1s ++ " ~~ " ++ pretty scheme2s)
-                             scheme1T <- instantiate scheme1s
+                             scheme1T <- instantiateToSkolems scheme1s
                              scheme2T <- instantiate scheme2s
                              -- TODO unify predicates properly (review this) - specificaly (==)
                              -- should prevent cycles!
@@ -343,6 +348,7 @@ unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
                              preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
                              preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
                              when (preds1' /= preds2') $ errorAction
+                             return ()
           isSimpleScheme =
             -- TODO: note we are left-biased here - assuming that t1 is the 'target', can be more specific than t2
             case scheme1s of

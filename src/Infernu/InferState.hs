@@ -312,13 +312,14 @@ applySubstInfer s =
 --
 instantiateScheme :: Bool -> TypeScheme -> Infer QualType
 instantiateScheme shouldAddVarInstances (TScheme tvarNames t) = do
-  allocNames <- forM tvarNames $ \tvName -> do
-    freshName <- fresh
-    return (tvName, freshName)
+  allocNames <- allocTVarInstances tvarNames
   when shouldAddVarInstances $ forM_ allocNames $ uncurry addVarInstance
   let replaceVar n = fromMaybe n $ lookup n allocNames
   return $ mapVarNames replaceVar t
 
+allocTVarInstances :: [TVarName] -> Infer [(TVarName, TVarName)]
+allocTVarInstances tvarNames = forM tvarNames $ \tvName -> (tvName,) <$> fresh
+    
 instantiate :: TypeScheme -> Infer QualType
 instantiate = instantiateScheme True
 
@@ -328,6 +329,15 @@ instantiateVar a n env = do
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
   tracePretty ("Instantiated var '" ++ pretty n ++ "' with scheme: " ++ pretty scheme ++ " to") <$> instantiate scheme
 
+instantiateToSkolems :: TypeScheme -> Infer QualType
+instantiateToSkolems (TScheme tvs t) =
+    do allocNames <- Map.fromList <$> allocTVarInstances tvs
+       let replaceVars' (Fix t@(TBody (TVar n))) = Fix $ case Map.lookup n allocNames of
+                                                             Nothing -> t
+                                                             Just n' -> (TBody (TSkolem n'))
+           replaceVars' (Fix t) = Fix $ fmap replaceVars' t
+       return $ t { qualType = replaceVars' (qualType t) }
+       
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
 --   type variables that are free in the given type, but are not free in the type environment.
