@@ -2,13 +2,11 @@ var f = function(obj, x) {
     return obj.doStuff(x);
 };
 
-f({bla: 3, doStuff: function(r) { return false;}}, 'b');
+var testObj = {bla: 3, doStuff: function(r) { return false;}};
+
+f(testObj, 'b');
 
 f = function(obj, x) {
-    return obj.doStuff('a'); // ignores x, uses 2 instead.
+    return obj.doStuff('a'); // ignores x, uses 'a' instead.
 };
 
-
-f;
-
-// f; // :: (a -> ({doStuff: (a -> b), ...} -> b))

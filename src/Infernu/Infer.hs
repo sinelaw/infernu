@@ -32,7 +32,7 @@ import           Infernu.Lib        (safeLookup)
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyRowPropertyBiased, unifyl, tryMakeRow)
+import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyTypeSchemes, unifyl, tryMakeRow)
 
 
 
@@ -183,18 +183,19 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> fresh
-     let rank0Unify rvalueScheme = unify a (qualType objT) $ Fix . TRow Nothing $ TRowProp prop rvalueScheme $ TRowEnd (Just rowTailVar)
-         rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
+     let rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
+         rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
+         rank0Unify = unify a rvalueRowType (qualType objT)
      (action, floatedPreds) <- case unFix (qualType objT) of
            TRow _ trowList ->
              case Map.lookup prop . fst $ flattenRow trowList of
               -- lvalue is known to be a property with some scheme
               Just lvalueScheme ->
                 do (generalizedRvalue, floatedPreds') <- generalize expr1 env rvalueT
-                   (,floatedPreds') <$> unifyRowPropertyBiased a (rank0Unify rvalueSchemeFloated) (lvalueScheme, generalizedRvalue)
-                   --(,floatedPreds') <$> rank0Unify generalizedRvalue
-              Nothing -> (,qualPred rvalueT) <$> rank0Unify rvalueSchemeFloated
-           _ -> (,qualPred rvalueT) <$> rank0Unify rvalueSchemeFloated
+                   -- Require RHS to be at least as polymorphic as LHS (to ensure all previous usages of this property are consistent with the assigned type)
+                   (,floatedPreds') <$> unifyTypeSchemes a rank0Unify lvalueScheme generalizedRvalue
+              Nothing -> (,qualPred rvalueT) <$> rank0Unify
+           _ -> (,qualPred rvalueT) <$> rank0Unify
      traceLog ("Floated preds: " ++ pretty floatedPreds) 
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
      --traceLog "EPropAssign - applying unifyAllInstances"

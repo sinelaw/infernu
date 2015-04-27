@@ -11,11 +11,11 @@ import           Control.Monad.Trans        (lift)
 import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT, bimapEitherT)
 import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify, mapStateT)
 import qualified Data.Graph.Inductive      as Graph
-    
+
 import qualified Data.List                  as List
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
--- import           Data.Map.Lazy              (Map)
+import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
@@ -27,7 +27,7 @@ import           Infernu.Pretty
 import           Infernu.Types
 import           Infernu.Log
 import qualified Infernu.Builtins.TypeClasses
-    
+
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a
 
@@ -59,7 +59,7 @@ getState = get
 
 setState :: InferState -> Infer ()
 setState = put
-           
+
 runInfer :: Infer a -> Either TypeError a
 runInfer = runInferWith emptyInferState
 
@@ -86,7 +86,7 @@ failWithM action err = do
 
 mapError :: (TypeError -> TypeError) -> Infer a -> Infer a
 mapError f ma = mapStateT (bimapEitherT f id) ma
-           
+
 getVarSchemeByVarId :: VarId -> Infer (Maybe TypeScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
 
@@ -121,7 +121,7 @@ setPendingUnifications :: (Set (Source, Type, (ClassName, Set TypeScheme))) -> I
 setPendingUnifications ts = do
     modify $ \is -> is { pendingUni = ts }
     return ()
-        
+
 ----------------------------------------------------------------------
 
 
@@ -143,9 +143,9 @@ addNamedType tid t scheme = do
 
 -- | Compares schemes up to alpha equivalence including named type constructors equivalence (TCons
 -- TName...).
--- 
+--
 -- >>> let mkNamedType tid ts = Fix $ TCons (TName (TypeId tid)) ts
---  
+--
 -- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TBody TNumber)) (mkNamedType 1 [], schemeEmpty (Fix $ TBody TString))
 -- False
 -- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (mkNamedType 0 [])) (mkNamedType 1 [], schemeEmpty (mkNamedType 1 []))
@@ -155,7 +155,7 @@ addNamedType tid t scheme = do
 --                             (mkNamedType 1 [], schemeEmpty (Fix $ TFunc [Fix $ TBody TNumber] (mkNamedType 1 [])))
 -- :}
 -- True
---  
+--
 -- >>> :{
 --     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 10] (mkNamedType 0 [Fix $ TBody $ TVar 10])))
 --                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 11] (mkNamedType 1 [Fix $ TBody $ TVar 11])))
@@ -169,7 +169,7 @@ areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = applySubst 
 replaceFixQual :: (Functor f, Eq (f (Fix f))) => f (Fix f) -> f (Fix f) -> TQual (Fix f) -> TQual (Fix f)
 replaceFixQual src dest (TQual preds t) = TQual (map (replacePredType' $ replaceFix src dest) preds) (replaceFix src dest t)
     where replacePredType' f p = p { predType = f $ predType p } -- TODO needs some lens goodness
-                
+
 -- Checks if a given type variable appears in the given type *only* as a parameter to a recursive
 -- type name.  If yes, returns the name of recursive types (and position within) in which it
 -- appears; otherwise returns Nothing.
@@ -243,13 +243,13 @@ resolveSimpleMutualRecursion n t tid ix =
          newNamedType = Fix (TCons (TName newTypeId) newTs)
          --updatedNamedType = Fix (TCons (TName tid) newTs)
          updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars'  sType'
-         
+
      addNamedType newTypeId newNamedType updatedScheme
      -- TODO: we could alternatively update the existing named type, but that will break it's schema (will now take less params?)
      --addNamedType tid updatedNamedType updatedScheme
      return $ replaceOldNamedType t
-     
-     
+
+
 getNamedType :: TVarName -> Type -> Infer Type
 getNamedType n t =
   do let recTypeParamPos = isRecParamOnly n Nothing t
@@ -258,7 +258,7 @@ getNamedType n t =
       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
       -- either the variable appears outside a recursive type's type parameter list, or it appears
       -- in more than one such position:
-      _ -> allocNamedType n t 
+      _ -> allocNamedType n t
 
 
 unrollNameByScheme :: Substable a => [Type] -> [TVarName] -> a -> a
@@ -274,7 +274,7 @@ unrollName a tid ts =
     -- TODO: Is it safe to ignore the scheme preds here?
     do (TScheme qvars t) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
        return $ unrollNameByScheme ts qvars t
-    
+
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
 -- >>> :{
@@ -296,7 +296,7 @@ applySubstInfer s =
 --
 -- For example:
 --
--- >>> runInferWith (emptyInferState { nameSource = NameSource 2 }) . instantiate $ TScheme [0] (TQual { qualPred = [], qualType = Fix $ TFunc [Fix $ TBody (TVar 0)] (Fix $ TBody (TVar 1)) }) 
+-- >>> runInferWith (emptyInferState { nameSource = NameSource 2 }) . instantiate $ TScheme [0] (TQual { qualPred = [], qualType = Fix $ TFunc [Fix $ TBody (TVar 0)] (Fix $ TBody (TVar 1)) })
 -- Right (TQual {qualPred = [], qualType = Fix (TFunc [Fix (TBody (TVar 3))] Fix (TBody (TVar 1)))})
 --
 -- In the above example, type variable 0 has been replaced with a fresh one (3), while the unqualified free type variable 1 has been left as-is.
@@ -319,7 +319,7 @@ instantiateScheme shouldAddVarInstances (TScheme tvarNames t) = do
 
 allocTVarInstances :: [TVarName] -> Infer [(TVarName, TVarName)]
 allocTVarInstances tvarNames = forM tvarNames $ \tvName -> (tvName,) <$> fresh
-    
+
 instantiate :: TypeScheme -> Infer QualType
 instantiate = instantiateScheme True
 
@@ -329,17 +329,40 @@ instantiateVar a n env = do
   scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
   tracePretty ("Instantiated var '" ++ pretty n ++ "' with scheme: " ++ pretty scheme ++ " to") <$> instantiate scheme
 
+----------------------------------------------------------------------
+
+data Variance = Covariant | Contravariant | Invariant
+                            deriving (Show, Eq)
+
+flipVariance :: Variance -> Variance                                     
+flipVariance Covariant     = Contravariant
+flipVariance Contravariant = Covariant
+flipVariance Invariant     = Invariant
+
+unifyVariances :: [Map TVarName Variance] -> Map TVarName Variance
+unifyVariances = Map.unionsWith (\c1 c2 -> if c1 == c2 then c1 else Invariant)
+    
+getVariances :: Set TVarName -> Type -> Map TVarName Variance
+getVariances ftvs (Fix t) = 
+    case t of
+        TBody (TVar n) -> if Set.member n ftvs then Map.singleton n Covariant else Map.empty
+        TFunc args res -> unifyVariances $ (getVariances ftvs res):(map (Map.map flipVariance . getVariances ftvs) args)
+        _ -> foldr (\t' m -> unifyVariances [m, getVariances ftvs t']) Map.empty t
+
+
 instantiateToSkolems :: Bool -> TypeScheme -> Infer QualType
 instantiateToSkolems isContra (TScheme tvs t) =
-    do allocNames <- Map.fromList <$> allocTVarInstances tvs
-       let replaceVars' contra (Fix t@(TBody (TVar n))) = Fix $ case Map.lookup n allocNames of
-                                                                    Nothing -> t
-                                                                    Just n' -> (TBody (constructor n'))
-               where constructor = if contra then TSkolem else TVar
-           replaceVars' contra (Fix t@(TFunc args res)) = Fix $ TFunc (map (Fix . fmap (replaceVars' $ contra) . unFix) args) (Fix . fmap (replaceVars' $ not contra) $ unFix res)
-           replaceVars' contra (Fix t) = Fix $ fmap (replaceVars' contra) t
-       return $ t { qualType = replaceVars' isContra (qualType t) }
-       
+    do let variances = (if isContra then id else Map.map flipVariance)
+                       $ getVariances (Set.fromList tvs)
+                       $ qualType t
+           constr' Contravariant = TVar
+           constr' _             = TSkolem           
+       traceLog $ show variances
+       subst <- flip Map.traverseWithKey variances
+                $ (\n v -> (Fix . TBody . constr' v) <$> fresh)
+       traceLog $ pretty subst
+       return $ applySubst subst t
+
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
 --   type variables that are free in the given type, but are not free in the type environment.

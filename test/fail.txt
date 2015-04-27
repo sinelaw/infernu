@@ -1,8 +1,9 @@
+// FAIL valid/builtins/regex-exec-2.js:5:5result : : Error:  |   Faile y valid/builtins/regex-exec-2.js
 // FAIL valid/mutability/array-of-polyfuncs.js:11:7: Error:  |   Faile y valid/mutability/array-of-polyfuncs.js
 // FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  dn.(({}.( y valid/new-func.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  < y valid/nothis-as-param.js
+// FAIL valid/poly-method-rank-3.js:6:6: Error:  |   Failed unifying:  y valid/poly-method-rank-3.js
+// FAIL valid/poly-method-rank-3-nothis.js:14:6: Error:  |   Failed un y valid/poly-method-rank-3-nothis.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
 // FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (dh -> e y valid/promise.js
-// FAIL  n invalid/prop-polymorphic-assign2.js
-// FAIL  n invalid/prop-polymorphic-assign2-this.js

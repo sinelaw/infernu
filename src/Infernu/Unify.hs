@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Infernu.Unify
-       (unify, unifyAll, unifyl, unifyRowPropertyBiased, unifyPredsL, unifyPending, tryMakeRow)
+       (unify, unifyAll, unifyl, unifyTypeSchemes, unifyPredsL, unifyPending, tryMakeRow)
        where
 
 
@@ -216,8 +216,8 @@ unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
 
 -- | Skolem type "variables"
 unify' _ a t1@(TBody (TSkolem n1)) t2@(TBody (TSkolem n2)) = if n1 == n2 then return () else unificationError a t1 t2
-unify' _ a t1 t2@(TBody (TSkolem n)) = unificationError a t1 t2
-unify' _ a t1@(TBody (TSkolem n)) t2 = unificationError a t1 t2
+unify' _ a t1 t2@(TBody (TSkolem _)) = unificationError a t1 t2
+unify' _ a t1@(TBody (TSkolem _)) t2 = unificationError a t1 t2
                                 
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
@@ -299,7 +299,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          --commonTypes :: [(Type, Type)]
          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
-     forM_ commonTypes $ \(ts1, ts2) -> unifyRowPropertyBiased' recurse a (unificationError a ts1 ts2) (ts1, ts2)
+     forM_ commonTypes $ \(ts1, ts2) -> unifyTypeSchemes' recurse a (unificationError a ts1 ts2) ts1 ts2
      r <- RowTVar <$> fresh
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
@@ -320,23 +320,15 @@ unifyTryMakeRow r a leftBiased tRowList t2 =
                             _ -> Just $ pretty t2
 
 
-unifyRowPropertyBiased :: Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
-unifyRowPropertyBiased = unifyRowPropertyBiased' unify
+unifyTypeSchemes :: Source -> Infer () -> TypeScheme -> TypeScheme -> Infer ()
+unifyTypeSchemes = unifyTypeSchemes' unify
 
--- | TODO: This hacky piece of code implements a simple 'subtyping' relation between
--- type schemes.  The logic is that if the LHS type is "more specific" than we allow
--- unifying with the RHS.  Instead of actually checking properly for subtyping
--- (including co/contra variance, etc.) we allow normal unification in two cases,
--- and fail all others:
---
--- 1. If the LHS is not quanitified at all
--- 2. If the LHS is a function type quantified only on the type of 'this'
---
-unifyRowPropertyBiased' :: UnifyF -> Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()
-unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
+-- | Biased subsumption-based unification. Succeeds if scheme2 is at least as polymorphic as scheme1
+unifyTypeSchemes' :: UnifyF -> Source -> Infer () -> TypeScheme -> TypeScheme -> Infer ()
+unifyTypeSchemes' recurse a errorAction scheme1s scheme2s =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
-      scheme1T <- instantiateToSkolems True scheme1s
-      scheme2T <- instantiateToSkolems False scheme2s
+      scheme1T <- instantiateToSkolems False scheme1s
+      scheme2T <- instantiate scheme2s
       traceLog $ "Instantiated skolems: " ++ pretty scheme1T
       traceLog $ "                      " ++ pretty scheme2T
       -- TODO unify predicates properly (review this) - specificaly (==)
@@ -347,7 +339,9 @@ unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
       recurse a (qualType scheme1T) (qualType scheme2T)
       preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
       preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
-      -- may be wrong, for example if unification reults in the elimination of some type class (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it shouldn't fail)
+      -- may be wrong, for example if unification reults in the elimination of some type class
+      -- (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it
+      -- shouldn't fail)
       when (preds1' /= preds2') $ errorAction
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
