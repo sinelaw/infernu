@@ -1,3 +1,6 @@
+// supposedly equivalent to this problem:
+// -- forall a b. ((() ->            (a -> b)),    a) -> b
+// -- forall    . ((() -> (forall d. (d -> d)), Bool) -> Bool
 
 function forceUndef(x) { x = undefined; }
 
@@ -8,7 +11,7 @@ function doId(o,x) {
     var f = o.getIdHolder;
     var o2 = f();
     var g = o2.id;
-    g(x);
+    return g(x);
 }
 
 doId(obj, 2);
