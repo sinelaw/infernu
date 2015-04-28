@@ -327,22 +327,28 @@ unifyTypeSchemes = unifyTypeSchemes' unify
 unifyTypeSchemes' :: UnifyF -> Source -> Infer () -> TypeScheme -> TypeScheme -> Infer ()
 unifyTypeSchemes' recurse a errorAction scheme1s scheme2s =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
-      scheme1T <- instantiateToSkolems False scheme1s
-      scheme2T <- instantiate scheme2s
-      traceLog $ "Instantiated skolems: " ++ pretty scheme1T
-      traceLog $ "                      " ++ pretty scheme2T
-      -- TODO unify predicates properly (review this) - specificaly (==)
-      -- should prevent cycles!
-      --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
-      -- TODO do something with pred'
-      --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
-      recurse a (qualType scheme1T) (qualType scheme2T)
-      preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
-      preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
-      -- may be wrong, for example if unification reults in the elimination of some type class
-      -- (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it
-      -- shouldn't fail)
-      when (preds1' /= preds2') $ errorAction
+      res <- runSubInfer $ do
+          scheme1T <- instantiateToSkolems False scheme1s
+          scheme2T <- instantiate scheme2s
+          traceLog $ "Instantiated skolems: " ++ pretty scheme1T
+          traceLog $ "                      " ++ pretty scheme2T
+          -- TODO unify predicateforeign import ccall "properly" properly :: (review -> - specificaly (==)
+          -- should prevent cycles!
+          --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
+          -- TODO do something with pred'
+          --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
+          recurse a (qualType scheme1T) (qualType scheme2T)
+      case res of
+          Left e -> errorAction
+          Right _ -> do s1 <- instantiate scheme1s
+                        s2 <- instantiate scheme2s
+                        recurse a (qualType s1) (qualType s2)
+                        preds1' <- Set.fromList . qualPred <$> applyMainSubst s1
+                        preds2' <- Set.fromList . qualPred <$> applyMainSubst s2
+                        -- may be wrong, for example if unification reults in the elimination of some type class
+                        -- (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it
+                        -- shouldn't fail)
+                        when (preds1' /= preds2') $ throwError a ("incompatible preds: " ++ pretty preds1' ++ " != " ++ pretty preds2') 
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
                -> (x, Set TProp, Map TProp TypeScheme)
