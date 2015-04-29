@@ -32,8 +32,8 @@ boolean = Fix $ TBody TBoolean
 ts :: t -> TScheme t
 ts t = TScheme [] $ qualEmpty t
 
-tvar :: TVarName -> Type
-tvar = Fix . TBody . TVar
+tvar :: Int -> Type
+tvar = Fix . TBody . TVar . Flex
 
 arrayProps :: Type -> [(String, TypeScheme)]
 arrayProps elemType = let aType = array elemType in
@@ -46,7 +46,7 @@ arrayProps elemType = let aType = array elemType in
   , ("indexOf", ts $ funcN [aType, elemType, number] number)
   , ("join", ts $ func aType string string)
   , ("lastIndexOf", ts $ func aType number number)
-  , ("map", TScheme [0,1] $ qualEmpty (func (array $ tvar 0) (funcN [undef, tvar 0, number, array $ tvar 0] (tvar 1)) (array $ tvar 1)))
+  , ("map", TScheme [Flex 0, Flex 1] $ qualEmpty (func (array $ tvar 0) (funcN [undef, tvar 0, number, array $ tvar 0] (tvar 1)) (array $ tvar 1)))
   , ("pop", ts $ funcN [aType] elemType)
   , ("push", ts $ funcN [aType, elemType] number)
   , ("reverse", ts $ funcN [aType] aType)
@@ -65,6 +65,6 @@ arrayRowType elemType = TRowProp TPropSetIndex (ts $ funcN [aType, number, elemT
                         <$> (foldM addProp (TRowEnd Nothing) $ arrayProps elemType)
   where aType = array elemType
         addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> (fresh >>= return . (tvName,))
+          do allocNames <- forM (schemeVars propTS) $ \tvName -> ((tvName,) . Flex <$> fresh)
              let ts' = mapVarNames (safeLookup allocNames) propTS
              return $ TRowProp (TPropName name) ts' rowlist

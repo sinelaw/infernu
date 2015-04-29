@@ -23,9 +23,10 @@ number = Fix $ TBody TNumber
 ts :: t -> TScheme t
 ts t = TScheme [] $ qualEmpty t
 
-tvar :: TVarName -> Type
-tvar = Fix . TBody . TVar
+tvar :: Int -> Type
+tvar = Fix . TBody . TVar . Flex
 
+withTypeClass :: String -> a -> a -> TQual a
 withTypeClass n t t' = TQual { qualPred = [TPredIsIn { predClass = ClassName n, predType = t }], qualType = t' }
 
 stringProps :: [(String, TypeScheme)]
@@ -48,7 +49,7 @@ stringProps =
 -- 
 --  , ("match", ts $ func string regex
 
-  , ("replace", TScheme [0] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)
+  , ("replace", TScheme [Flex 0] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
@@ -57,6 +58,6 @@ stringRowType :: Infer (TRowList Type)
 stringRowType = TRowProp TPropGetIndex (ts $ func string number string) <$> namedProps
   where namedProps = foldM addProp (TRowEnd Nothing) $ stringProps
         addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> (fresh >>= return . (tvName,))
+          do allocNames <- forM (schemeVars propTS) $ \tvName -> ((tvName,) . Flex <$> fresh)
              let ts' = mapVarNames (safeLookup allocNames) propTS
              return $ TRowProp (TPropName name) ts' rowlist

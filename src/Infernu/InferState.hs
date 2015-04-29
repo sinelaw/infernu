@@ -63,11 +63,14 @@ setState = put
 runInfer :: Infer a -> Either TypeError a
 runInfer = runInferWith emptyInferState
 
-fresh :: Infer TVarName
+fresh :: Infer Int
 fresh = do
   modify $ \is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } }
   lastName . nameSource <$> get
 
+freshFlex :: Infer TVarName
+freshFlex = Flex <$> fresh
+            
 freshVarId :: Infer VarId
 freshVarId = VarId <$> fresh
 
@@ -253,7 +256,7 @@ resolveSimpleMutualRecursion n t tid ix =
 getNamedType :: TVarName -> Type -> Infer Type
 getNamedType n t =
   do let recTypeParamPos = isRecParamOnly n Nothing t
-     traceLog ("isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ (show $ fmap pretty $ recTypeParamPos))
+     traceLog ("isRecParamOnly: " ++ show n ++ " in " ++ pretty t ++ ": " ++ (show $ fmap show $ recTypeParamPos))
      case recTypeParamPos of
       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
       -- either the variable appears outside a recursive type's type parameter list, or it appears
@@ -318,7 +321,7 @@ instantiateScheme shouldAddVarInstances (TScheme tvarNames t) = do
   return $ mapVarNames replaceVar t
 
 allocTVarInstances :: [TVarName] -> Infer [(TVarName, TVarName)]
-allocTVarInstances tvarNames = forM tvarNames $ \tvName -> (tvName,) <$> fresh
+allocTVarInstances tvarNames = forM tvarNames $ \tvName -> (tvName,) . Flex <$> fresh
 
 instantiate :: TypeScheme -> Infer QualType
 instantiate = instantiateScheme True
@@ -331,37 +334,23 @@ instantiateVar a n env = do
 
 ----------------------------------------------------------------------
 
-data Variance = Covariant | Contravariant | Invariant
-                            deriving (Show, Eq)
-
-flipVariance :: Variance -> Variance                                     
-flipVariance Covariant     = Contravariant
-flipVariance Contravariant = Covariant
-flipVariance Invariant     = Invariant
-
-unifyVariances :: [Map TVarName Variance] -> Map TVarName Variance
-unifyVariances = Map.unionsWith (\c1 c2 -> if c1 == c2 then c1 else Invariant)
-    
-getVariances :: Set TVarName -> Type -> Map TVarName Variance
-getVariances ftvs (Fix t) = 
-    case t of
-        TBody (TVar n) -> if Set.member n ftvs then Map.singleton n Covariant else Map.empty
-        TFunc args res -> unifyVariances $ (getVariances ftvs res):(map (Map.map flipVariance . getVariances ftvs) args)
-        _ -> foldr (\t' m -> unifyVariances [m, getVariances ftvs t']) Map.empty t
-
-
-instantiateToSkolems :: Bool -> TypeScheme -> Infer QualType
-instantiateToSkolems isContra (TScheme tvs t) =
-    do let variances = (if isContra then id else Map.map flipVariance)
-                       $ getVariances (Set.fromList tvs)
-                       $ qualType t
-           constr' Contravariant = TVar
-           constr' _             = TSkolem           
-       traceLog $ show variances
-       subst <- flip Map.traverseWithKey variances
-                $ (\n v -> (Fix . TBody . constr' v) <$> fresh)
-       traceLog $ pretty subst
-       return $ applySubst subst t
+-- Performs deep skolemisation, retuning the 
+-- skolem constants and the skolemised type
+skolemiseScheme :: TypeScheme -> Infer ([TVarName], QualType)
+skolemiseScheme (TScheme tvs ty)	-- Rule PRPOLY
+  = do sks1 <- forM tvs $ const (Skolem <$> fresh)
+       let subst = Map.fromList $ zip tvs sks1
+           lookup' x = case Map.lookup x subst of
+                           Nothing -> x
+                           Just y -> y
+       (sks2, ty') <- skolemiseType (mapVarNames lookup' ty)
+       return (sks1 ++ sks2, ty') 
+skolemiseType :: QualType -> Infer ([TVarName], QualType)
+skolemiseType q@(TQual ps (Fix (TFunc args_ty res_ty)))
+  = do (sks, res_ty'@(TQual ps' res_ty'')) <- skolemiseType (qualEmpty res_ty)
+       return (sks, q { qualPred = ps ++ ps',  qualType = Fix $ TFunc args_ty res_ty'' })
+skolemiseType ty
+  = return ([], ty)
 
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
@@ -432,8 +421,8 @@ generalize exp' env t = if isExpansive exp'
                         else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName
-minifyVarsFunc xs n = fromMaybe n $ Map.lookup n vars
-  where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) ([0..] :: [TVarName])
+minifyVarsFunc xs n = fromMaybe n $ fmap (setTVarName n) $ Map.lookup n vars
+  where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) [0..]
 
 minifyVars :: (VarNames a) => a -> a
 minifyVars xs = mapVarNames (minifyVarsFunc xs) xs

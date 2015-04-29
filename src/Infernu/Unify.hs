@@ -209,15 +209,15 @@ assertNoPred q =
 
 -- | Main unification function
 unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
-
+                                
 -- | Type variables
-unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
-unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
+unify' _ a (TBody (TVar (Flex n))) t = varBind a (Flex n) (Fix t)
+unify' _ a t (TBody (TVar (Flex n))) = varBind a (Flex n) (Fix t)
 
 -- | Skolem type "variables"
-unify' _ a t1@(TBody (TSkolem n1)) t2@(TBody (TSkolem n2)) = if n1 == n2 then return () else unificationError a t1 t2
-unify' _ a t1 t2@(TBody (TSkolem _)) = unificationError a t1 t2
-unify' _ a t1@(TBody (TSkolem _)) t2 = unificationError a t1 t2
+unify' _ a t1@(TBody (TVar (Skolem n1))) t2@(TBody (TVar (Skolem n2))) = if n1 == n2 then return () else unificationError a t1 t2
+unify' _ a t1 t2@(TBody (TVar (Skolem _))) = unificationError a t1 t2
+unify' _ a t1@(TBody (TVar (Skolem _))) t2 = unificationError a t1 t2
                                 
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
@@ -300,7 +300,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
      forM_ commonTypes $ \(ts1, ts2) -> unifyTypeSchemes' recurse a (unificationError a ts1 ts2) ts1 ts2
-     r <- RowTVar <$> fresh
+     r <- RowTVar . Flex <$> fresh
      unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
      unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
 
@@ -327,28 +327,29 @@ unifyTypeSchemes = unifyTypeSchemes' unify
 unifyTypeSchemes' :: UnifyF -> Source -> Infer () -> TypeScheme -> TypeScheme -> Infer ()
 unifyTypeSchemes' recurse a errorAction scheme1s scheme2s =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
-      res <- runSubInfer $ do
-          scheme1T <- instantiateToSkolems False scheme1s
-          scheme2T <- instantiate scheme2s
-          traceLog $ "Instantiated skolems: " ++ pretty scheme1T
-          traceLog $ "                      " ++ pretty scheme2T
-          -- TODO unify predicateforeign import ccall "properly" properly :: (review -> - specificaly (==)
-          -- should prevent cycles!
-          --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
-          -- TODO do something with pred'
-          --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
-          recurse a (qualType scheme1T) (qualType scheme2T)
-      case res of
-          Left e -> errorAction
-          Right _ -> do s1 <- instantiate scheme1s
-                        s2 <- instantiate scheme2s
-                        recurse a (qualType s1) (qualType s2)
-                        preds1' <- Set.fromList . qualPred <$> applyMainSubst s1
-                        preds2' <- Set.fromList . qualPred <$> applyMainSubst s2
-                        -- may be wrong, for example if unification reults in the elimination of some type class
-                        -- (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it
-                        -- shouldn't fail)
-                        when (preds1' /= preds2') $ throwError a ("incompatible preds: " ++ pretty preds1' ++ " != " ++ pretty preds2') 
+      (skolemVars, scheme1T) <- skolemiseScheme scheme1s
+      scheme2T <- instantiate scheme2s
+      traceLog $ "Instantiated skolems: " ++ pretty scheme1T
+      traceLog $ "                      " ++ pretty scheme2T
+      traceLog $ "   skolems : " ++ show skolemVars
+      -- TODO unify predicateforeign import ccall "properly" properly :: (review -> - specificaly (==)
+      -- should prevent cycles!
+      --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
+      -- TODO do something with pred'
+      --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
+      recurse a (qualType scheme1T) (qualType scheme2T)
+      ftvs <- mapM (applyMainSubst . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
+      let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
+          isSkolem _ = False
+          escapedSkolems = filter isSkolem $ concat ftvs
+      when (not . null $ escapedSkolems) $ throwError a $ "\n\t\t" ++ pretty scheme2T ++ "\n\t  is not as polymorphic as \n\t\t" ++ pretty scheme1T ++ "\n\t (escaped skolems: " ++ pretty escapedSkolems ++ ")"
+      -- preds
+      preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
+      preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
+      -- may be wrong, for example if unification reults in the elimination of some type class
+      -- (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it
+      -- shouldn't fail)
+      when (preds1' /= preds2') $ throwError a ("incompatible preds: " ++ pretty preds1' ++ " != " ++ pretty preds2') 
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
                -> (x, Set TProp, Map TProp TypeScheme)
@@ -408,7 +409,7 @@ varBind' :: Source -> TVarName -> Type -> Infer TSubst
 varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                | Just rowT <- getSingleton $ isInsideRowType n t =
                    do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " recursive in: " ++ pretty t ++ ", found enclosing row type: " ++ " = " ++ pretty rowT)
-                      recVar <- fresh
+                      recVar <- Flex <$> fresh
                       let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = replaceFix (TBody (TVar n)) (unFix withRecVar) rowT
                       namedType <- getNamedType recVar recT

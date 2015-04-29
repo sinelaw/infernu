@@ -97,14 +97,14 @@ inferType' env (EVar a n) =
   do t <- instantiateVar a n env
      return (t, EVar (a, t) n)
 inferType' env (EAbs a argNames e2) =
-  do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> fresh)
+  do argTypes <- forM argNames (const $ Fix . TBody . TVar <$> freshFlex)
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
      pred' <- unifyPredsL a $ qualPred t1
      let t = TQual pred' $ Fix $ TFunc argTypes (qualType t1)
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
-  do tvar <- Fix . TBody . TVar <$> fresh
+  do tvar <- Fix . TBody . TVar <$> freshFlex
      (t1, e1') <- inferType env e1
      traceLog $ "EApp: Inferred type for func expr: " ++ pretty t1
      argsTE <- accumInfer env eArgs
@@ -127,15 +127,15 @@ inferType' env (ENew a e1 eArgs) =
                         ELet _ _ _ e'' -> label e''
                         _ -> Nothing
      argsTE <- accumInfer env eArgs
-     thisT <- Fix . TBody . TVar <$> fresh
-     resT <- Fix . TBody . TVar <$> fresh
+     thisT <- Fix . TBody . TVar <$> freshFlex
+     resT <- Fix . TBody . TVar <$> freshFlex
      let rargsTE = reverse argsTE
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1 : map fst argsTE
      unify a (qualType t1) (Fix $ TFunc tArgs resT)
      -- constrain 'this' to be a row type:
-     rowConstraintVar <- RowTVar <$> fresh
+     rowConstraintVar <- RowTVar <$> freshFlex
      unify a (Fix . TRow Nothing . TRowEnd $ Just rowConstraintVar) thisT
      -- close the row type
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
@@ -148,7 +148,7 @@ inferType' env (ENew a e1 eArgs) =
                             _ -> resolvedThisT
      return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
-  do recType <- Fix . TBody . TVar <$> fresh
+  do recType <- Fix . TBody . TVar <$> freshFlex
      recEnv <- addVarScheme env n $ schemeEmpty recType
      (t1, e1') <- inferType recEnv e1
      unify a (qualType t1) recType
@@ -182,11 +182,11 @@ inferType' env expr@(EAssign a n expr1 expr2) =
 inferType' env (EPropAssign a objExpr prop expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
-     rowTailVar <- RowTVar <$> fresh
+     rowTailVar <- RowTVar <$> freshFlex
      (generalizedRvalue, floatedPreds) <- generalize expr1 env rvalueT
-     let rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
-         -- rvalueRowType = Fix . TRow Nothing $ TRowProp prop generalizedRvalue $ TRowEnd (Just rowTailVar)
-         rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
+     let --rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
+         rvalueRowType = Fix . TRow Nothing $ TRowProp prop generalizedRvalue $ TRowEnd (Just rowTailVar)
+         --rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
      unify a (qualType objT) rvalueRowType 
      -- (action, floatedPreds) <- case unFix (qualType objT) of
      --       TRow _ trowList ->
@@ -206,7 +206,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      let tRes = TQual preds $ qualType expr2T
      return (tRes, EPropAssign (a, tRes) objExpr' prop expr1' expr2')
 inferType' env (EArray a exprs) =
-  do tv <- Fix . TBody . TVar <$> fresh
+  do tv <- Fix . TBody . TVar <$> freshFlex
      te <- accumInfer env exprs
      let types = map (qualType . fst) te
      unifyl unify a $ zip (tv:types) types
@@ -218,7 +218,7 @@ inferType' env (ETuple a exprs) =
      return (t, ETuple (a,t) $ map snd te)
 inferType' env (EStringMap a exprs') =
   do let exprs = map snd exprs'
-     elemType <- Fix . TBody . TVar <$> fresh
+     elemType <- Fix . TBody . TVar <$> freshFlex
      te <- accumInfer env exprs
      let types = map (qualType . fst) te
      unifyAll a $ elemType:types
@@ -227,7 +227,7 @@ inferType' env (EStringMap a exprs') =
      return (t, EStringMap (a,t) $ zip (map fst exprs') (map snd te))
 inferType' env (ERow a isOpen propExprs) =
   do te <- accumInfer env $ map snd propExprs
-     endVar <- RowTVar <$> fresh
+     endVar <- RowTVar <$> freshFlex
      let propNamesTypes = zip propExprs (reverse $ map fst te)
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          accumRowProp' (row, floatedPs') ((propName, propExpr), propType) =
@@ -254,8 +254,8 @@ inferType' env (EProp a eObj propName) =
      -- not.  Otherwise we must assume the property is a monotype.
      let propTypeIfMono =
              do traceLog $ "Failed to find prop: " ++ pretty propName ++ " in type: " ++ pretty tObj
-                rowTail <- TRowEnd . Just . RowTVar <$> fresh
-                propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> fresh
+                rowTail <- TRowEnd . Just . RowTVar <$> freshFlex
+                propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> freshFlex
                 unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme $ rowTail) (qualType tObj)
                 instantiate propTypeScheme
 
@@ -279,7 +279,7 @@ unifyAllInstances a tvs = do
   m <- getVarInstances
        
   traceLog $ "unifyAllInstances: " ++ pretty a ++ " Unifying all instances of tvars: " ++ intercalate ", " (map pretty tvs)
-  let equivalenceSets = map Set.fromList $ filter (not . null) $ map (mapMaybe $ Graph.lab m) $ map (flip Graph.bfs m) tvs
+  let equivalenceSets = map Set.fromList $ filter (not . null) $ map (mapMaybe $ Graph.lab m) $ map (flip Graph.bfs m . unTVarName) tvs
       unifyAll' equivs =
           do  let equivsL = Set.toList equivs
                   qequivsL = map qualType equivsL
@@ -297,7 +297,7 @@ createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
           addVarScheme' :: Map EVarName VarId -> (EVarName, TypeScheme) -> Infer (Map EVarName VarId)
           addVarScheme' m (name, tscheme) =
             do allocNames <- forM (Set.toList $ allTVars tscheme)
-                             $ \tvName -> (tvName,) <$> fresh
+                             $ \tvName -> (tvName,) <$> freshFlex
                addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 

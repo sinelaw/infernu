@@ -96,19 +96,25 @@ instance Pretty (Exp a) where
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + (n - 1))
 
+          
+ptv :: Int -> String          
+ptv x = foldr ((++) . (:[]) . toChr)  [] (Digits.digits 26 (x + 1))
+        
 -- |
 -- >>> prettyTab 0 (0 :: TVarName)
 -- "a"
 -- >>> prettyTab 0 (26 :: TVarName)
 -- "aa"
 instance Pretty TVarName where
-  prettyTab _ n = foldr ((++) . (:[]) . toChr) [] (Digits.digits 26 (n + 1))
+  prettyTab _ tvn = case tvn of
+                      Flex n -> ptv n
+                      Skolem n -> '!' : ptv n
 
 instance Pretty Bool where
   prettyTab _ x = show x
 
 instance Pretty TypeId where
-  prettyTab _ (TypeId n) = capitalize $ pretty n
+  prettyTab _ (TypeId n) = capitalize $ ptv n
     where capitalize [] = []
           capitalize (x:xs) = Char.toUpper x : xs
 

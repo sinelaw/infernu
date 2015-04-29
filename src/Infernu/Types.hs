@@ -15,7 +15,9 @@ module Infernu.Types
        , Exp(..)
        , LitVal(..)
        , EVarName
-       , TVarName
+       , TVarName(..)
+       , unTVarName
+       , setTVarName
        , TBody(..)
        , TConsName(..)
        , TypeId(..)
@@ -113,13 +115,22 @@ data Exp a = EVar a EVarName
 
 ----------------------------------------------------------------------
                       
-type TVarName = Int
+data TVarName = Flex Int | Skolem Int
+              deriving (Show, Eq, Ord)
 
-data TBody = TVar TVarName | TSkolem TVarName
+unTVarName :: TVarName -> Int                       
+unTVarName (Flex x) = x
+unTVarName (Skolem x) = x
+
+setTVarName :: TVarName -> Int -> TVarName
+setTVarName (Flex x) y = Flex y
+setTVarName (Skolem x) y = Skolem y
+
+data TBody = TVar TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
              deriving (Show, Eq, Ord)
 
-newtype TypeId = TypeId TVarName
+newtype TypeId = TypeId Int
                 deriving (Show, Eq, Ord)
 
 data TConsName = TArray | TTuple | TName TypeId | TStringMap
@@ -472,7 +483,7 @@ newtype VarId = VarId Int
 type TypeEnv = Map.Map EVarName VarId
 
 -- Used internally to generate fresh type variable names
-data NameSource = NameSource { lastName :: TVarName }
+data NameSource = NameSource { lastName :: Int }
                 deriving (Show, Eq)
 
 
@@ -525,10 +536,10 @@ instance Substable InferState where
 -- >>> pretty $ addEquivalence 1 4 $ addEquivalence 4 5 m1
 -- "Map (b => Set {b, c, e, f}, c => Set {b, c, e, f}, e => Set {b, c, e, f}, f => Set {b, c, e, f})"
 addEquivalence :: TVarName -> TVarName -> Graph.Gr QualType () -> Graph.Gr QualType ()
-addEquivalence x y gr = Graph.insEdge (x,y,()) . insTVar x . insTVar y $ gr
-    where insTVar tv g = if Graph.gelem tv g
+addEquivalence x y gr = Graph.insEdge (unTVarName x, unTVarName y, ()) . insTVar x . insTVar y $ gr
+    where insTVar tv g = if Graph.gelem (unTVarName tv) g
                          then g
-                         else Graph.insNode (tv, qualEmpty $ Fix . TBody $ TVar tv) g
+                         else Graph.insNode (unTVarName tv, qualEmpty $ Fix . TBody $ TVar tv) g
 
 
 ----------------------------------------------------------------------

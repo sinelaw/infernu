@@ -23,13 +23,13 @@ number = Fix $ TBody TNumber
 ts :: t -> TScheme t
 ts t = TScheme [] $ qualEmpty t
 
-tvar :: TVarName -> Type
-tvar = Fix . TBody . TVar
+tvar :: Int -> Type
+tvar = Fix . TBody . TVar . Flex
        
 regexMatch :: Type
 regexMatch = Fix . TRow (Just "RegexMatch")
              -- TODO: instead of quantifying 'this', it should be a recursive type (regexMatch itself)
-             . TRowProp (TPropGetIndex) (TScheme [0] $ qualEmpty $ func (tvar 0) number string)
+             . TRowProp (TPropGetIndex) (TScheme [Flex 0] $ qualEmpty $ func (tvar 0) number string)
              . TRowProp (TPropName "index") (ts $ number)
              . TRowProp (TPropName "input") (ts $ string)
              $ TRowEnd Nothing
@@ -45,6 +45,6 @@ regexProps =
 regexRowType :: Infer (TRowList Type)
 regexRowType = foldM addProp (TRowEnd Nothing) $ regexProps
   where addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> (fresh >>= return . (tvName,))
+          do allocNames <- forM (schemeVars propTS) $ \tvName -> ((tvName,) . Flex <$> fresh)
              let ts' = mapVarNames (safeLookup allocNames) propTS
              return $ TRowProp (TPropName name) ts' rowlist
