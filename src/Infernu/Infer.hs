@@ -185,8 +185,8 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      rowTailVar <- RowTVar <$> freshFlex
      (generalizedRvalue, floatedPreds) <- generalize expr1 env rvalueT
      let rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
-         --rvalueRowType = Fix . TRow Nothing $ TRowProp prop generalizedRvalue $ TRowEnd (Just rowTailVar)
-         rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
+         rvalueRowType = Fix . TRow Nothing $ TRowProp prop generalizedRvalue $ TRowEnd (Just rowTailVar)
+         --rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
      unify a (qualType objT) rvalueRowType 
      -- (action, floatedPreds) <- case unFix (qualType objT) of
      --       TRow _ trowList ->
