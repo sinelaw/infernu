@@ -302,6 +302,9 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          --commonTypes :: [(Type, Type)]
          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
+     traceLog $ "row1: " ++ pretty m1
+     traceLog $ "row2: " ++ pretty m2
+     traceLog $ "Common row properties: " ++ show commonNames
      forM_ commonTypes $ \(ts1, ts2) -> unifyTypeSchemes' recurse a (unificationError a ts1 ts2) ts1 ts2
 
      let allAreCommon = Set.null $ (names1 `Set.difference` names2) `Set.union` (names2 `Set.difference` names1)
