@@ -341,10 +341,11 @@ unifyTypeSchemes' recurse a errorAction scheme1s scheme2s =
       -- TODO do something with pred'
       --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
       recurse a (qualType scheme1T) (qualType scheme2T)
-      ftvs <- mapM (applyMainSubst . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
       let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
           isSkolem _ = False
-          escapedSkolems = filter isSkolem $ concat ftvs
+          
+      ftvs <- mapM (applyMainSubst . filter (not . isSkolem) . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
+      let escapedSkolems = filter isSkolem $ concat ftvs
       when (not . null $ escapedSkolems) $ throwError a $ "\n\t\t" ++ pretty scheme2T ++ "\n\t  is not as polymorphic as \n\t\t" ++ pretty scheme1T ++ "\n\t (escaped skolems: " ++ pretty escapedSkolems ++ ")"
       -- preds
       preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
