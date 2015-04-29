@@ -1,12 +1,10 @@
 // FAIL valid/builtins/regex-exec-2.js:5:5result : : Error:  |   Faile y valid/builtins/regex-exec-2.js
 // FAIL valid/mutability/array-of-polyfuncs.js:11:7: Error:  |   Faile y valid/mutability/array-of-polyfuncs.js
-// FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  dn.(({}.( y valid/new-func.js
+// FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  (({bla: d y valid/new-func.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
-// FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  < y valid/nothis-as-param.js
-// FAIL valid/poly-method-rank-3.js:6:6: Error:  |   Failed unifying:  y valid/poly-method-rank-3.js
-// FAIL valid/poly-method-rank-3-nothis.js:17:6: Error:  |   Failed un y valid/poly-method-rank-3-nothis.js
+// FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  ( y valid/nothis-as-param.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
-// FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (di -> e y valid/promise.js
+// FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  { |      y valid/promise.js
 // FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error:  |   Failed y valid/prop-polymorphic-assign2-this.js
 // FAIL valid/prop-polymorphic-assign3.js:6:1: Error:  |   Failed unif y valid/prop-polymorphic-assign3.js
 // FAIL valid/prop-polymorphic-assign.js:4:1: Error:  |   Failed unify y valid/prop-polymorphic-assign.js

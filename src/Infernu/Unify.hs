@@ -222,6 +222,9 @@ unify' _ a t1@(TBody (TVar (Skolem _))) t2 = unificationError a t1 t2
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
+-- | Undefined <- something
+--unify' _ a (TBody TUndefined) t = return ()
+
 -- | Two recursive types
 unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
     if n1 == n2
@@ -267,10 +270,10 @@ unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
 
 -- | Two functions
 unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
-    case matchZip ts1 ts2 of
+    case matchZip ts2 ts1 of
         Nothing -> unificationError a t1 t2
         Just ts -> do  unifyl recurse a ts
-                       recurse a tres2 tres1
+                       recurse a tres1 tres2
      
 -- | Type constructor vs. row type
 unify' r a (TRow _ tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2

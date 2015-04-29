@@ -113,7 +113,7 @@ inferType' env (EApp a e1 eArgs) =
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:tArgs
-     unify a (qualType t1) (Fix $ TFunc (map qualType tArgs) tvar)
+     unify a (Fix $ TFunc (map qualType tArgs) tvar) (qualType t1)
      traceLog $ "Inferred preds: " ++ intercalate ", " (map pretty preds)
      tvar' <- do  pred' <- unifyPredsL a preds
                   tvarSubsted <- applyMainSubst tvar
@@ -232,7 +232,8 @@ inferType' env (ERow a isOpen propExprs) =
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          accumRowProp' (row, floatedPs') ((propName, propExpr), propType) =
            do (ts, floatedPs) <- generalize propExpr env propType
-              return $ (TRowProp (TPropName propName) ts row, floatedPs' ++ floatedPs)
+              -- TODO use unfloated predicates
+              return $ (TRowProp (TPropName propName) (ts) row, floatedPs' ++ floatedPs)
      (rowType', floatedPreds) <- foldM  accumRowProp' (rowEnd', []) propNamesTypes
      let rowType = TQual { qualPred = floatedPreds, qualType = Fix . TRow Nothing $ rowType' }
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
