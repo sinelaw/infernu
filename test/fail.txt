@@ -3,7 +3,6 @@
 // FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  (({bla: d y valid/new-func.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  ( y valid/nothis-as-param.js
-// FAIL valid/object-chaining.js:5:5o : : Error:  |   Failed unifying: y valid/object-chaining.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
 // FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  { |      y valid/promise.js
 // FAIL valid/promise-method-workaround.js:23:5: Error:  |   Failed un y valid/promise-method-workaround.js

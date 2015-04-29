@@ -303,10 +303,21 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
      forM_ commonTypes $ \(ts1, ts2) -> unifyTypeSchemes' recurse a (unificationError a ts1 ts2) ts1 ts2
-     r <- RowTVar . Flex <$> fresh
-     unifyRows recurse a r (t1, names1, m1) (t2, names2, r2)
-     unifyRows recurse a r (t2, names2, m2) (t1, names1, r1)
 
+     let allAreCommon = Set.null $ (names1 `Set.difference` names2) `Set.union` (names2 `Set.difference` names1)
+         unifyDifferences =
+             do  r <- RowTVar . Flex <$> fresh
+                 let flippedRecurse = (\a' t1' t2' -> recurse a' t2' t1')
+                 unifyRows        recurse a r (t1, names1, m1) (t2, names2, r2)
+                 unifyRows flippedRecurse a r (t2, names2, m2) (t1, names1, r1)
+         unifyRowTVars act =
+             case (r1, r2) of
+                 (FlatRowEndTVar (Just r1v), FlatRowEndTVar (Just r2v)) -> recurse a (toRowTVar r1v) (toRowTVar r2v)
+                     where toRowTVar = Fix . TBody . TVar . getRowTVar
+                 _ -> act
+     if allAreCommon
+         then unifyRowTVars unifyDifferences
+         else unifyDifferences
 
 unifyTryMakeRow :: UnifyF -> Source -> Bool -> TRowList Type -> FType Type -> Infer ()
 unifyTryMakeRow r a leftBiased tRowList t2 =
@@ -343,9 +354,9 @@ unifyTypeSchemes' recurse a errorAction scheme1s scheme2s =
       recurse a (qualType scheme1T) (qualType scheme2T)
       let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
           isSkolem _ = False
-          
-      ftvs <- mapM (applyMainSubst . filter (not . isSkolem) . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
-      let escapedSkolems = filter isSkolem $ concat ftvs
+          oldSkolems = concatMap (filter isSkolem . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) $ [scheme1s, scheme2s]
+      ftvs <- mapM (applyMainSubst . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
+      let escapedSkolems = filter (\x -> isSkolem x && not (elem x oldSkolems)) $ concat ftvs
       when (not . null $ escapedSkolems) $ throwError a $ "\n\t\t" ++ pretty scheme2T ++ "\n\t  is not as polymorphic as \n\t\t" ++ pretty scheme1T ++ "\n\t (escaped skolems: " ++ pretty escapedSkolems ++ ")"
       -- preds
       preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
