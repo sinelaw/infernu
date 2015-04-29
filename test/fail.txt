@@ -5,4 +5,5 @@
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  < y valid/nothis-as-param.js
 // FAIL valid/poly-method-rank-3.js:6:6: Error:  |   Failed unifying:  y valid/poly-method-rank-3.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
-// FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (dh -> e y valid/promise.js
+// FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (di -> e y valid/promise.js
+// FAIL  n invalid/prop-polymorphic-assign3.js
