@@ -10,8 +10,8 @@ import qualified Text.Parsec.Pos                  as Pos
 import           SafeJS.Types
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
-poo :: EVarName
-poo = "_/_"
+poo :: Int -> EVarName
+poo n = "_/_" ++ show n
 
 -- | A dummy expression that does nothing (but has a type).
 empty :: a -> Exp a
@@ -28,16 +28,19 @@ foldStmts (x:xs) k = fromStatement x (foldStmts xs k)
 chainExprs :: Show a => a -> Exp a -> (Exp a -> Exp a) -> Exp a -> Exp a
 chainExprs a init' getK k = ELet a poo init' $ getK k
 
+singleStmt :: Show a => a -> Exp a -> Exp a -> Exp a
+singleStmt a expr = ELet a poo expr
 
-fromStatement :: Show a => ES3.Statement a -> Exp a -> Exp a
+fromStatement :: Show a => Int -> ES3.Statement a -> Exp a -> Exp a
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
-fromStatement (ES3.ExprStmt z e) = ELet z poo (fromExpression e)
+fromStatement (ES3.ExprStmt z e) = singleStmt $ fromExpression e
 -- TODO: The if/while/do conversion is hacky
-fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ foldStmts [thenS, elseS]
-fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement thenS
-fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement loopS
-fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray z [fromExpression pred', ELit z (LitBoolean False)]) $ fromStatement loopS
+fromStatement (ES3.IfStmt z pred' thenS elseS) = singleStmt z $ EIfThenElse z (fromExpression pred') (fromStatement thenS $ empty z) (fromStatement elseS $ empty z)
+fromStatement (ES3.IfSingleStmt z pred' thenS) = singleStmt z $ EIfThenElse z (fromExpression pred') (fromStatement thenS $ empty z) (empty z)
+-- while (p) { s; } => let loop = if p then s; loop; else undefined
+fromStatement (ES3.WhileStmt z pred' loopS) = singleStmt z $ ELet z poo (EIfThenElse z (fromExpression pred') (fromStatement loopS $ EVar z poo) (empty z)) (EVar z poo)
+fromStatement (ES3.DoWhileStmt z loopS pred') = singleStmt z $ ELet z poo (fromStatement loopS $ EIfThenElse z (fromExpression pred') (EVar z poo) (empty z)) (EVar z poo)
 fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.TryStmt _ stmt mCatch mFinally) = foldStmts $ [stmt] ++ catchS ++ finallyS
@@ -50,8 +53,8 @@ fromStatement (ES3.TryStmt _ stmt mCatch mFinally) = foldStmts $ [stmt] ++ catch
 fromStatement (ES3.ThrowStmt _ _) = id
 fromStatement s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
---fromStatement (ES3.ForInStmt z init' obj loopS) =
---omStatement (ES3.ForStmt z init' test increment body) = ELet z poo (
+--fromStatement (ES3.ForInStmt z init' obj loopS) = 
+--fromStatement (ES3.ForStmt z NoInit mTest mIncrement body) = ELet z poo (
 fromStatement (ES3.VarDeclStmt _ decls) = chain decls
     where chain [] k = k
           chain (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet z' name (ELit z' LitUndefined) (chain xs k)
