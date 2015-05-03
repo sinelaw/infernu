@@ -103,7 +103,8 @@ inferType' env (EAbs a argNames e2) =
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
      pred' <- unifyPredsL a $ qualPred t1
-     let t = TQual pred' $ Fix $ TFunc argTypes (qualType t1)
+     rowConstraintVar <- RowTVar <$> fresh
+     let t = TQual pred' $ Fix $ TFunc argTypes (qualType t1) (TRowEnd $ Just rowConstraintVar)
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> fresh
@@ -115,8 +116,9 @@ inferType' env (EApp a e1 eArgs) =
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:tArgs
-     unify a (qualType t1) (Fix $ TFunc (map qualType tArgs) tvar)
-     traceLog $ "Inferred preds: " ++ intercalate ", " (map pretty preds)
+     rowConstraintVar <- RowTVar <$> fresh
+     unify a (qualType t1) (Fix $ TFunc (map qualType tArgs) tvar (TRowEnd $ Just rowConstraintVar))
+     traceLog ("Inferred preds: " ++ (intercalate ", " $ map pretty preds))
      tvar' <- do  pred' <- unifyPredsL a preds
                   tvarSubsted <- applyMainSubst tvar
                   return $ TQual pred' tvarSubsted
@@ -131,17 +133,15 @@ inferType' env (ENew a e1 eArgs) =
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1 : map fst argsTE
-     unify a (qualType t1) (Fix $ TFunc tArgs resT)
-     -- constrain 'this' to be a row type:
-     rowConstraintVar <- RowTVar <$> fresh
-     unify a (Fix . TRow . TRowEnd $ Just rowConstraintVar) thisT
-     -- close the row type
-     resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
-     unify a thisT (closeRow resolvedThisT)
+     protoRowVar <- RowTVar <$> fresh 
+     unify a (qualType t1) (Fix $ TFunc tArgs resT (TRowEnd $ Just protoRowVar))
      -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
      preds' <- unifyPredsL a preds
-     let thisT' = TQual preds' thisT
-     return (thisT', ENew (a, thisT') e1' eArgs')
+     let protoType = Fix $ TRow $ TRowEnd $ Just protoRowVar
+         protoT' = TQual preds' protoType
+     -- TODO: HACK - make this+proto work correctly
+     unify a protoType thisT
+     return (protoT', ENew (a, protoT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
   do recType <- Fix . TBody . TVar <$> fresh
      recEnv <- addVarScheme env n $ schemeEmpty recType

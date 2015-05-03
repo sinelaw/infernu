@@ -159,10 +159,9 @@ areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
 areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = applySubst subst $ replaceFixQual (unFix t1) (unFix t2) $ schemeType s1 })
   where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
 
--- Checks if a given type variable appears in the given type *only* as a parameter to a recursive
+-- | Checks if a given type variable appears in the given type *only* as a parameter to a recursive
 -- type name.  If yes, returns the name of recursive types (and position within) in which it
 -- appears; otherwise returns Nothing.
---isRecParamOnly :: TVarName -> Maybe (TypeId, Int) -> Type -> Maybe [(TypeId, Int)]
 isRecParamOnly
   :: (Num t, Enum t) =>
      TVarName -> Maybe (TypeId, t) -> Type -> Maybe [(TypeId, t)]
@@ -171,17 +170,21 @@ isRecParamOnly n1 typeId t1 =
    TBody (TVar n1') -> if n1' == n1 then sequence [typeId] else Just []
    TBody _ -> Just []
    TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
-   TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
-   TFunc ts tres -> (isRecParamOnly n1 Nothing) tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
+   TCons _ subTs -> msum $ map isRec' subTs
+   TFunc ts tres proto ->  isRec' tres
+                           `mappend` isRec' (Fix $ TRow proto)
+                           `mappend` msum (map isRec' ts)
    TRow rlist -> isRecParamRecList n1 rlist
-     where isRecParamRecList n' rlist' =
-             case rlist' of
-              TRowEnd _ -> Just []
-              -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
-              -- TODO: Can we safely ignore preds here?
-              TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing $ qualType t') (isRecParamRecList n' rlist'')
-              TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
-  where recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
+ where isRec' = isRecParamOnly n1 Nothing
+       recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
+       isRecParamRecList n' rlist' =
+         case rlist' of
+          TRowEnd _ -> Just []
+          -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
+          -- TODO: Can we safely ignore preds here?
+          TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n' Nothing $ qualType t') (isRecParamRecList n' rlist'')
+          TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
+
 
 dropAt :: Integral a => a -> [b] -> [b]
 dropAt _ [] = []
@@ -190,23 +193,24 @@ dropAt n (_:xs) = dropAt (n-1) xs
 
 replaceRecType :: TypeId -> TypeId -> Int -> Type -> Type
 replaceRecType typeId newTypeId indexToDrop t1 =
-    let replace' = replaceRecType typeId newTypeId indexToDrop
+    case unFix t1 of
+        TBody _ -> t1
+        TCons (TName typeId') subTs -> if typeId == typeId'
+                                      then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
+                                      else t1
+        TCons n subTs -> Fix $ TCons n $ mapTs' subTs
+        TFunc ts tres proto -> Fix $ TFunc (mapTs' ts) (replace' tres) (go proto)
+        TRow rlist -> Fix $ TRow $ go rlist
+    where
+        replace' = replaceRecType typeId newTypeId indexToDrop
         mapTs' = map replace'
-    in  case unFix t1 of
-            TBody _ -> t1
-            TCons (TName typeId') subTs -> if typeId == typeId'
-                                          then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
-                                          else t1
-            TCons n subTs -> Fix $ TCons n $ mapTs' subTs
-            TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
-            TRow rlist -> Fix $ TRow $ go rlist
-             where go rlist' =
-                     case rlist' of
-                      TRowEnd _ -> rlist'
-                      TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (go rlist'')
-                      TRowRec tid ts -> if typeId == tid
-                                        then TRowRec newTypeId $ dropAt indexToDrop ts
-                                        else rlist'
+        go rlist' =
+           case rlist' of
+            TRowEnd _ -> rlist'
+            TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (go rlist'')
+            TRowRec tid ts -> if typeId == tid
+                              then TRowRec newTypeId $ dropAt indexToDrop ts
+                              else rlist'
 
 allocNamedType :: TVarName -> Type -> Infer Type
 allocNamedType n t =

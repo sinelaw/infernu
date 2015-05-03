@@ -4,5 +4,10 @@ mkn;
 
 function Foo(x) { this.bla = x; }
 
-mkn(Foo, 2);
+var x = mkn(Foo, 2);
 
+x;
+
+var y = mkn(Foo, false);
+
+y;

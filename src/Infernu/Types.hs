@@ -148,7 +148,7 @@ data FType t = TBody TBody
              | TCons TConsName [t]
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
-             | TFunc [t] t 
+             | TFunc [t] t (TRowList t)
              | TRow (TRowList t)
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 

@@ -8,11 +8,14 @@ import Infernu.Types
 import Infernu.InferState
 import           Infernu.Lib (safeLookup)
 
+emptyProto :: TRowList t
+emptyProto = TRowEnd Nothing
+             
 func :: Type -> Type -> Type -> Type
-func this x y = Fix $ TFunc [this, x] y
+func this x y = Fix $ TFunc [this, x] y emptyProto
 
 funcN :: [Fix FType] -> Fix FType -> Fix FType
-funcN xs tres = Fix $ TFunc xs tres
+funcN xs tres = Fix $ TFunc xs tres emptyProto
 
 string :: Type
 string = Fix $ TBody TString
