@@ -213,9 +213,6 @@ unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 unify' _ a (TBody (TVar n)) t = varBind a n (Fix t)
 unify' _ a t (TBody (TVar n)) = varBind a n (Fix t)
 
--- | undefined
-unify' _ _ (TBody TUndefined) _ = return () -- TODO verify this is ok. undefined being treated as "bottom" type here.
-
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
@@ -263,7 +260,6 @@ unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
         Just ts -> unifyl recurse a ts
 
 -- | Two functions
--- TODO: handle func return type (contravariance) by swapping the unify rhs/lhs for the last TCons TFunc targ
 unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
     case matchZip ts1 ts2 of
         Nothing -> unificationError a t1 t2
