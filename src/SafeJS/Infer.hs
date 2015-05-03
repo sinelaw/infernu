@@ -156,7 +156,7 @@ runInferWith :: InferState -> Infer a -> Either TypeError a
 runInferWith ns inf = runIdentity . runEitherT $ evalStateT inf ns
 
 runInfer :: Infer a -> Either TypeError a
-runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty, namedTypes = Map.empty }
+runInfer = runInferWith InferState { nameSource = NameSource { lastName = 0 }, varInstances = Map.empty, varSchemes = Map.empty }
 
 fresh :: Infer TVarName
 fresh = do
@@ -207,32 +207,6 @@ getFreeTVars env = do
           where curFreeTVs = tr . maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId
                 tr = tracePretty $ " collected from " ++ pretty varId ++ " free type variables: "
   foldM collectFreeTVs Set.empty (Map.elems env)
-
-addNamedType :: TypeId -> Type -> Infer ()
-addNamedType tid t = do
-  modify $ \is -> is { namedTypes = Map.insert tid t $ namedTypes is }
-  return ()
-
-unrollName :: TypeId -> Infer (Maybe Type)
-unrollName tid = Map.lookup tid . namedTypes <$> get
-
-unrollNamedTypes :: Type -> Infer Type
-unrollNamedTypes t = do
-  typeAssocs <- Map.toList . namedTypes <$> get
-  return $ foldr (\(tName, Fix tType) t' -> replaceFix (TCons (TName tName) []) tType t') t typeAssocs
-
-rollNamedTypes :: Type -> Infer Type
-rollNamedTypes t = do
-  traceLog ("rollNamedTypes: " ++ pretty t) ()
-  typeAssocs <- Map.toList . namedTypes <$> get
-  return $ rollNamedTypes' typeAssocs t
-
-rollNamedTypes' typeAssocs t = roll' t
-  where roll typ = foldr (\(tName, Fix tType) t' -> replaceFix tType (TCons (TName tName) []) t') typ typeAssocs
-        roll' typ = let typ' = roll typ
-                    in if typ' /= typ
-                       then roll' (trace ("1:" ++ show typ ++ "\n2:" ++ show typ') typ')
-                       else typ'
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
@@ -322,16 +296,15 @@ generalize tenv t = do
   return $ TScheme (Set.toList unboundVars) t
 
 ----------------------------------------------------------------------
+type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 
+unify :: UnifyF
 unify = decycle3 unify''
 
-type UnifyF = Pos.SourcePos -> Type -> Type -> Infer TSubst
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ _ _ = return nullSubst
 unify'' (Just recurse) a t1 t2 =
   do traceLog ("unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2) ()
-     -- t1' <- rollNamedTypes t1
-     -- t2' <- rollNamedTypes t2
      tr' <$> unify' recurse a (unFix t1) (unFix t2)
   where tr' x = trace (tr2 x) x
         tr2 x = "unify: \t" ++ pretty t1 ++ " ,\t " ++ pretty t2 ++ "\n\t-->" ++ concatMap pretty (Map.toList x)
@@ -346,18 +319,15 @@ unify' recurse a t (TBody (TVar n)) = varBind a n (Fix t)
 unify' recurse a (TBody x) (TBody y) = if x == y
                                then return nullSubst
                                else unificationError a x y
-unify' recurse a t1@(TCons (TName n1) []) t2@(TCons (TName n2) []) =
+unify' recurse a t1@(TCons (TName n1 mu1) [t1']) t2@(TCons (TName n2 mu2) [t2']) =
   do if n1 == n2
      then return nullSubst
      else
-       do let unroll' n' t' = unrollName n' `failWithM` throwError a ("Unknown named type: " ++ pretty t')
-          t1' <- unroll' n1 t1
-          t2' <- unroll' n2 t2
-          recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
-unify' recurse a t1@(TCons (TName n1) []) t2 =
-  do t1' <- unrollName n1 `failWithM` throwError a ("Unknown named type: " ++ pretty t1)
+       do recurse a t1' t2' -- unificationError a (t1, t1') (t1, t2')
+unify' recurse a t1@(TCons (TName n1 _) [t1']) t2 =
+  do traceLog ("Recursing: " ++ pretty t1' ++ " ~ " ++ pretty t2) ()
      recurse a t1' (Fix t2) -- unificationError a (unFix t1') t2
-unify' recurse a t1 t2@(TCons (TName _) []) = recurse a (Fix t2) (Fix t1)
+unify' recurse a t1 t2@(TCons (TName _ _) [_]) = recurse a (Fix t2) (Fix t1)
 
 unify' recurse a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' recurse a t1@(TCons _ _) t2@(TBody _) = recurse a (Fix t2) (Fix t1)
@@ -439,16 +409,26 @@ isInsideRowType n (Fix t) =
    TRow t' -> n `Set.member` freeTypeVars t'
    _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
+isRow :: Type -> Bool
+isRow (Fix (TRow _)) = True
+isRow _ = False
+
+-- TODO find the smallest type we can fix to break the cycle instead of wrapping the entire type
+fixType :: TVarName -> Type -> Infer TSubst
+fixType n t =
+  do typeId <- fresh
+     muVarName <- fresh
+     -- TODO generalize and move to Types
+     let target = replaceFix (TBody (TVar n)) (TBody (TVar muVarName)) t
+         namedType = TCons (TName typeId muVarName) [target]
+
+     return $ singletonSubst n $ Fix namedType
+
+
 varBind :: Pos.SourcePos -> TVarName -> Type -> Infer TSubst
 varBind a n t | t == Fix (TBody (TVar n)) = return nullSubst
-              | isInsideRowType n t =
-                  do typeId <- fresh
-                     -- TODO generalize and move to Types
-                     let namedType = TCons (TName typeId) []
-                         target = replaceFix (TBody (TVar n)) namedType t
-                     addNamedType typeId target
-                     return $ singletonSubst n $ Fix namedType
-              | n `Set.member` freeTypeVars t = throwError a $ "Occurs check failed: " ++ pretty n ++ " in " ++ pretty t
+              | isInsideRowType n t = fixType n t
+              | n `Set.member` freeTypeVars t = let mvf = minifyVarsFunc t in throwError a $ "Occurs check failed: " ++ pretty (mvf n) ++ " in " ++ pretty (mapVarNames mvf t)
               | otherwise = return $ singletonSubst n t
 
 -- | Drops the last element of a list. Does not entail an O(n) price.
@@ -760,7 +740,7 @@ typeInference builtins e = do
 -- The following should succeed because x is immutable and thus polymorphic:
 --
 -- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (tuple [app (var "x") (lit (LitNumber 2)), app (var "x") (lit (LitBoolean True))]) (tuple [var "x", var "y"]))
--- "((b -> b), (TNumber, TBoolean))"
+-- "((this: b -> b), (TNumber, TBoolean))"
 --
 -- The following should fail because x is mutable and therefore a monotype:
 --
@@ -770,7 +750,7 @@ typeInference builtins e = do
 -- The following should also succeed because "x" is only ever used like this: (x True). The second assignment to x is: x := \z1 -> False, which is specific but matches the usage. Note that x's type is collapsed to: Boolean -> Boolean.
 --
 -- >>> test $ let' "x" (fun ["z"] (var "z")) (let' "y" (app (var "x") (lit (LitBoolean True))) (assign "x" (fun ["z1"] (lit (LitBoolean False))) (tuple [var "x", var "y"])))
--- "((TBoolean -> TBoolean), TBoolean)"
+-- "((this: TBoolean -> TBoolean), TBoolean)"
 --
 -- | Tests a setter for x being called with something more specific than x's original definition:
 -- >>> :{
@@ -790,10 +770,10 @@ typeInference builtins e = do
 -- "(TBoolean, TNumber)"
 --
 -- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (fun ["y"] (var "y")) (var "id"))
--- "(a -> a)"
+-- "(this: a -> a)"
 --
 -- >>> test $ let' "id" (fun ["x"] (var "x")) (assign "id" (lit (LitBoolean True)) (var "id"))
--- "<dummy>:1:1: Error: Could not unify: TBoolean with (a -> a)"
+-- "<dummy>:1:1: Error: Could not unify: TBoolean with (this: a -> a)"
 --
 -- >>> test $ let' "x" (lit (LitBoolean True)) (assign "x" (lit (LitBoolean False)) (var "x"))
 -- "TBoolean"
@@ -814,16 +794,16 @@ typeInference builtins e = do
 -- "<dummy>:1:1: Error: Could not unify: TNumber with TBoolean"
 --
 -- >>> test $ let' "id" (fun ["x"] (let' "y" (var "x") (var "y"))) (app (var "id") (var "id"))
--- "(b -> b)"
+-- "(this: b -> b)"
 --
 -- >>> test $ let' "id" (fun ["x"] (let' "y" (var "x") (var "y"))) (app (app (var "id") (var "id")) (lit (LitNumber 2)))
 -- "TNumber"
 --
 -- >>> test $ let' "id" (fun ["x"] (app (var "x") (var "x"))) (var "id")
--- "<dummy>:1:1: Error: Occurs check failed: a in (a -> b)"
+-- "<dummy>:1:1: Error: Occurs check failed: a in (this: a -> b)"
 --
 -- >>> test $ fun ["m"] (let' "y" (var "m") (let' "x" (app (var "y") (lit (LitBoolean True))) (var "x")))
--- "((TBoolean -> a) -> a)"
+-- "(this: (this: TBoolean -> a) -> a)"
 --
 -- >>> test $ app (lit (LitNumber 2)) (lit (LitNumber 2))
 -- "<dummy>:1:1: Error: Could not unify: TNumber with (TNumber -> a)"

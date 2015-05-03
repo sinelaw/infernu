@@ -84,7 +84,7 @@ data TBody = TVar TVarName
 
 type TypeId = TVarName
 
-data TConsName = TFunc | TArray | TTuple | TName TypeId
+data TConsName = TFunc | TArray | TTuple | TName TypeId TVarName
                  deriving (Show, Eq, Ord)
 
 -- | Row type.
@@ -142,6 +142,12 @@ instance VarNames (TBody) where
   freeTypeVars (TVar n) = Set.singleton n
   freeTypeVars _ = Set.empty
 
+instance VarNames (TConsName) where
+  mapVarNames f (TName n x) = TName n $ f x
+  mapVarNames _ t = t
+
+  freeTypeVars _ = Set.empty
+
 instance VarNames t => VarNames (Map.Map a t) where
   freeTypeVars = freeTypeVars'
   mapVarNames = mapVarNames'
@@ -185,14 +191,21 @@ instance VarNames t => VarNames (TRowList t) where
 -- fromList [1]
 -- >>> freeTypeVars $ (Fix $ (TRow (TRowEnd (Just 3))) :: Type)
 -- fromList [3]
+-- >>> freeTypeVars (Fix $ TCons (TName 99 88) [Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 88]])
+-- fromList [1]
+-- >>> mapVarNames (+1) (Fix $ TCons (TName 99 88) [Fix $ TCons TFunc [Fix $ TBody $ TVar 1, Fix $ TBody $ TVar 88]])
+-- Fix (TCons (TName 99 89) [Fix (TCons TFunc [Fix (TBody (TVar 2)),Fix (TBody (TVar 89))])])
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
   freeTypeVars (Fix (TRow trlist)) = freeTypeVars trlist
-  freeTypeVars (Fix t) = freeTypeVars' t
+  freeTypeVars (Fix (TCons (TName _ mu) ts)) = freeTypeVars' ts `Set.difference` (Set.singleton mu)
+  freeTypeVars (Fix (TCons n ts)) = (freeTypeVars n `Set.union` freeTypeVars' ts)
+--  freeTypeVars (Fix t) = freeTypeVars' t
 
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
   mapVarNames f (Fix (TRow trlist)) = Fix $ TRow $ mapVarNames f trlist
-  mapVarNames f (Fix t) = Fix $ mapVarNames' f t
+  mapVarNames f (Fix (TCons n ts)) = Fix $ TCons (mapVarNames f n) (mapVarNames f ts)
+  --mapVarNames f (Fix t) = Fix $ mapVarNames' f t
 
 instance VarNames (FType (Fix FType)) where
   freeTypeVars = freeTypeVars . Fix
@@ -280,7 +293,7 @@ instance Substable (TRowList Type) where
                                                Nothing -> t
                                                Just (Fix (TRow tRowList)) -> tRowList
                                                -- UGLY HACK!
-                                               Just (Fix (TCons (TName n) _)) -> TRowEnd (Just n)
+                                               Just (Fix (TCons (TName n _) _)) -> TRowEnd (Just n)
                                                Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
 
@@ -333,18 +346,19 @@ data InferState = InferState { nameSource   :: NameSource
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map.Map VarId TScheme
                              , varInstances :: Map.Map TVarName (Set.Set (Type))
-                             , namedTypes   :: Map.Map TypeId Type }
+                             }
                   deriving (Show, Eq)
 
 -- | VarNames instance for InferState
 -- >>> mapVarNames (\k -> k + 1) $ InferState { nameSource = NameSource 0, varSchemes = Map.empty, varInstances = Map.fromList [(0, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1]), (1, Set.fromList [Fix $ TBody $ TVar 0, Fix $ TBody $ TVar 1])] }
 -- InferState {nameSource = NameSource {lastName = 0}, varSchemes = fromList [], varInstances = fromList [(1,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))]),(2,fromList [Fix (TBody (TVar 1)),Fix (TBody (TVar 2))])]}
 instance VarNames InferState where
-  freeTypeVars = freeTypeVars . varSchemes
+  freeTypeVars is = freeTypeVars $ varSchemes is
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is
                         , varInstances = Map.fromList $ map (\(k,v) -> (f k, Set.map (mapVarNames f) v)) $ Map.assocs $ varInstances is
                         }
 
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
-                       , varInstances = Map.fromList $ map (\(k,v) -> (k, (applySubst s v) `Set.union` v)) $ Map.assocs $ varInstances is }
+                       , varInstances = Map.fromList $ map (\(k,v) -> (k, (applySubst s v) `Set.union` v)) $ Map.assocs $ varInstances is
+                       }
