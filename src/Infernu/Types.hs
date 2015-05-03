@@ -94,20 +94,21 @@ data LitVal = LitNumber Double
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar a EVarName
+           | EAssign a EVarName (Exp a) (Exp a)
            | EApp a (Exp a) [Exp a]
            | EAbs a [EVarName] (Exp a)
            | ELet a EVarName (Exp a) (Exp a)
-           | ELit a LitVal
-           | EAssign a EVarName (Exp a) (Exp a)
+           | ECase a (Exp a) [(LitVal, Exp a)]
+           | EProp a (Exp a) TProp
            | EPropAssign a (Exp a) TProp (Exp a) (Exp a)
+             -- TODO consider better options for causing rows to become closed outside the 'new' call
+           | ENew a (Exp a) [Exp a]
+             -- Various literal expressions
+           | ELit a LitVal
            | EArray a [Exp a]
            | ETuple a [Exp a]
            | ERow a Bool [(EPropName, Exp a)]
            | EStringMap a [(String, Exp a)]
-           | ECase a (Exp a) [(LitVal, Exp a)]
-           | EProp a (Exp a) TProp
-             -- TODO consider better options for causing rows to become closed outside the 'new' call
-           | ENew a (Exp a) [Exp a]
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
