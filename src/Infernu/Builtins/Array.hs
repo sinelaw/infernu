@@ -7,6 +7,7 @@ import           Control.Monad             (foldM, forM)
 import Infernu.Types
 import Infernu.InferState
 import           Infernu.Lib (safeLookup)
+import Control.Applicative
 
 func :: Type -> Type -> Type -> Type
 func this x y = Fix $ TFunc [this, x] y
