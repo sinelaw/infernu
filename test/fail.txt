@@ -1,10 +1,17 @@
-// FAIL valid/builtins/regex-exec-2.js:5:5result : : Error:  |   Faile y valid/builtins/regex-exec-2.js
+// FAIL valid/builtins/map.js:3:5b : : Error:  |   Failed unifying:  [ y valid/builtins/map.js
+// FAIL valid/method-as-func.js:5:3: Error:  |   Failed unifying:  <Cy y valid/method-as-func.js
 // FAIL valid/mutability/array-of-polyfuncs.js:11:7: Error:  |   Faile y valid/mutability/array-of-polyfuncs.js
 // FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  dn.(({}.( y valid/new-func.js
+// FAIL valid/nothis2.js:11:7: Error:  |   Failed unifying:  (Number - y valid/nothis2.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  < y valid/nothis-as-param.js
-// FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
-// FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (dh -> e y valid/promise.js
-// FAIL valid/prop-polymorphic-assign2-this.js:4:1: Error:  |   Failed y valid/prop-polymorphic-assign2-this.js
-// FAIL valid/prop-polymorphic-assign3.js:4:1: Error:  |   Failed unif y valid/prop-polymorphic-assign3.js
-// FAIL  n invalid/rank-2-method-b.js
+// FAIL valid/nothis.js:13:3: Error:  |   Failed unifying:  <Cu>.(Numb y valid/nothis.js
+ERROR y valid/poly-array-assign2.js
+// FAIL valid/poly-method-recursive-this.js:13:16: Error:  |   Failed  y valid/poly-method-recursive-this.js
+// FAIL valid/poly-row-field.js:10:15: Error:  |   Failed unifying:  < y valid/poly-row-field.js
+// FAIL valid/poly-row-field-using-let.js:11:4: Error:  |   Failed uni y valid/poly-row-field-using-let.js
+// FAIL valid/poly-this2.js:8:3: Error:  |   Failed unifying:  <Cx>.(N y valid/poly-this2.js
+// FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  (dg -> e y valid/promise.js
+ERROR n invalid/occurs.js
+// FAIL  n invalid/prop-polymorphic-assign2.js
+// FAIL  n invalid/prop-polymorphic-assign2-this.js

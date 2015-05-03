@@ -228,8 +228,9 @@ inferType' env (ERow a isOpen propExprs) =
      let propNamesTypes = zip propExprs (reverse $ map fst te)
          rowEnd' = TRowEnd $ if isOpen then Just endVar else Nothing
          accumRowProp' (row, floatedPs') ((propName, propExpr), propType) =
-           do (ts, floatedPs) <- generalize propExpr env propType
-              return $ (TRowProp (TPropName propName) ts row, floatedPs' ++ floatedPs)
+           do --(ts, floatedPs) <- generalize propExpr env propType
+              let floatedPs = qualPred $ propType
+              return $ (TRowProp (TPropName propName) (TScheme [] $ TQual { qualPred = [], qualType = qualType $ propType }) row, floatedPs' ++ floatedPs)
      (rowType', floatedPreds) <- foldM  accumRowProp' (rowEnd', []) propNamesTypes
      let rowType = TQual { qualPred = floatedPreds, qualType = Fix . TRow Nothing $ rowType' }
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))

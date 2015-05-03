@@ -306,13 +306,15 @@ unifyTryMakeRow r a leftBiased tRowList t2 =
      res <- tryMakeRow t2
      case res of
       Nothing -> unificationError a tRow t2
-      Just rowType -> if leftBiased
-                      then r a (Fix tRow) row'
-                      else r a row' (Fix tRow)
-         where row' = Fix $ TRow label' rowType
-               label' = case t2 of
-                            TCons cons _ -> Just $ pretty cons
-                            _ -> Just $ pretty t2
+      Just rowType ->
+          do let label' =
+                     case t2 of
+                         TCons cons _ -> Just $ pretty cons
+                         _ -> Just $ pretty t2
+             row' <- freshifyVars $ Fix $ TRow label' rowType 
+             if leftBiased
+             then r a (Fix tRow) row'
+             else r a row' (Fix tRow)
 
 
 unifyRowPropertyBiased :: Source -> Infer () -> (TypeScheme, TypeScheme) -> Infer ()

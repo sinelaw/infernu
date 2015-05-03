@@ -403,6 +403,12 @@ minifyVarsFunc xs n = fromMaybe n $ Map.lookup n vars
 minifyVars :: (VarNames a) => a -> a
 minifyVars xs = mapVarNames (minifyVarsFunc xs) xs
 
+
+freshifyVars :: (VarNames a) => a -> Infer a
+freshifyVars t = 
+    do varsMap <- Map.fromList <$> forM (Set.toList $ freeTypeVars t) (\tv -> (tv,) <$> fresh)
+       return $ mapVarNames (\n -> fromMaybe n $ Map.lookup n varsMap) t
+
 getVarInstances :: Infer (Graph.Gr QualType ())
 getVarInstances = varInstances <$> get
 

@@ -29,7 +29,7 @@ tvar = Fix . TBody . TVar
 regexMatch :: Type
 regexMatch = Fix . TRow (Just "RegexMatch")
              -- TODO: instead of quantifying 'this', it should be a recursive type (regexMatch itself)
-             . TRowProp (TPropGetIndex) (TScheme [0] $ qualEmpty $ func (tvar 0) number string)
+             . TRowProp (TPropGetIndex) (ts $ func (tvar 0) number string)
              . TRowProp (TPropName "index") (ts $ number)
              . TRowProp (TPropName "input") (ts $ string)
              $ TRowEnd Nothing

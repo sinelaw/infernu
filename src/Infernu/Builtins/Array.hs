@@ -46,7 +46,7 @@ arrayProps elemType = let aType = array elemType in
   , ("indexOf", ts $ funcN [aType, elemType, number] number)
   , ("join", ts $ func aType string string)
   , ("lastIndexOf", ts $ func aType number number)
-  , ("map", TScheme [0] $ qualEmpty (func aType (funcN [undef, elemType, number, aType] (tvar 0)) (array $ tvar 0)))-- requires type variables, and maybe foralls on row properties
+  , ("map", ts $ func aType (funcN [undef, elemType, number, aType] (tvar 0)) (array $ tvar 0))-- requires type variables, and maybe foralls on row properties
   , ("pop", ts $ funcN [aType] elemType)
   , ("push", ts $ funcN [aType, elemType] number)
   , ("reverse", ts $ funcN [aType] aType)
