@@ -4,6 +4,7 @@
 -- | Infernu
 module Lambdabot.Plugin.Infernu (infernuPlugin) where
 
+import           Data.Maybe                  (catMaybes)
 import qualified Data.ByteString.Char8       as P
 import           Data.Functor                ((<$>))
 import           Data.List                   (intersperse)
@@ -36,6 +37,10 @@ sayType rest = case  runTypeInference . fmap Source . translate . ES3.unJavaScri
                 Right res -> case getAnnotations <$> res of
                               Left e' -> pretty e'
                               Right [] -> show "There is nothing there."
-                              Right xs -> pretty . minifyVars . snd $ head $ filterGen xs
-                                  where filterGen = filter (\(Source (GenInfo g _, _), _) -> not g)
+                              Right xs -> concat . intersperse "\n" $ filterGen xs
+                                  where filterGen = catMaybes . map (\(Source (GenInfo g n, _), t) ->
+                                                                         case (g,n) of
+                                                                             (False, Just n) -> Just (pretty n ++ " : " ++ (pretty $ minifyVars t))
+                                                                             _ -> Nothing
+                                                                    )
 
