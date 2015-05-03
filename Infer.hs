@@ -435,8 +435,10 @@ inferType' env (ELet _ n e1 e2) =
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env (EAssign _ n expr1 expr2) =
-  do lvalueScheme <- getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
-     lvalueT <- instantiate lvalueScheme
+  do varId <- getVarId n env `failWith` throwError ("Unbound variable: '" ++ show n ++ "'")
+     ungeneralizedScheme <- ungeneralize <$> getVarScheme n env `failWithM` throwError ("Unbound variable: " ++ n ++ " in assignment " ++ pretty expr1)
+     setVarScheme n varId ungeneralizedScheme
+     lvalueT <- instantiate ungeneralizedScheme
      (s1, rvalueT) <- inferType env expr1
      s2 <- unify rvalueT (applySubst s1 lvalueT)
      let s3 = s2 `composeSubst` s1
