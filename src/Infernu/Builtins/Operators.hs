@@ -3,6 +3,8 @@ module Infernu.Builtins.Operators
        where
 
 import           Infernu.Types
+import           Infernu.Prelude
+
 import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 

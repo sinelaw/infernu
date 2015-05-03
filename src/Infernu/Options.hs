@@ -2,6 +2,8 @@ module Infernu.Options
        (Options(..), defaultOptions, opts)
        where
 
+import           Infernu.Prelude
+
 import Options.Applicative 
 
 data Options = Options

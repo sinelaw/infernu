@@ -8,9 +8,7 @@ module Infernu.Fix
        )
        where
 
-import           Data.Foldable             (Foldable (..), foldr)
-import           Prelude                   hiding (foldr)
-
+import Infernu.Prelude
 
 newtype Fix f = Fix { unFix :: f (Fix f) }
 

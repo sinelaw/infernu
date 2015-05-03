@@ -3,6 +3,7 @@ module Infernu.Builtins.TypeClasses
        where
 
 import           Infernu.Types
+import           Infernu.Prelude
 
 typeClasses =
     [

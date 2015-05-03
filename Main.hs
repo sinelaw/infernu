@@ -9,6 +9,7 @@ import           Infernu.Infer       (pretty)
 import           Infernu.Options     (Options (..), opts)
 import           Infernu.Types       (QualType, Source (..))
 import           Infernu.Util
+import           Infernu.Prelude
 
 process :: [(Source, QualType)] -> [(Pos.SourceName, [String])] -> String
 process ts sourceCodes = concatMap (\(f, ds) -> annotatedSource (filteredTypes f ts) ds) sourceCodes

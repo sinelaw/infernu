@@ -3,7 +3,7 @@ module Infernu.Pretty where
 
 
 import           Infernu.Types
-
+import           Infernu.Prelude
     
 import           Data.Char       (chr, ord)
 import qualified Data.Char       as Char
@@ -14,6 +14,7 @@ import qualified Data.Graph.Inductive      as Graph
 
 import qualified Data.Set        as Set
 import qualified Text.Parsec.Pos as Pos
+
 
 tab :: Int -> String
 tab t = replicate (t*4) ' '

@@ -56,8 +56,6 @@ import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
-import           Prelude                    hiding (foldr, sequence, mapM)
-
 
 import           Infernu.Prelude
 import           Infernu.Pretty

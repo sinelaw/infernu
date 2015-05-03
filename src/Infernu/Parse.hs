@@ -9,6 +9,7 @@ import qualified Language.ECMAScript3.Syntax      as ES3
 import           Infernu.Types
 import qualified Text.Parsec.Pos                  as Pos
 import qualified Infernu.Log as Log
+import           Infernu.Prelude
     
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName

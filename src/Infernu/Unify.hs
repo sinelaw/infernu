@@ -16,7 +16,6 @@ import           Data.Maybe           (catMaybes, mapMaybe)
 
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
-import           Prelude              hiding (foldl, foldr, mapM, sequence)
 
 
 import           Infernu.Prelude

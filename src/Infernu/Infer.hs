@@ -21,7 +21,6 @@ import qualified Data.Map.Lazy      as Map
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as Set
-import           Prelude            hiding (foldr, mapM, sequence)
 
 import           Data.List          (intercalate)
 

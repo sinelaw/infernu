@@ -1,6 +1,7 @@
 module Infernu.Builtins.StringMap where
 
 import Infernu.Types
+import           Infernu.Prelude
 
 undef :: Type
 undef = Fix $ TBody TUndefined
