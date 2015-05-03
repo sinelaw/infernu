@@ -354,6 +354,7 @@ sortRow :: TRowList t -> TRowList t
 sortRow row = row -- TODO implement
 
 data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) | FlatRowEndRec TypeId [t]
+                  deriving (Eq, Show)
 
 flattenRow :: TRowList t -> (Map.Map TProp (TScheme t), FlatRowEnd t)
 flattenRow = flattenRow' (Map.empty, FlatRowEndTVar Nothing)

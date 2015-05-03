@@ -131,6 +131,9 @@ instance Pretty TConsName where
 instance Pretty RowTVar where
   prettyTab _ t = ".." ++ pretty (getRowTVar t)
 
+instance Show t => Pretty (FlatRowEnd t) where
+  prettyTab _ t = show t
+
 instance Pretty Type where
   prettyTab x = prettyType x . unFix
 
