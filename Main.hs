@@ -5,8 +5,13 @@ import           SafeJS.Infer       (pretty)
 import           SafeJS.Util
 import           System.Environment (getArgs)
 import qualified Text.Parsec.Pos    as Pos
+import SafeJS.Pretty (Pretty(..))
+import SafeJS.Types (Type)
 
---process :: [(String, [String])] -> String
+process :: Pretty a
+           => Either a [(Pos.SourcePos, Type)]
+           -> [(Pos.SourceName, [String])]
+           -> String
 process res sourceCodes =
   case res of
    Right ts -> concatMap (\(f, ds) -> annotatedSource (filteredTypes f ts) ds) sourceCodes

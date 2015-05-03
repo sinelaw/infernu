@@ -4,16 +4,16 @@ module SafeJS.Util (checkFiles, annotatedSource, checkSource) where
 import           Control.Arrow               (second)
 import           Control.Monad               (forM)
 import           Data.Functor                ((<$>))
-import qualified Data.Set                    as Set
 import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
 
 import           SafeJS.Parse                (translate)
 -- TODO move pretty stuff to Pretty module
-import           SafeJS.Infer                (getAnnotations, runTypeInference, minifyVars)
+import           SafeJS.Infer                (getAnnotations, minifyVars,
+                                              runTypeInference)
 import           SafeJS.Pretty               (pretty)
-import           SafeJS.Types                (Type, TypeError(..))
+import           SafeJS.Types                (Type, TypeError (..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -47,5 +47,5 @@ checkFiles fileNames = do
 annotatedSource :: [(Pos.SourcePos, Type)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos prettyRes indexedSource
   where indexedSource = indexList sourceCode
-        prettyRes = (Set.toList . Set.fromList . fmap (second pretty)) xs
+        prettyRes = (fmap (second pretty)) xs
 
