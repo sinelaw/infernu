@@ -123,8 +123,8 @@ unTVarName (Flex x) = x
 unTVarName (Skolem x) = x
 
 setTVarName :: TVarName -> Int -> TVarName
-setTVarName (Flex x) y = Flex y
-setTVarName (Skolem x) y = Skolem y
+setTVarName (Flex _) y = Flex y
+setTVarName (Skolem _) y = Skolem y
 
 data TBody = TVar TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
@@ -461,10 +461,10 @@ instance VarNames t => VarNames (TScheme t) where
 instance (VarNames t, Substable t) => Substable (TScheme t) where
     applySubst = schemeForceApplySubst
 
--- | Substitution on TScheme that doesn't touch quantified variables
--- Useful for normal substitution
-schemeQApplySubst :: (VarNames t, Substable t) => TSubst -> TScheme t -> TScheme t
-schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
+-- -- | Substitution on TScheme that doesn't touch quantified variables
+-- -- Useful for normal substitution
+-- schemeQApplySubst :: (VarNames t, Substable t) => TSubst -> TScheme t -> TScheme t
+-- schemeQApplySubst s (TScheme qvars t) = TScheme qvars $ applySubst (foldr Map.delete s qvars) t
 
 -- | Substitution on TScheme that *does* replace even quantified variables
 -- Useful for un-generalizing mutable variables

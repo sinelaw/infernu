@@ -18,6 +18,7 @@ string = Fix $ TBody TString
 ts :: t -> TScheme t
 ts t = TScheme [] $ qualEmpty t
 
+stringMapRowType :: Monad m => Type -> m (TRowList Type)
 stringMapRowType elemType = return
                             . TRowProp TPropSetIndex (ts $ funcN [aType, string, elemType] undef)
                             . TRowProp TPropGetIndex (ts $ func aType string elemType)

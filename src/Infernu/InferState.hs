@@ -3,7 +3,7 @@
 {-# LANGUAGE BangPatterns    #-}
 
 module Infernu.InferState
-       ( Infer(..)
+       ( Infer
        , addPendingUnification
        , addVarScheme
        , applyMainSubst
@@ -52,7 +52,6 @@ import qualified Data.Graph.Inductive      as Graph
 import qualified Data.List                  as List
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
-import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
@@ -369,20 +368,20 @@ instantiateVar a n env = do
 
 ----------------------------------------------------------------------
 
--- Performs deep skolemisation, retuning the 
--- skolem constants and the skolemised type
+-- Performs deep skolemisation, retuning the skolem constants and the skolemised type
 skolemiseScheme :: TypeScheme -> Infer ([TVarName], QualType)
-skolemiseScheme (TScheme tvs ty)	-- Rule PRPOLY
+skolemiseScheme (TScheme tvs ty)
   = do sks1 <- forM tvs $ const (Skolem <$> fresh)
        let subst = Map.fromList $ zip tvs sks1
            lookup' x = case Map.lookup x subst of
                            Nothing -> x
                            Just y -> y
        (sks2, ty') <- skolemiseType (mapVarNames lookup' ty)
-       return (sks1 ++ sks2, ty') 
+       return (sks1 ++ sks2, ty')
+ 
 skolemiseType :: QualType -> Infer ([TVarName], QualType)
 skolemiseType q@(TQual ps (Fix (TFunc args_ty res_ty)))
-  = do (sks, res_ty'@(TQual ps' res_ty'')) <- skolemiseType (qualEmpty res_ty)
+  = do (sks, TQual ps' res_ty'') <- skolemiseType (qualEmpty res_ty)
        return (sks, q { qualPred = ps ++ ps',  qualType = Fix $ TFunc args_ty res_ty'' })
 skolemiseType ty
   = return ([], ty)
@@ -474,12 +473,6 @@ applyMainSubst x =
   do s <- getMainSubst
      return $ applySubst s x
 
-
-substVar :: TSubst -> TVarName -> TVarName
-substVar subst x = let varX = Fix (TBody (TVar x))
-                   in case applySubst subst varX of
-                          Fix (TBody (TVar zx)) -> zx
-                          _ -> x
 
 lookupClass :: ClassName -> Infer (Maybe (Class Type))
 lookupClass cs = Map.lookup cs . classes <$> get

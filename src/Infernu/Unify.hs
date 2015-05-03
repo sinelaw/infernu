@@ -183,6 +183,12 @@ mkTypeErrorMessage t1 t2 mte =
                          --   "             With:  "
                  Just te -> "\n          Because:  " ++ prettyTab 2 (message te)
            ]
+
+wrapError :: Pretty b => b -> b -> Infer a -> Infer a
+wrapError ta tb = mapError 
+                  $ \te -> TypeError { source = source te,
+                                       message = mkTypeErrorMessage ta tb (Just te)
+                                     }
     
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ "breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2
@@ -192,10 +198,7 @@ unify'' (Just recurse) a t1 t2 =
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
      traceLog $ "unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2
-     let wrap' te = TypeError { source = source te,
-                                message = mkTypeErrorMessage t1 t2 (Just te)
-                              }
-     mapError wrap' $ unify' recurse a t1' t2'
+     wrapError t1 t2 $ unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ mkTypeErrorMessage a b Nothing
@@ -304,7 +307,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
      traceLog $ "row1: " ++ pretty m1
      traceLog $ "row2: " ++ pretty m2
      traceLog $ "Common row properties: " ++ show commonNames
-     forM_ commonTypes $ \(ts1, ts2) -> unifyTypeSchemes' recurse a (unificationError a ts1 ts2) ts1 ts2
+     forM_ commonTypes $ \(ts1, ts2) -> wrapError ts1 ts2 $ unifyTypeSchemes' recurse a ts1 ts2
 
      let allAreCommon = Set.null $ (names1 `Set.difference` names2) `Set.union` (names2 `Set.difference` names1)
          unifyDifferences =
@@ -336,12 +339,12 @@ unifyTryMakeRow r a leftBiased tRowList t2 =
                             _ -> Just $ pretty t2
 
 
-unifyTypeSchemes :: Source -> Infer () -> TypeScheme -> TypeScheme -> Infer ()
+unifyTypeSchemes :: Source -> TypeScheme -> TypeScheme -> Infer ()
 unifyTypeSchemes = unifyTypeSchemes' unify
 
 -- | Biased subsumption-based unification. Succeeds if scheme2 is at least as polymorphic as scheme1
-unifyTypeSchemes' :: UnifyF -> Source -> Infer () -> TypeScheme -> TypeScheme -> Infer ()
-unifyTypeSchemes' recurse a errorAction scheme1s scheme2s =
+unifyTypeSchemes' :: UnifyF -> Source -> TypeScheme -> TypeScheme -> Infer ()
+unifyTypeSchemes' recurse a scheme1s scheme2s =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
       (skolemVars, scheme1T) <- skolemiseScheme scheme1s
       scheme2T <- instantiate scheme2s

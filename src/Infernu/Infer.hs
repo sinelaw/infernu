@@ -31,7 +31,7 @@ import           Infernu.Lib        (safeLookup)
 import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyTypeSchemes, unifyl, tryMakeRow)
+import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyl, tryMakeRow)
 
 
 
@@ -183,7 +183,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> freshFlex
      (generalizedRvalue, floatedPreds) <- generalize expr1 env rvalueT
-     let rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
+     let --rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
          rvalueRowType = Fix . TRow Nothing $ TRowProp prop generalizedRvalue $ TRowEnd (Just rowTailVar)
          --rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
      unify a (qualType objT) rvalueRowType 

@@ -5,6 +5,7 @@ module Infernu.Builtins.TypeClasses
 import           Infernu.Types
 import           Infernu.Prelude
 
+typeClasses :: [(ClassName, Class (Fix FType))]
 typeClasses =
     [
       (ClassName "Pattern", Class { classInstances =
