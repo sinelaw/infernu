@@ -43,9 +43,11 @@ stringProps =
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
+-- TODO: this code is actually pure, refactor to pure function and 'return' wrapper.
 stringRowType :: Infer (TRowList Type)
-stringRowType = foldM addProp (TRowEnd Nothing) $ stringProps
-  where addProp rowlist (name, propTS) =
+stringRowType = TRowProp TPropGetIndex (ts $ func string number string) <$> namedProps
+  where namedProps = foldM addProp (TRowEnd Nothing) $ stringProps
+        addProp rowlist (name, propTS) =
           do allocNames <- forM (schemeVars propTS) $ \tvName -> (fresh >>= return . (tvName,))
              let ts' = mapVarNames (safeLookup allocNames) propTS
-             return $ TRowProp name ts' rowlist
+             return $ TRowProp (TPropName name) ts' rowlist

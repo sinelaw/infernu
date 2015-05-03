@@ -23,6 +23,7 @@ import           Infernu.Prelude
 import           Infernu.Builtins.Array (arrayRowType)
 import           Infernu.Builtins.Regex (regexRowType)
 import           Infernu.Builtins.String (stringRowType)
+import           Infernu.Builtins.StringMap (stringMapRowType)
 import           Infernu.Decycle
 import           Infernu.InferState
 import           Infernu.Lib          (matchZip)
@@ -30,10 +31,10 @@ import           Infernu.Log
 import           Infernu.Pretty
 import           Infernu.Types
 
-
 ----------------------------------------------------------------------
 
 tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
+tryMakeRow (TCons TStringMap [t]) = Just <$> stringMapRowType t 
 tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
 tryMakeRow (TBody TRegex) = Just <$> regexRowType
 tryMakeRow (TBody TString) = Just <$> stringRowType
@@ -351,8 +352,8 @@ unifyRowPropertyBiased' recurse a errorAction (scheme1s, scheme2s) =
             else errorAction
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
-               -> (x, Set EPropName, Map EPropName TypeScheme)
-               -> (x, Set EPropName, FlatRowEnd Type)
+               -> (x, Set TProp, Map TProp TypeScheme)
+               -> (x, Set TProp, FlatRowEnd Type)
                -> Infer ()
 unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2

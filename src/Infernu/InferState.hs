@@ -376,7 +376,6 @@ isExpansive (EVar _ _)        = False
 isExpansive (EApp _ _ _)      = True
 isExpansive (EAssign _ _ _ _) = True
 isExpansive (EPropAssign _ _ _ _ _) = True
-isExpansive (EIndexAssign _ _ _ _ _) = True
 isExpansive (ELet _ _ _ _)    = True
 isExpansive (EAbs _ _ _)      = False
 isExpansive (ELit _ _)        = False
@@ -386,7 +385,6 @@ isExpansive (EStringMap _ _)    = True
 isExpansive (ERow _ _ _)    = True
 isExpansive (ECase _ ep es) = any isExpansive (ep:map snd es)
 isExpansive (EProp _ e _)  = isExpansive e
-isExpansive (EIndex _ a b)  = any isExpansive [a, b]
 isExpansive (ENew _ _ _) = True
 
 

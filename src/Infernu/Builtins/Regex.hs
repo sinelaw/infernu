@@ -23,9 +23,10 @@ regexProps =
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
+-- TODO: this code is actually pure, refactor to pure function and 'return' wrapper.
 regexRowType :: Infer (TRowList Type)
 regexRowType = foldM addProp (TRowEnd Nothing) $ regexProps
   where addProp rowlist (name, propTS) =
           do allocNames <- forM (schemeVars propTS) $ \tvName -> (fresh >>= return . (tvName,))
              let ts' = mapVarNames (safeLookup allocNames) propTS
-             return $ TRowProp name ts' rowlist
+             return $ TRowProp (TPropName name) ts' rowlist

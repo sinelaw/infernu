@@ -92,7 +92,7 @@ fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray (gen z) tes
 
 fromStatement (ES3.VarDeclStmt _ decls) = chainDecls decls
 fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
-fromStatement (ES3.ReturnStmt z x) = EIndexAssign (gen z) (EVar (gen z) "return") (ELit (gen z) $ LitNumber 0)
+fromStatement (ES3.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return") (TPropName "value")
                                      $ case x of
                                         Nothing -> ELit (gen z) LitUndefined
                                         Just x' -> fromExpression x'
@@ -102,7 +102,7 @@ toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (GenInfo, a)
 toAbs z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'
   -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
   where body' = case any hasReturn stmts of
-                 True -> ELet (gen z) "return" (EArray (gen z) []) $ foldStmts stmts $ (EIndex (gen z) (EVar (gen z) "return") (ELit (gen z) $ LitNumber 0))
+                 True -> ELet (gen z) "return" (ERow (gen z) True []) $ foldStmts stmts $ (EProp (gen z) (EVar (gen z) "return") (TPropName "value"))
                  False -> ELet (gen z) "return" (empty z) $ foldStmts stmts $ (ELit (gen z) LitUndefined)
 
 
@@ -164,7 +164,7 @@ fromExpression (ES3.ObjectLit z props) = let stringProps = map (fromPropString .
                                          in if all (\x -> x /= Nothing) stringProps
                                             then EStringMap (src z) $ zip (catMaybes stringProps) (map (fromExpression . snd) props) 
                                             else ERow (src z) False $ map (fromProp *** fromExpression) props
-fromExpression (ES3.BracketRef z arrExpr indexExpr) = EIndex (src z) (fromExpression arrExpr) (fromExpression indexExpr)
+fromExpression (ES3.BracketRef z arrExpr indexExpr) = getIndex z arrExpr indexExpr
 fromExpression (ES3.VarRef z name) = EVar (src z) $ ES3.unId name
 fromExpression (ES3.CondExpr z ePred eThen eElse) = ECase (src z) (fromExpression ePred) [(LitBoolean True, fromExpression eThen), (LitBoolean False, fromExpression eElse)]
 fromExpression (ES3.CallExpr z expr argExprs) =
@@ -174,9 +174,9 @@ fromExpression (ES3.CallExpr z expr argExprs) =
   -- (<complicated expr>, ...)) by binding the object expression to '__obj__'.
   -- So that we get: let __obj__ = <complicated expr> in __obj__.method(__obj__, ...)
   case expr of
-   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') var propName) var
+   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') var (TPropName propName)) var
      where var = fromExpression varExpr
-   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet (gen z') objVarName obj $ appExpr (Just propName) (EProp (src z') objVar propName) objVar
+   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet (gen z') objVarName obj $ appExpr (Just propName) (EProp (src z') objVar (TPropName propName)) objVar
      where obj = fromExpression objExpr
            objVar = EVar (gen z') objVarName
            objVarName = "_/obj/_"
@@ -188,8 +188,8 @@ fromExpression (ES3.AssignExpr z op target expr) = assignExpr
   where sz = src z
         (assignExpr, oldValue) = case target of
           ES3.LVar _ name -> (assignToVar z name value, EVar sz name)
-          ES3.LDot _ objExpr name -> (assignToProperty z objExpr name value, EProp sz (fromExpression objExpr) name)
-          ES3.LBracket _ objExpr idxExpr -> (assignToIndex z objExpr idxExpr value, EIndex sz (fromExpression objExpr) (fromExpression idxExpr))
+          ES3.LDot _ objExpr name -> (assignToProperty z objExpr name value, EProp sz (fromExpression objExpr) (TPropName name))
+          ES3.LBracket _ objExpr idxExpr -> (assignToIndex z objExpr idxExpr value, getIndex z objExpr idxExpr)
         expr' = fromExpression expr
         value = case op of
           ES3.OpAssign -> expr'
@@ -216,7 +216,7 @@ fromExpression e@(ES3.ListExpr z exprs) =
       xs -> ELet (gen z) poo (ETuple (gen z) (tail exprs')) (head exprs')
           where exprs' = reverse . map fromExpression $ xs
 fromExpression (ES3.ThisRef z) = EVar (src z) "this"
-fromExpression (ES3.DotRef z expr propId) = EProp (src z) (fromExpression expr) (ES3.unId propId)
+fromExpression (ES3.DotRef z expr propId) = EProp (src z) (fromExpression expr) (TPropName $ ES3.unId propId)
 fromExpression (ES3.NewExpr z expr argExprs) = ENew (src z) (fromExpression expr) (map fromExpression argExprs)
 --  ELet z "__this__" (ERow z True []) (ELet z "_bla_" (EApp z (fromExpression expr) ((EVar z "__this__") : map fromExpression argExprs)) (EVar z "__this__"))
 fromExpression e@(ES3.PrefixExpr z op expr) =
@@ -231,11 +231,9 @@ fromExpression e@(ES3.PrefixExpr z op expr) =
     _ -> EApp (src z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression expr]
 fromExpression (ES3.InfixExpr z op e1 e2) = EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression e1, fromExpression e2]
 fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name $ addConstant z op (EVar (src z) name)
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr name $ addConstant z op (EProp (src z) objExpr' name)
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr name $ addConstant z op (EProp (src z) objExpr' (TPropName name))
   where objExpr' = fromExpression objExpr
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex z objExpr idxExpr $ addConstant z op (EIndex (src z) objExpr' idxExpr')
-  where objExpr' = fromExpression objExpr
-        idxExpr' = fromExpression idxExpr
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex z objExpr idxExpr $ addConstant z op (getIndex z objExpr idxExpr)
 
 opFunc :: a -> ES3.InfixOp -> Exp (GenInfo, a)
 opFunc z op = EVar (gen z) $ show . ES3PP.prettyPrint $ op
@@ -256,11 +254,21 @@ assignToVar :: Show a => a -> EVarName -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 assignToVar z name expr = EAssign (src z) name expr (EVar (src z) name)
 
 assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp (GenInfo, a) -> Exp (GenInfo, a)
-assignToProperty  z objExpr name expr = EPropAssign (src z) objExpr' name expr (EProp (src z) objExpr' name)
+assignToProperty  z objExpr name expr = EPropAssign (src z) objExpr' (TPropName name) expr $ EProp (src z) objExpr' (TPropName name)
   where objExpr' = fromExpression objExpr
 
+applyPropFunc :: a -> TProp -> Exp (GenInfo, a) -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)                   
+applyPropFunc z prop arrExpr args = ELet (gen z) obj' arrExpr $ applyPropFunc'
+    where obj' = "bracketObj"
+          objVar = EVar (gen z) obj'
+          applyPropFunc' = EApp (gen z) getProp' (objVar:args)
+          getProp' = EProp (gen z) objVar prop
+
+getIndex :: Show a => a -> ES3.Expression a -> ES3.Expression a -> Exp (GenInfo, a)
+getIndex z arrExpr indexExpr = applyPropFunc z TPropGetIndex (fromExpression arrExpr) [fromExpression indexExpr]
+                               
 assignToIndex :: Show a => a -> ES3.Expression a  -> ES3.Expression a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
-assignToIndex z objExpr idxExpr expr = EIndexAssign (src z) objExpr' idxExpr' expr (EIndex (src z) objExpr' idxExpr')
+assignToIndex z objExpr idxExpr expr = applyPropFunc z TPropSetIndex objExpr' [idxExpr', expr]
   where objExpr' = fromExpression objExpr
         idxExpr' = fromExpression idxExpr
 
