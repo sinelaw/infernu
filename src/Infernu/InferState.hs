@@ -3,6 +3,43 @@
 {-# LANGUAGE BangPatterns    #-}
 
 module Infernu.InferState
+       ( Infer(..)
+       , addPendingUnification
+       , addVarScheme
+       , applyMainSubst
+       , applySubstInfer
+       , emptyInferState
+       , failWith
+       , failWithM
+       , fresh
+       , freshFlex
+       , freshVarId
+       , generalize
+       , getMainSubst
+       , getNamedType
+       , getPendingUnifications
+       , getState
+       , getVarId
+       , getVarInstances
+       , getVarScheme
+       , instantiate
+       , instantiateVar
+       , instantiateScheme
+       , lookupClass
+       , mapError
+       , minifyVars
+       , minifyVarsFunc
+       , runInfer
+       , runInferWith
+       , runSubInfer
+       , setPendingUnifications
+       , setState
+       , setVarScheme
+       , skolemiseScheme
+       , throwError
+       , unrollName
+--             , getVarScheme
+         )
        where
 
 import           Data.Foldable              (msum)
