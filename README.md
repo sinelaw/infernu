@@ -64,7 +64,14 @@ If you have trouble in the last command due to package incompatibilities, use a 
 
 The `infernu` executable will be placed in `infernu/.cabal-sandbox/bin`
 
+### Running tests
 
+    cd test
+    ./test.sh
+    
+Currently there are still a few failing tests due to unclosed issues in the type system.
+
+The file `test/fail.txt` records the test failures and is kept in git. This makes it easier to track progress on outstanding bugs.
 
 ## Examples
 
