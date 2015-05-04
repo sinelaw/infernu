@@ -66,6 +66,10 @@ The `infernu` executable will be placed in `infernu/.cabal-sandbox/bin`
 
 ### Running tests
 
+    cd infernu
+    cabal sandbox init # if you haven't already
+    cabal install --only-dependencies
+    cabal build
     cd test
     ./test.sh
     
