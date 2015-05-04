@@ -1,12 +1,14 @@
 # Infernu
 
-Static type inference for JavaScript. (In early development.)
+Static type inference for JavaScript. 
 
 See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing-sjs-a-type-inferer-and-checker-for-javascript/) for a short discussion comparing infernu to **other type checkers**.
 
-*(Formerly known as Inferno / Safe JS / SJS)*
+## Status: In early development
 
-**Features:**
+Currently (hopefully) finalizing the type system, after which the next big tasks are supporting a large chunk of the standard JS / Web APIs, and support for modules.
+
+## Features
 
 * Full type inference: no type annotations necessary.
 * Parametric polymorphism (aka "generics"), based on Hindley-Milner type inference.
@@ -182,6 +184,8 @@ Things that maybe need to be done, but have major drawbacks:
 - [ ] type annotations
 - [ ] add support for CommonJS modules
 - [ ] deal better with inferred polymorphic object properties - requires full rank-n unification
+
+p.s.  *(Formerly known as Inferno / Safe JS / SJS)*
 
 <!--  LocalWords:  JS polymorphism Hindley Milner JS's Equi num arrNums Number String getData
  -->
