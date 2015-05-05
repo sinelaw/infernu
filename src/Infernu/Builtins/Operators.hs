@@ -29,6 +29,12 @@ tVar = Fix . TBody . TVar . Flex
 tBoolean :: Type
 tBoolean = Fix $ TBody TBoolean
 
+tUndefined :: Type
+tUndefined = Fix $ TBody TUndefined
+
+tRegex :: Type
+tRegex = Fix $ TBody TRegex
+
 tNumber :: Type
 tNumber = Fix $ TBody TNumber
 
@@ -69,11 +75,19 @@ builtins = Map.fromList [
   -- avoid coercions on == and !=
   ("==",           ts [0, 1] $ Fix $ TFunc [tVar 1, tVar 0, tVar 0] tBoolean),
   ("!=",           ts [0, 1] $ Fix $ TFunc [tVar 1, tVar 0, tVar 0] tBoolean),
-  ("RegExp",       ts [0] $ Fix $ TFunc [tVar 0, tString, tString] (Fix $ TBody TRegex)),
-  ("String",       ts [1] $ Fix $ TFunc [Fix $ TBody $ TUndefined, tVar 1] (Fix $ TBody TString)),
-  ("Number",       ts [1] $ Fix $ TFunc [Fix $ TBody $ TUndefined, tVar 1] (Fix $ TBody TNumber)),
-  ("Boolean",      ts [1] $ Fix $ TFunc [Fix $ TBody $ TUndefined, tVar 1] (Fix $ TBody TBoolean)),
+  ("RegExp",       ts [0] $ Fix $ TFunc [tVar 0, tString, tString] (tRegex)),
+  ("String",       ts [1] $ Fix $ TFunc [tUndefined, tVar 1] (tString)),
+  ("Number",       ts [1] $ Fix $ TFunc [tUndefined, tVar 1] (tNumber)),
+  ("Boolean",      ts [1] $ Fix $ TFunc [tUndefined, tVar 1] (tBoolean)),
   ("NaN",          ts [] tNumber),
   ("Infinity",     ts [] tNumber),
-  ("undefined",    ts [] $ Fix $ TBody TUndefined)
+  ("undefined",    ts [] $ tUndefined),
+  ("isFinite",     ts [1] $ Fix $ TFunc [tUndefined, tNumber] (tBoolean)),
+  ("isNaN",        ts [1] $ Fix $ TFunc [tUndefined, tNumber] (tBoolean)),
+  ("parseFloat",   ts [1] $ Fix $ TFunc [tUndefined, tString] (tNumber)),
+  ("parseInt",     ts [1] $ Fix $ TFunc [tUndefined, tString, tNumber] (tNumber)),
+  ("decodeURI",    ts [1] $ Fix $ TFunc [tUndefined, tString] (tString)),
+  ("decodeURIComponent",    ts [1] $ Fix $ TFunc [tUndefined, tString] (tString)),
+  ("encodeURI",    ts [1] $ Fix $ TFunc [tUndefined, tString] (tString)),
+  ("encodeURIComponent",    ts [1] $ Fix $ TFunc [tUndefined, tString] (tString))
   ]
