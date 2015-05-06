@@ -1,4 +1,4 @@
-# Infernu
+# ![Infernu](docs/infernu.png)
 
 Static type inference for JavaScript. 
 
