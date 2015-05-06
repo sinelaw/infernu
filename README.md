@@ -2,12 +2,6 @@
 
 Static type inference for JavaScript. 
 
-See the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing-sjs-a-type-inferer-and-checker-for-javascript/) for a short discussion comparing infernu to **other type checkers**.
-
-## Status: In early development
-
-Currently (hopefully) finalizing the type system, after which the next big tasks are supporting a large chunk of the standard JS / Web APIs, and support for modules.
-
 ## Features
 
 * Full type inference: no type annotations necessary.
@@ -18,6 +12,12 @@ Currently (hopefully) finalizing the type system, after which the next big tasks
 * Correct handling of JS's `this` dynamic scoping rules.
 
 For more information see [Infernu's Type System](docs/type-system.md).
+
+Also see the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introducing-sjs-a-type-inferer-and-checker-for-javascript/) for a short discussion comparing infernu to **other type checkers**.
+
+## Status: In early development
+
+Currently (hopefully) finalizing the type system, after which the next big tasks are supporting a large chunk of the standard JS / Web APIs, and support for modules.
 
 ## Installation
 
