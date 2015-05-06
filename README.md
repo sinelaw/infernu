@@ -4,7 +4,12 @@ Static type inference for JavaScript.
 
 ## Features
 
+* It's just JavaScript: runs as-is in your browser. No transpilation or compilation required for running.
 * Full type inference: no type annotations necessary.
+* Safety: a strict type system with no workarounds sets a high bar for code correctness. *So you can sleep at night!*
+
+### Type System
+
 * Parametric polymorphism (aka "generics"), based on Hindley-Milner type inference.
 * Row-type polymorphism, otherwise known as "static duck typing".
 * Simple type classes (which allow for example correct support of JS `+` and `[]` operators).
