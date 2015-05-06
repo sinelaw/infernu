@@ -7,6 +7,7 @@ Static type inference for JavaScript.
 * It's just JavaScript: runs as-is in your browser. No transpilation or compilation required for running.
 * Full type inference: no type annotations necessary.
 * Safety: a strict type system with no workarounds sets a high bar for code correctness. *So you can sleep at night!*
+* **Work in progress**: it can set your computer on fire! 
 
 ### Type System
 
