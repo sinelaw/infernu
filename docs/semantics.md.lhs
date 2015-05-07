@@ -14,7 +14,7 @@ These definitions don't necessarily correspond to ECMAScript.
 
 > type Env = [(Name, Value, Location)]
 
-> pushDecl x v ((_,_,l):env) = (x,v,l+1):env
+> pushDecl x v (p@(_,_,l):env) = (x,v,l+1):p:env
 > popDecl (p:env) = env
 > composeEnv env1 env2 = env1 ++ env2
 > -- TODO: deal with failure
@@ -23,12 +23,41 @@ These definitions don't necessarily correspond to ECMAScript.
 
 ### Statements
 
-> s[[ stmt ]] :: (Env -> RealWorld -> (Env, RealWorld)) -> Env -> RealWorld -> (Env, RealWorld)
+> s[[ stmt ]] :: (Env -> RealWorld -> (Env, RealWorld))
+>                -> Env -> RealWorld -> (Env, RealWorld)
 
+> halt = (,)
+  
 ### Expressions
 
 > e[[ expr ]] :: Env -> RealWorld -> (RealWorld, Value)
 
+### Function expressions
+
+Return values are passed using a special "return" name pushed onto the environment. The result of a function is the value bound in the environment to that value when the function completes.
+  
+> e[[ function(args) { body } ]] =
+>     \env rw ->
+>         ( rw
+>         , \rw' ->
+>               \this args ->
+>                   case [[ body ]] halt (composeEnv args (pushDecl "this" this $ pushDecl "return" e[[ undefined ]] env)) rw' of
+>                       (env'', rw'') -> (rw'', get "return" env'')
+>         )
+
+### Function Call
+
+> e[[ f(args) ]] =
+>     \env rw ->
+>         case e[[ f ]] env rw of
+>             (rw', f') -> f' rw' e[[ undefined ]] e[[ args ]]
+  
+### Return statement
+
+> s[[ return expr; stmt ]] =
+>     \k env rw -> case [[ expr ]] env rw of
+>                      (rw', val) -> k (pushDecl "return" val env) rw'
+  
 ### Expression statements
 
 > s[[ expr ]] = \k env rw -> k env . fst . e[[ expr ]] env $ rw
@@ -37,9 +66,7 @@ These definitions don't necessarily correspond to ECMAScript.
 
 > s[[ stmtA; stmtB ]] = s[[ stmtA ]] . s[[ stmtB ]]
 
-### Variable declaration
-
-TODO
+### (Mutable) variable declaration
 
 > s[[ var x ]] = \k env rw -> k (pushDecl id[[ x ]] env) rw
 
@@ -49,7 +76,7 @@ TODO
 >     case (e[[ expr ]] env rw) of
 >         (rw', val) -> k env (store (get id[[ x ]] env) val rw')
 
-## While loop
+### While loop
 
 > s[[ while (expr) { body } ]] =
 >     \k env rw ->
@@ -58,24 +85,22 @@ TODO
 >                         (rw'', True)  -> w rw''
 >         in w rw
 
-## Case (statements/expressions?)
+Note: Recursive let using in the meaning here. It should be the same as using `fix`.
+  
+### If statement
 
-TODO
-
-## Function expressions
-
-> e[[ function(args) { body } ]] =
->     \env rw ->
->         ( rw
->         , \k rw' ->
->               \this args ->
->                   [[ body ]] k (composeEnv args (pushDecl "this" this env)) rw'
+> s[[ if expr then b1 else b2 ]] =
+>     \k env rw ->
+>         case e[[ expr ]] env rw of
+>             (rw', True)  -> [[ b1 ]] k env rw'
+>             (rw', False) -> [[ b2 ]] k env rw'
+  
 
 ## Non-JS fragments
 
 These syntax constructs are added:
 
-### Let expression
+### Let expression (immutable variable)
 
 Non-recursive ('x' not free in 'expr'):
 
@@ -85,9 +110,9 @@ Non-recursive ('x' not free in 'expr'):
 
 Recursive:
 
-> s[[ let x = expr{x} in stmt ]] = s[[ let x = fix(\x -> expr{x}) in stmt ]]
+> s[[ let x = expr in stmt ]] = s[[ let x = fix(\x -> expr) in stmt ]]
 
-Where the notation 'expr{x}' means "an expression that has 'x' as a free variable'.
+Where `x` is free in `expr`.
 
 Note that this definition restricts to non-polymorphic recursion.
 
