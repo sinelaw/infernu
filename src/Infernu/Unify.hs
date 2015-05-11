@@ -357,7 +357,8 @@ unifyTypeSchemes' recurse a scheme1s scheme2s =
       recurse a (qualType scheme1T) (qualType scheme2T)
       let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
           isSkolem _ = False
-          oldSkolems = concatMap (filter isSkolem . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) $ [scheme1s, scheme2s]
+          filterSkolems' = filter isSkolem . map (Fix . TBody . TVar) . Set.toList . freeTypeVars
+          oldSkolems = concatMap filterSkolems' $ [scheme1s, scheme2s]
       ftvs <- mapM (applyMainSubst . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
       let escapedSkolems = filter (\x -> isSkolem x && not (elem x oldSkolems)) $ concat ftvs
           
@@ -371,10 +372,16 @@ unifyTypeSchemes' recurse a scheme1s scheme2s =
                                 , ")"]
       
       -- preds
-      preds1' <- qualPred <$> applyMainSubst scheme1T
-      preds2' <- qualPred <$> applyMainSubst scheme2T
+      preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
+      preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
+      when (not . Set.null $ preds1' `Set.difference` preds2')
+        $ throwError a $ concat [ "Failed unifying preds: "
+                                , "\n\t\t" ++ pretty preds2'
+                                , "\n\t didn't match "
+                                , "\n\t\t" ++ pretty preds1'
+                                ]
       -- TODO what to do with the ambiguous preds?
-      ambiguousPreds <- unifyPredsL a (preds1' ++ preds2')
+      --ambiguousPreds <- unifyPredsL a $ preds1' ++ preds2'
       return ()
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
@@ -456,7 +463,8 @@ unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
 -- filtered list of yet-to-be-resolved predicates.
 unifyPredsL :: Source -> [TPred Type] -> Infer [TPred Type]
 unifyPredsL a ps = Set.toList . Set.fromList . catMaybes <$>
-    do  forM ps $ \p@(TPredIsIn className t) ->
+    do  traceLog $ "unifyPredsL: Unifying preds: " ++ pretty a ++ ": " ++ pretty ps 
+        forM ps $ \p@(TPredIsIn className t) ->
                   do  entry <- ((a,t,) . (className,) . Set.fromList . classInstances) <$> lookupClass className
                                `failWithM` throwError a ("Unknown class: " ++ pretty className ++ " in pred list: " ++ pretty ps)
                       remainingAmbiguities <- unifyAmbiguousEntry entry

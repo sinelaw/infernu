@@ -369,42 +369,16 @@ instantiateVar a n env = do
 
 ----------------------------------------------------------------------
 
-data Variance = Covariant | Contravariant | Invariant
-                            deriving (Show, Eq)
-
-flipVariance :: Variance -> Variance                                     
-flipVariance Covariant     = Contravariant
-flipVariance Contravariant = Covariant
-flipVariance Invariant     = Invariant
-
-unifyVariances :: [Map TVarName Variance] -> Map TVarName Variance
-unifyVariances = Map.unionsWith (\c1 c2 -> if c1 == c2 then c1 else Invariant)
-    
-
-getVariances :: Set TVarName -> Type -> Map TVarName Variance
-getVariances ftvs (Fix t) = 
-    case snd $ tracePretty "getVariances: " (ftvs, t)  of
-        TBody (TVar n) -> if Set.member n ftvs then Map.singleton n Covariant else Map.empty
-        TFunc args res -> unifyVariances $ [getVariances ftvs res] -- :(map (Map.map flipVariance . getVariances ftvs) args)
-        _ -> foldr (\t' m -> unifyVariances [m, getVariances ftvs t']) Map.empty t
-
 -- Performs deep skolemisation, retuning the skolem constants and the skolemised type
 skolemiseScheme :: TypeScheme -> Infer ([TVarName], QualType)
 skolemiseScheme (TScheme tvs ty)
-  = do let variances = getVariances (Set.fromList tvs) (qualType ty)
-           variantTVs = Map.keys variances
-           otherTVs = Set.toList $ Set.fromList tvs `Set.difference` Set.fromList variantTVs
-       traceLog $ "Variances: " ++ show variances
-       sks1 <- forM variantTVs $ const (Skolem <$> fresh)
-       flexes <- forM otherTVs $ const (Flex <$> fresh)
-       let substSks = Map.fromList $ zip variantTVs sks1
-           substFlexes = Map.fromList $ zip otherTVs flexes
-           subst = substSks `Map.union` substFlexes
+  = do sks1 <- forM tvs $ const (Skolem <$> fresh)
+       let subst = Map.fromList $ zip tvs sks1
            lookup' x = case Map.lookup x subst of
                            Nothing -> x
                            Just y -> y
        return (sks1, mapVarNames lookup' ty)
- 
+
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
 --   type variables that are free in the given type, but are not free in the type environment.
