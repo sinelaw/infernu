@@ -1,5 +1,3 @@
-// FAIL valid/builtins/regex-exec-2.js:5:5result : : Error:  |   Faile y valid/builtins/regex-exec-2.js
-// FAIL valid/debounce-indexable.js:31:7: Error:  |   Failed unifying: y valid/debounce-indexable.js
 // FAIL valid/mutability/array-of-polyfuncs.js:11:7: Error:  |   Faile y valid/mutability/array-of-polyfuncs.js
 // FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  (({bla: e y valid/new-func.js
 // FAIL valid/new-recursive.js:1:1*: Error:  |   Failed unifying:  { | y valid/new-recursive.js
@@ -7,5 +5,7 @@
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  ( y valid/nothis-as-param.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
 // FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  { |      y valid/promise.js
-// FAIL valid/promise-method-workaround.js:23:5: Error:  |   Failed un y valid/promise-method-workaround.js
 // FAIL valid/promise-simple-api.js:1:1*: Error:  |   Failed unifying: y valid/promise-simple-api.js
+// FAIL  n invalid/promise-method-workaround.js
+// FAIL  n invalid/promise-method-workaround-simplified.js
+// FAIL  n invalid/prop-polymorphic-assign2-this.js

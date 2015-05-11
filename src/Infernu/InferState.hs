@@ -52,6 +52,7 @@ import qualified Data.Graph.Inductive      as Graph
 import qualified Data.List                  as List
 import           Data.Functor.Identity      (Identity (..), runIdentity)
 import qualified Data.Map.Lazy              as Map
+import           Data.Map.Lazy              (Map)
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Set                   as Set
 import           Data.Set                   (Set)
@@ -368,24 +369,42 @@ instantiateVar a n env = do
 
 ----------------------------------------------------------------------
 
+data Variance = Covariant | Contravariant | Invariant
+                            deriving (Show, Eq)
+
+flipVariance :: Variance -> Variance                                     
+flipVariance Covariant     = Contravariant
+flipVariance Contravariant = Covariant
+flipVariance Invariant     = Invariant
+
+unifyVariances :: [Map TVarName Variance] -> Map TVarName Variance
+unifyVariances = Map.unionsWith (\c1 c2 -> if c1 == c2 then c1 else Invariant)
+    
+
+getVariances :: Set TVarName -> Type -> Map TVarName Variance
+getVariances ftvs (Fix t) = 
+    case snd $ tracePretty "getVariances: " (ftvs, t)  of
+        TBody (TVar n) -> if Set.member n ftvs then Map.singleton n Covariant else Map.empty
+        TFunc args res -> unifyVariances $ [getVariances ftvs res] -- :(map (Map.map flipVariance . getVariances ftvs) args)
+        _ -> foldr (\t' m -> unifyVariances [m, getVariances ftvs t']) Map.empty t
+
 -- Performs deep skolemisation, retuning the skolem constants and the skolemised type
 skolemiseScheme :: TypeScheme -> Infer ([TVarName], QualType)
 skolemiseScheme (TScheme tvs ty)
-  = do sks1 <- forM tvs $ const (Skolem <$> fresh)
-       let subst = Map.fromList $ zip tvs sks1
+  = do let variances = getVariances (Set.fromList tvs) (qualType ty)
+           variantTVs = Map.keys variances
+           otherTVs = Set.toList $ Set.fromList tvs `Set.difference` Set.fromList variantTVs
+       traceLog $ "Variances: " ++ show variances
+       sks1 <- forM variantTVs $ const (Skolem <$> fresh)
+       flexes <- forM otherTVs $ const (Flex <$> fresh)
+       let substSks = Map.fromList $ zip variantTVs sks1
+           substFlexes = Map.fromList $ zip otherTVs flexes
+           subst = substSks `Map.union` substFlexes
            lookup' x = case Map.lookup x subst of
                            Nothing -> x
                            Just y -> y
-       (sks2, ty') <- skolemiseType (mapVarNames lookup' ty)
-       return (sks1 ++ sks2, ty')
+       return (sks1, mapVarNames lookup' ty)
  
-skolemiseType :: QualType -> Infer ([TVarName], QualType)
-skolemiseType q@(TQual ps (Fix (TFunc args_ty res_ty)))
-  = do (sks, TQual ps' res_ty'') <- skolemiseType (qualEmpty res_ty)
-       return (sks, q { qualPred = ps ++ ps',  qualType = Fix $ TFunc args_ty res_ty'' })
-skolemiseType ty
-  = return ([], ty)
-
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all
 --   type variables that are free in the given type, but are not free in the type environment.
