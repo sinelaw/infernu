@@ -346,30 +346,36 @@ unifyTypeSchemes = unifyTypeSchemes' unify
 unifyTypeSchemes' :: UnifyF -> Source -> TypeScheme -> TypeScheme -> Infer ()
 unifyTypeSchemes' recurse a scheme1s scheme2s =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
+      
       (skolemVars, scheme1T) <- skolemiseScheme scheme1s
       scheme2T <- instantiate scheme2s
+      
       traceLog $ "Instantiated skolems: " ++ pretty scheme1T
       traceLog $ "                      " ++ pretty scheme2T
       traceLog $ "   skolems : " ++ show skolemVars
-      -- TODO unify predicateforeign import ccall "properly" properly :: (review -> - specificaly (==)
-      -- should prevent cycles!
-      --Pred.unify (unify a) (qualPred scheme1) (qualPred scheme2)
-      -- TODO do something with pred'
-      --unifyPredsL a $ (qualPred scheme1T) ++ (qualPred scheme2T)
+
       recurse a (qualType scheme1T) (qualType scheme2T)
       let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
           isSkolem _ = False
           oldSkolems = concatMap (filter isSkolem . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) $ [scheme1s, scheme2s]
       ftvs <- mapM (applyMainSubst . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
       let escapedSkolems = filter (\x -> isSkolem x && not (elem x oldSkolems)) $ concat ftvs
-      when (not . null $ escapedSkolems) $ throwError a $ "\n\t\t" ++ pretty scheme2T ++ "\n\t  is not as polymorphic as \n\t\t" ++ pretty scheme1T ++ "\n\t (escaped skolems: " ++ pretty escapedSkolems ++ ")"
+          
+      when (not . null $ escapedSkolems)
+        $ throwError a $ concat [ "\n\t\t"
+                                , pretty scheme2T
+                                , "\n\t  is not as polymorphic as \n\t\t"
+                                , pretty scheme1T
+                                , "\n\t (escaped skolems: "
+                                , pretty escapedSkolems
+                                , ")"]
+      
       -- preds
-      preds1' <- Set.fromList . qualPred <$> applyMainSubst scheme1T
-      preds2' <- Set.fromList . qualPred <$> applyMainSubst scheme2T
-      -- may be wrong, for example if unification reults in the elimination of some type class
-      -- (e.g. unifying forall a. MyClass a => a with T, where T is an instance of MyClass, it
-      -- shouldn't fail)
-      when (preds1' /= preds2') $ throwError a ("incompatible preds: " ++ pretty preds1' ++ " != " ++ pretty preds2') 
+      preds1' <- qualPred <$> applyMainSubst scheme1T
+      preds2' <- qualPred <$> applyMainSubst scheme2T
+      -- TODO what to do with the ambiguous preds?
+      ambiguousPreds <- unifyPredsL a (preds1' ++ preds2')
+      return ()
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
                -> (x, Set TProp, Map TProp TypeScheme)
