@@ -60,6 +60,7 @@ import           Infernu.Prelude
 import           Infernu.Pretty
 import           Infernu.Types
 import           Infernu.Log
+import           Infernu.Lib
 import qualified Infernu.Builtins.TypeClasses
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
@@ -199,8 +200,12 @@ addNamedType tid t scheme = do
 -- :}
 -- True
 areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
-areEquivalentNamedTypes (t1, s1) (t2, s2) = s2 == (s2 { schemeType = applySubst subst $ replaceFixQual (unFix t1) (unFix t2) $ schemeType s1 })
-  where subst = foldr (\(x,y) s -> singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s) nullSubst $ zip (schemeVars s1) (schemeVars s2)
+areEquivalentNamedTypes (t1, s1) (t2, s2) =
+    case matchZip (schemeVars s1) (schemeVars s2) of
+        Just zipvars -> s2 == (s2 { schemeType = applySubst subst' $ replaceFixQual (unFix t1) (unFix t2) $ schemeType s1 })
+            where subst' = foldr accumSubst' nullSubst $ zipvars
+                  accumSubst' (x,y) s = singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s
+        Nothing -> False
 
 -- | Returns a TQual with the `src` type replaced everywhere with the `dest` type.
 replaceFixQual :: (Functor f, Eq (f (Fix f))) => f (Fix f) -> f (Fix f) -> TQual (Fix f) -> TQual (Fix f)
@@ -256,18 +261,23 @@ replaceRecType typeId newTypeId indexToDrop t1 =
                                         then TRowRec newTypeId $ dropAt indexToDrop ts
                                         else rlist'
 
-allocNamedType :: TVarName -> Type -> Infer Type
-allocNamedType n t =
+allocNamedType :: Source -> TVarName -> Type -> Infer Type
+allocNamedType a n t =
   do typeId <- TypeId <$> fresh
-     let namedType = TCons (TName typeId) $ map (Fix . TBody . TVar) $ Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
+     let namedTypeParams = map (Fix . TBody . TVar) . Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
+         namedType = TCons (TName typeId) namedTypeParams
          target = replaceFix (TBody (TVar n)) namedType t
      (scheme, ps) <- unsafeGeneralize Map.empty $ qualEmpty target
      traceLog $ "===> Generated scheme for mu type: " ++ pretty scheme
-     currentNamedTypes <- filter (areEquivalentNamedTypes (Fix namedType, scheme)) . map snd . Map.toList . namedTypes <$> get
+     currentNamedTypes <- filter (\(_, ts) -> areEquivalentNamedTypes (Fix namedType, scheme) ts) . Map.toList . namedTypes <$> get
      case currentNamedTypes of
-      [] -> do addNamedType typeId (Fix namedType) scheme
+      [] -> do traceLog $ "===> Didn't find existing rec type, adding new: " ++ pretty namedType ++ " = " ++ pretty scheme
+               addNamedType typeId (Fix namedType) scheme
                return $ Fix namedType
-      (otherNT, _):_ -> return otherNT
+      (otherTID, (otherNT, otherScheme)):_ ->
+          do traceLog $ "===> Found existing rec type: " ++ pretty otherNT
+             -- TODO: don't ignore the preds!
+             qualType <$> unrollName a otherTID namedTypeParams
 
 resolveSimpleMutualRecursion :: TVarName -> Type -> TypeId -> Int -> Infer Type
 resolveSimpleMutualRecursion n t tid ix =
@@ -287,20 +297,22 @@ resolveSimpleMutualRecursion n t tid ix =
      return $ replaceOldNamedType t
 
 
-getNamedType :: TVarName -> Type -> Infer Type
-getNamedType n t =
+getNamedType :: Source -> TVarName -> Type -> Infer Type
+getNamedType a n t =
   do let recTypeParamPos = isRecParamOnly n Nothing t
      traceLog ("isRecParamOnly: " ++ show n ++ " in " ++ pretty t ++ ": " ++ (show $ fmap show $ recTypeParamPos))
      case recTypeParamPos of
       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
       -- either the variable appears outside a recursive type's type parameter list, or it appears
       -- in more than one such position:
-      _ -> allocNamedType n t
+      _ -> applyMainSubst t >>= allocNamedType a n
 
 
 unrollNameByScheme :: Substable a => [Type] -> [TVarName] -> a -> a
 unrollNameByScheme ts qvars t = applySubst subst t
-  where assocs = zip qvars ts
+  where assocs = case matchZip qvars ts of
+                     Just x -> x
+                     Nothing -> error "Assertion failed: Expected number of types = number of tvars when unrolling a recursive type."
         subst = foldr (\(tvar,destType) s -> singletonSubst tvar destType `composeSubst` s) nullSubst assocs
 
 -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.

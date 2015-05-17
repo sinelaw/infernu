@@ -438,7 +438,7 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                       recVar <- Flex <$> fresh
                       let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = replaceFix (TBody (TVar n)) (unFix withRecVar) rowT
-                      namedType <- getNamedType recVar recT
+                      namedType <- getNamedType a recVar recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
                       traceLog $ "===> Resulting mu type: " ++ pretty n ++ " = " ++ pretty withRecVar
