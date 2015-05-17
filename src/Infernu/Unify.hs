@@ -374,7 +374,12 @@ unifyTypeSchemes' recurse a scheme1s scheme2s =
       preds1' <- qualPred <$> applyMainSubst scheme1T
       preds2' <- qualPred <$> applyMainSubst scheme2T
       -- TODO what to do with the ambiguous preds?
-      ambiguousPreds <- unifyPredsL a (preds1' ++ preds2')
+      traceLog $ "Checking entailment of: \n\t" ++ pretty preds1' ++ "\n  from:\n\t" ++ pretty preds2'
+      let preds1Set = Set.fromList preds1'
+          preds2Set = Set.fromList preds2'
+          symDiff s1 s2 = (s1 `Set.difference` s2) `Set.union` (s2 `Set.difference` s1)
+      -- TODO this will fail wrongly if the remaining preds contain skolems
+      ambiguousPreds <- unifyPredsL a $ Set.toList $ symDiff preds1Set preds2Set
       return ()
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar

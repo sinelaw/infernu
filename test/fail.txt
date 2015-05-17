@@ -1,5 +1,4 @@
 // FAIL valid/builtins/regex-exec-2.js:5:5result : : Error:  |   Faile y valid/builtins/regex-exec-2.js
-// FAIL valid/debounce-indexable.js:31:7: Error:  |   Failed unifying: y valid/debounce-indexable.js
 // FAIL valid/mutability/array-of-polyfuncs.js:11:7: Error:  |   Faile y valid/mutability/array-of-polyfuncs.js
 // FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  (({bla: e y valid/new-func.js
 // FAIL valid/new-recursive.js:1:1*: Error:  |   Failed unifying:  { | y valid/new-recursive.js
