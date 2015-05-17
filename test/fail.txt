@@ -5,6 +5,7 @@
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:12:7: Error:  |   Failed unifying:  ( y valid/nothis-as-param.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
+// FAIL valid/promise-checking-subsumption.js:5:9: Error:  |   Failed  y valid/promise-checking-subsumption.js
 // FAIL valid/promise.js:30:31: Error:  |   Failed unifying:  { |      y valid/promise.js
 // FAIL valid/promise-method-workaround.js:23:5: Error:  |   Failed un y valid/promise-method-workaround.js
 // FAIL valid/promise-simple-api.js:1:1*: Error:  |   Failed unifying: y valid/promise-simple-api.js
