@@ -116,9 +116,7 @@ instance Pretty Bool where
   prettyTab _ x = show x
 
 instance Pretty TypeId where
-  prettyTab _ (TypeId n) = capitalize $ ptv n
-    where capitalize [] = []
-          capitalize (x:xs) = Char.toUpper x : xs
+  prettyTab _ (TypeId n) = 'R' :  ptv n
 
 instance Pretty TBody where
   prettyTab t (TVar n) = prettyTab t n
@@ -130,7 +128,7 @@ instance Pretty TConsName where
   prettyTab _ = show
 
 instance Pretty RowTVar where
-  prettyTab _ t = ".." ++ pretty (getRowTVar t)
+  prettyTab _ t = pretty (getRowTVar t)
 
 instance Show t => Pretty (FlatRowEnd t) where
   prettyTab _ t = show t
@@ -151,6 +149,8 @@ prettyType n (TFunc ts tres) = wrapThis this $ "(" ++ args ++ " -> " ++ prettyTa
         wrapThis Nothing s = s
         wrapThis (Just (Fix (TBody TUndefined))) s = s
         wrapThis (Just (Fix (TBody TEmptyThis))) s = s
+        -- if "this" is a recursive type, only show the recursive type name (no params) - this is "lossy"
+        wrapThis (Just (Fix (TCons (TName name) _))) s = prettyTab n name ++ "." ++ s
         wrapThis (Just t) s = prettyTab n t ++ "." ++ s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
@@ -166,7 +166,7 @@ prettyType t (TRow label list) =
            , "{"
            , body'
            , case r of
-                  FlatRowEndTVar r' -> maybe "" ((", "++) . pretty) r'
+                  FlatRowEndTVar r' -> maybe "" ((" | "++) . pretty) r'
                   FlatRowEndRec tid ts -> ", " ++ prettyTab (t+1) (Fix $ TCons (TName tid) ts) -- TODO
            , "}"
            ]
