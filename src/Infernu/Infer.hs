@@ -91,6 +91,7 @@ inferType' _ (ELit a lit) = do
                     LitRegex{} -> TRegex
                     LitUndefined -> TUndefined
                     LitNull -> TNull
+                    LitEmptyThis -> TEmptyThis
   return (qualEmpty t, ELit (a, qualEmpty t) lit)
 inferType' env (EVar a n) =
   do t <- instantiateVar a n env

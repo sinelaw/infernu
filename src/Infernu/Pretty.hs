@@ -57,6 +57,7 @@ instance Pretty LitVal where
   prettyTab _ (LitRegex x g i) = "/" ++ x ++ "/" ++ (if g then "g" else "") ++ (if i then "i" else "") ++ (if g || i then "/" else "")
   prettyTab _ LitUndefined = "undefined"
   prettyTab _ LitNull = "null"
+  prettyTab _ LitEmptyThis = "(undefined 'this')"
 
 instance Pretty EVarName where
   prettyTab _ x = x

@@ -221,11 +221,14 @@ unify' _ a t1@(TBody (TVar (Skolem n1))) t2@(TBody (TVar (Skolem n2))) = unless 
 unify' _ a t1 t2@(TBody (TVar (Skolem _))) = unificationError a t1 t2
 unify' _ a t1@(TBody (TVar (Skolem _))) t2 = unificationError a t1 t2
 
+-- | TEmptyThis <- something
+unify' _ a (TBody TEmptyThis) t = return ()
+
+-- | TUndefined <- TEmptyThis
+unify' _ a (TBody TUndefined) (TBody TEmptyThis) = return ()
+
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
-
--- | Undefined <- something
---unify' _ a (TBody TUndefined) t = return ()
 
 -- | Two recursive types
 unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =

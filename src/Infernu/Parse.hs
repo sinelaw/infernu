@@ -181,7 +181,7 @@ fromExpression (ES3.CallExpr z expr argExprs) =
      where obj = fromExpression objExpr
            objVar = EVar (gen z') objVarName
            objVarName = "_/obj/_"
-   _ -> appExpr Nothing (fromExpression expr) (ELit (gen z) LitUndefined)
+   _ -> appExpr Nothing (fromExpression expr) (ELit (gen z) LitEmptyThis)
   where appExpr (Just "call") _ obj = (EApp (src z) obj (map fromExpression argExprs)) -- TODO: may be wrong if object expression is not a function!
         appExpr _ funcExpr thisExpr = (EApp (src z) funcExpr (thisExpr : map fromExpression argExprs))
   --error $ "Assetion failed: expecting at least 'this'"

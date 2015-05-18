@@ -93,6 +93,7 @@ data LitVal = LitNumber Double
             | LitRegex String Bool Bool
             | LitUndefined
             | LitNull
+            | LitEmptyThis
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar a EVarName
@@ -127,7 +128,7 @@ setTVarName (Flex _) y = Flex y
 setTVarName (Skolem _) y = Skolem y
 
 data TBody = TVar TVarName
-           | TNumber | TBoolean | TString | TRegex | TUndefined | TNull
+           | TNumber | TBoolean | TString | TRegex | TUndefined | TNull | TEmptyThis
              deriving (Show, Eq, Ord)
 
 newtype TypeId = TypeId Int

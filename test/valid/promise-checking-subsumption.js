@@ -4,6 +4,5 @@ function Promise () {
     this.reject = function (ex) {
         that.then = function(rej) { rej(ex); };
     };
-
 }; 
 
