@@ -182,26 +182,15 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1
      rowTailVar <- RowTVar <$> freshFlex
-     (generalizedRvalue, floatedPreds) <- generalize expr1 env rvalueT
-     let --rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
-         rvalueRowType = Fix . TRow Nothing $ TRowProp prop generalizedRvalue $ TRowEnd (Just rowTailVar)
-         --rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
-     unify a (qualType objT) rvalueRowType
-     -- (action, floatedPreds) <- case unFix (qualType objT) of
-     --       TRow _ trowList ->
-     --         case Map.lookup prop . fst $ flattenRow trowList of
-     --          -- lvalue is known to be a property with some scheme
-     --          Just lvalueScheme ->
-     --            do (generalizedRvalue, floatedPreds') <- generalize expr1 env rvalueT
-     --               -- Require RHS to be at least as polymorphic as LHS (to ensure all previous usages of this property are consistent with the assigned type)
-     --               (,floatedPreds') <$> unifyTypeSchemes a rank0Unify lvalueScheme generalizedRvalue
-     --          Nothing -> (,qualPred rvalueT) <$> rank0Unify
-     --       _ -> (,qualPred rvalueT) <$> rank0Unify
-     traceLog $ "Floated preds: " ++ pretty floatedPreds
+     -- Don't generalize prop assignments, because it causes inference of too-polymorphic types that
+     -- the user may not have meant to use, and later cause errors when another assignment is not as
+     -- polymorphic. In the future, type annotations could be used to make the prop assignment
+     -- polymorphic.
+     let rvalueSchemeFloated = TScheme [] TQual { qualPred = [], qualType = qualType rvalueT }
+         rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
+     unify a (qualType objT) rvalueRowType >> getState
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
-     --traceLog "EPropAssign - applying unifyAllInstances"
-     --instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
-     preds <- unifyPredsL a $ floatedPreds ++ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
+     preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
      let tRes = TQual preds $ qualType expr2T
      return (tRes, EPropAssign (a, tRes) objExpr' prop expr1' expr2')
 inferType' env (EArray a exprs) =
