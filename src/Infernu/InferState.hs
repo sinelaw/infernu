@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP             #-}
 {-# LANGUAGE TupleSections   #-}
-{-# LANGUAGE BangPatterns    #-}
 
 module Infernu.InferState
        ( Infer
@@ -105,7 +104,7 @@ fresh = do
 
 freshFlex :: Infer TVarName
 freshFlex = Flex <$> fresh
-            
+
 freshVarId :: Infer VarId
 freshVarId = VarId <$> fresh
 
@@ -123,7 +122,7 @@ failWithM action err = do
   failWith result err
 
 mapError :: (TypeError -> TypeError) -> Infer a -> Infer a
-mapError f ma = mapStateT (bimapEitherT f id) ma
+mapError f = mapStateT (bimapEitherT f id)
 
 getVarSchemeByVarId :: VarId -> Infer (Maybe TypeScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
@@ -155,7 +154,7 @@ addPendingUnification ts = do
 getPendingUnifications :: Infer (Set (Source, Type, (ClassName, Set TypeScheme)))
 getPendingUnifications = pendingUni <$> get
 
-setPendingUnifications :: (Set (Source, Type, (ClassName, Set TypeScheme))) -> Infer ()
+setPendingUnifications :: Set (Source, Type, (ClassName, Set TypeScheme)) -> Infer ()
 setPendingUnifications ts = do
     modify $ \is -> is { pendingUni = ts }
     return ()
@@ -203,7 +202,7 @@ areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
 areEquivalentNamedTypes (t1, s1) (t2, s2) =
     case matchZip (schemeVars s1) (schemeVars s2) of
         Just zipvars -> s2 == (s2 { schemeType = applySubst subst' $ replaceFixQual (unFix t1) (unFix t2) $ schemeType s1 })
-            where subst' = foldr accumSubst' nullSubst $ zipvars
+            where subst' = foldr accumSubst' nullSubst zipvars
                   accumSubst' (x,y) s = singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s
         Nothing -> False
 
@@ -225,7 +224,7 @@ isRecParamOnly n1 typeId t1 =
    TBody _ -> Just []
    TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
-   TFunc ts tres -> (isRecParamOnly n1 Nothing) tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
+   TFunc ts tres -> isRecParamOnly n1 Nothing tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
    TRow _ rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
              case rlist' of
@@ -286,7 +285,7 @@ resolveSimpleMutualRecursion n t tid ix =
      let qVars' = dropAt ix $ schemeVars scheme
          replaceOldNamedType = replaceRecType tid newTypeId ix
          sType' = (schemeType scheme) { qualType = replaceOldNamedType $ qualType $  schemeType scheme }
-         newTs = dropAt ix $ ts
+         newTs = dropAt ix ts
          newNamedType = Fix (TCons (TName newTypeId) newTs)
          --updatedNamedType = Fix (TCons (TName tid) newTs)
          updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars'  sType'
@@ -300,7 +299,7 @@ resolveSimpleMutualRecursion n t tid ix =
 getNamedType :: Source -> TVarName -> Type -> Infer Type
 getNamedType a n t =
   do let recTypeParamPos = isRecParamOnly n Nothing t
-     traceLog ("isRecParamOnly: " ++ show n ++ " in " ++ pretty t ++ ": " ++ (show $ fmap show $ recTypeParamPos))
+     traceLog $ "isRecParamOnly: " ++ show n ++ " in " ++ pretty t ++ ": " ++ show (fmap show recTypeParamPos)
      case recTypeParamPos of
       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
       -- either the variable appears outside a recursive type's type parameter list, or it appears
@@ -309,7 +308,7 @@ getNamedType a n t =
 
 
 unrollNameByScheme :: Substable a => [Type] -> [TVarName] -> a -> a
-unrollNameByScheme ts qvars t = applySubst subst t
+unrollNameByScheme ts qvars = applySubst subst
   where assocs = case matchZip qvars ts of
                      Just x -> x
                      Nothing -> error "Assertion failed: Expected number of types = number of tvars when unrolling a recursive type."
@@ -385,12 +384,10 @@ skolemiseScheme :: TypeScheme -> Infer ([TVarName], QualType)
 skolemiseScheme (TScheme tvs ty)
   = do sks1 <- forM tvs $ const (Skolem <$> fresh)
        let subst = Map.fromList $ zip tvs sks1
-           lookup' x = case Map.lookup x subst of
-                           Nothing -> x
-                           Just y -> y
+           lookup' x = fromMaybe x $ Map.lookup x subst
        (sks2, ty') <- skolemiseType (mapVarNames lookup' ty)
        return (sks1 ++ sks2, ty')
- 
+
 skolemiseType :: QualType -> Infer ([TVarName], QualType)
 skolemiseType q@(TQual ps (Fix (TFunc args_ty res_ty)))
   = do (sks, TQual ps' res_ty'') <- skolemiseType (qualEmpty res_ty)
@@ -442,32 +439,32 @@ unsafeGeneralize tenv t = do
     traceLog $ "Generalization result: unbound vars = " ++ pretty unboundVars ++ ", type = " ++ pretty t'
     let t'' = TQual { qualPred = qvarPreds, qualType = qualType t' }
         (qvarPreds, floatedPreds) = List.partition (\p -> Set.null $ freeTypeVars p `Set.intersection` unboundVars) $ qualPred t'
-    return $ (TScheme (Set.toList unboundVars) t', floatedPreds)
+    return (TScheme (Set.toList unboundVars) t', floatedPreds)
 
 isExpansive :: Exp a -> Bool
-isExpansive (EVar _ _)        = False
-isExpansive (EApp _ _ _)      = True
-isExpansive (EAssign _ _ _ _) = True
-isExpansive (EPropAssign _ _ _ _ _) = True
-isExpansive (ELet _ _ _ _)    = True
-isExpansive (EAbs _ _ _)      = False
-isExpansive (ELit _ _)        = False
-isExpansive (EArray _ _)  = True
-isExpansive (ETuple _ _)  = True
-isExpansive (EStringMap _ _)    = True
-isExpansive (ERow _ _ _)    = True
+isExpansive (EVar{})    = False
+isExpansive (EAbs{})    = False
+isExpansive (ELit{})    = False
 isExpansive (ECase _ ep es) = any isExpansive (ep:map snd es)
-isExpansive (EProp _ e _)  = isExpansive e
-isExpansive (ENew _ _ _) = True
+isExpansive (EProp _ e _)   = isExpansive e
+isExpansive (EApp{})    = True
+isExpansive (EAssign{}) = True
+isExpansive (EPropAssign{}) = True
+isExpansive (ELet{})    = True
+isExpansive (EArray{})  = True
+isExpansive (ETuple{})  = True
+isExpansive (EStringMap{})  = True
+isExpansive (ERow{})        = True
+isExpansive (ENew{})        = True
 
 
 generalize :: Exp a -> TypeEnv -> QualType -> Infer (TypeScheme, [TPred Type])
 generalize exp' env t = if isExpansive exp'
-                        then return $ (TScheme [] t, [])
+                        then return (TScheme [] t, [])
                         else unsafeGeneralize env t
 
 minifyVarsFunc :: (VarNames a) => a -> TVarName -> TVarName
-minifyVarsFunc xs n = fromMaybe n $ fmap (setTVarName n) $ Map.lookup n vars
+minifyVarsFunc xs n = maybe n (setTVarName n) $ Map.lookup n vars
   where vars = Map.fromList $ zip (Set.toList $ freeTypeVars xs) [0..]
 
 minifyVars :: (VarNames a) => a -> a

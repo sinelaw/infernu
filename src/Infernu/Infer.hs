@@ -186,7 +186,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      let --rvalueSchemeFloated = TScheme [] $ TQual { qualPred = [], qualType = qualType rvalueT }
          rvalueRowType = Fix . TRow Nothing $ TRowProp prop generalizedRvalue $ TRowEnd (Just rowTailVar)
          --rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
-     unify a (qualType objT) rvalueRowType 
+     unify a (qualType objT) rvalueRowType
      -- (action, floatedPreds) <- case unFix (qualType objT) of
      --       TRow _ trowList ->
      --         case Map.lookup prop . fst $ flattenRow trowList of
@@ -197,7 +197,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      --               (,floatedPreds') <$> unifyTypeSchemes a rank0Unify lvalueScheme generalizedRvalue
      --          Nothing -> (,qualPred rvalueT) <$> rank0Unify
      --       _ -> (,qualPred rvalueT) <$> rank0Unify
-     traceLog ("Floated preds: " ++ pretty floatedPreds) 
+     traceLog $ "Floated preds: " ++ pretty floatedPreds
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
      --traceLog "EPropAssign - applying unifyAllInstances"
      --instancePred <- unifyAllInstances a [getRowTVar rowTailVar]
@@ -232,7 +232,7 @@ inferType' env (ERow a isOpen propExprs) =
          accumRowProp' (row, floatedPs') ((propName, propExpr), propType) =
            do (ts, floatedPs) <- generalize propExpr env propType
               -- TODO use unfloated predicates
-              return $ (TRowProp (TPropName propName) (ts) row, floatedPs' ++ floatedPs)
+              return (TRowProp (TPropName propName) ts row, floatedPs' ++ floatedPs)
      (rowType', floatedPreds) <- foldM  accumRowProp' (rowEnd', []) propNamesTypes
      let rowType = TQual { qualPred = floatedPreds, qualType = Fix . TRow Nothing $ rowType' }
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
@@ -240,11 +240,11 @@ inferType' env (ECase a eTest eBranches) =
   do (eType, eTest') <- inferType env eTest
      infPatterns <- accumInfer env $ map (ELit a . fst) eBranches
      let patternTypes = map (qualType . fst) infPatterns
-     unifyAll a $ (qualType eType):patternTypes
+     unifyAll a $ qualType eType : patternTypes
      infBranches <- accumInfer env $ map snd eBranches
      let branchTypes = map (qualType . fst) infBranches
      unifyAll a branchTypes
-     allPreds <- unifyPredsL a . concatMap qualPred $ eType : (map fst infPatterns) ++ (map fst infBranches)
+     allPreds <- unifyPredsL a . concatMap qualPred $ eType : map fst infPatterns ++ map fst infBranches
      let tRes = TQual { qualPred = allPreds, qualType = qualType . fst $ head infBranches } -- TODO unsafe head
      return (tRes, ECase (a, tRes) eTest' $ zip (map fst eBranches) (map snd infBranches))
 inferType' env (EProp a eObj propName) =
@@ -256,14 +256,14 @@ inferType' env (EProp a eObj propName) =
              do traceLog $ "Failed to find prop: " ++ pretty propName ++ " in type: " ++ pretty tObj
                 rowTail <- TRowEnd . Just . RowTVar <$> freshFlex
                 propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> freshFlex
-                unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme $ rowTail) (qualType tObj)
+                unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme rowTail) (qualType tObj)
                 instantiate propTypeScheme
 
          propTypefromTRow tRowList =
              case Map.lookup propName . fst $ flattenRow tRowList of
                  Just knownPropTypeScheme -> instantiate knownPropTypeScheme
                  Nothing -> propTypeIfMono
-         
+
      rowType <- case unFix (qualType tObj) of
                     TRow _ tRowList -> return $ Just tRowList
                     _ -> tryMakeRow $ unFix (qualType tObj)
@@ -271,15 +271,15 @@ inferType' env (EProp a eObj propName) =
          case rowType of
              Just tRowList -> propTypefromTRow tRowList
              _ -> propTypeIfMono
-     
+
      return (propType, EProp (a,propType) eObj' propName)
 
 unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do
   m <- getVarInstances
-       
+
   traceLog $ "unifyAllInstances: " ++ pretty a ++ " Unifying all instances of tvars: " ++ intercalate ", " (map pretty tvs)
-  let equivalenceSets = map Set.fromList $ filter (not . null) $ map (mapMaybe $ Graph.lab m) $ map (flip Graph.bfs m . unTVarName) tvs
+  let equivalenceSets = map Set.fromList $ filter (not . null) $ map (mapMaybe (Graph.lab m) . flip Graph.bfs m . unTVarName) tvs
       unifyAll' equivs =
           do  let equivsL = Set.toList equivs
                   qequivsL = map qualType equivsL
@@ -424,4 +424,3 @@ test e = case runTypeInference e of
 
 runTypeInference :: Exp Source -> Either TypeError (Exp (Source, QualType))
 runTypeInference e = runInfer $ typeInference Operators.builtins e
-

@@ -33,7 +33,7 @@ import           Infernu.Types
 ----------------------------------------------------------------------
 
 tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
-tryMakeRow (TCons TStringMap [t]) = Just <$> stringMapRowType t 
+tryMakeRow (TCons TStringMap [t]) = Just <$> stringMapRowType t
 tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
 tryMakeRow (TBody TRegex) = Just <$> regexRowType
 tryMakeRow (TBody TString) = Just <$> stringRowType
@@ -170,7 +170,7 @@ decycledUnify = decycle3 unify''
 unlessEq :: (Monad m, Eq a) => a -> a -> m () -> m ()
 unlessEq x y = unless (x == y)
 
-mkTypeErrorMessage :: Pretty a => a -> a -> Maybe TypeError -> [Char]
+mkTypeErrorMessage :: Pretty a => a -> a -> Maybe TypeError -> String
 mkTypeErrorMessage t1 t2 mte =
     concat [ "\n"
            , "  Failed unifying:  "
@@ -185,11 +185,11 @@ mkTypeErrorMessage t1 t2 mte =
            ]
 
 wrapError :: Pretty b => Source -> b -> b -> Infer a -> Infer a
-wrapError s ta tb = mapError 
+wrapError s ta tb = mapError
                     $ \te -> TypeError { source = s,
                                          message = mkTypeErrorMessage ta tb (Just te)
                                        }
-    
+
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ "breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2
 unify'' (Just recurse) a t1 t2 =
@@ -211,16 +211,16 @@ assertNoPred q =
 
 -- | Main unification function
 unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
-                                
+
 -- | Type variables
 unify' _ a (TBody (TVar (Flex n))) t = varBind a (Flex n) (Fix t)
 unify' _ a t (TBody (TVar (Flex n))) = varBind a (Flex n) (Fix t)
 
 -- | Skolem type "variables"
-unify' _ a t1@(TBody (TVar (Skolem n1))) t2@(TBody (TVar (Skolem n2))) = if n1 == n2 then return () else unificationError a t1 t2
+unify' _ a t1@(TBody (TVar (Skolem n1))) t2@(TBody (TVar (Skolem n2))) = unless (n1 == n2) $ unificationError a t1 t2
 unify' _ a t1 t2@(TBody (TVar (Skolem _))) = unificationError a t1 t2
 unify' _ a t1@(TBody (TVar (Skolem _))) t2 = unificationError a t1 t2
-                                
+
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
@@ -254,12 +254,12 @@ unify' recurse a t1 (TCons (TName n2) targs2) =
 -- | A type constructor vs. a simple type
 unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' _ a t1@(TCons _ _) t2@(TBody _) = unificationError a t1 t2
-                                         
+
 -- | A function vs. a simple type
 unify' _ a t1@(TBody _) t2@(TFunc _ _) = unificationError a t1 t2
 unify' _ a t1@(TFunc _ _) t2@(TBody _) = unificationError a t1 t2
 
--- | A function vs. a type constructor                                         
+-- | A function vs. a type constructor
 unify' _ a t1@(TFunc _ _) t2@(TCons _ _) = unificationError a t1 t2
 unify' _ a t1@(TCons _ _) t2@(TFunc _ _) = unificationError a t1 t2
 
@@ -276,7 +276,7 @@ unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
         Nothing -> unificationError a t1 t2
         Just ts -> do  unifyl recurse a ts
                        recurse a tres1 tres2
-     
+
 -- | Type constructor vs. row type
 unify' r a (TRow _ tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TCons _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
@@ -312,7 +312,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
      let allAreCommon = Set.null $ (names1 `Set.difference` names2) `Set.union` (names2 `Set.difference` names1)
          unifyDifferences =
              do  r <- RowTVar . Flex <$> fresh
-                 let flippedRecurse = (\a' t1' t2' -> recurse a' t2' t1')
+                 let flippedRecurse a' = flip $ recurse a'
                  unifyRows        recurse a r (t1, names1, m1) (t2, names2, r2)
                  unifyRows flippedRecurse a r (t2, names2, m2) (t1, names1, r1)
          unifyRowTVars act =
@@ -346,10 +346,10 @@ unifyTypeSchemes = unifyTypeSchemes' unify
 unifyTypeSchemes' :: UnifyF -> Source -> TypeScheme -> TypeScheme -> Infer ()
 unifyTypeSchemes' recurse a scheme1s scheme2s =
    do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
-      
+
       (skolemVars, scheme1T) <- skolemiseScheme scheme1s
       scheme2T <- instantiate scheme2s
-      
+
       traceLog $ "Instantiated skolems: " ++ pretty scheme1T
       traceLog $ "                      " ++ pretty scheme2T
       traceLog $ "   skolems : " ++ show skolemVars
@@ -357,19 +357,19 @@ unifyTypeSchemes' recurse a scheme1s scheme2s =
       recurse a (qualType scheme1T) (qualType scheme2T)
       let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
           isSkolem _ = False
-          oldSkolems = concatMap (filter isSkolem . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) $ [scheme1s, scheme2s]
+          oldSkolems = concatMap (filter isSkolem . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
       ftvs <- mapM (applyMainSubst . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
-      let escapedSkolems = filter (\x -> isSkolem x && not (elem x oldSkolems)) $ concat ftvs
-          
-      when (not . null $ escapedSkolems)
+      let escapedSkolems = filter (\x -> isSkolem x && x `notElem` oldSkolems) $ concat ftvs
+
+      unless (null escapedSkolems)
         $ throwError a $ concat [ "\n\t\t"
-                                , pretty scheme2T
-                                , "\n\t  is not as polymorphic as \n\t\t"
-                                , pretty scheme1T
+                                , pretty scheme2s
+                                , "\n\tis not as polymorphic as \n\t\t"
+                                , pretty scheme1s
                                 , "\n\t (escaped skolems: "
                                 , pretty escapedSkolems
                                 , ")"]
-      
+
       -- preds
       preds1' <- qualPred <$> applyMainSubst scheme1T
       preds2' <- qualPred <$> applyMainSubst scheme2T
@@ -470,14 +470,14 @@ unifyPredsL a ps = Set.toList . Set.fromList . catMaybes <$>
                           Just ambig ->
                               do  addPendingUnification ambig
                                   return $ Just p
-
+                                                
 isRight :: Either a b -> Bool
 isRight (Right _) = True
 isRight _  = False
 
 catLefts :: [Either a b] -> [a]
 catLefts [] = []
-catLefts (Left a:xs) = a:(catLefts xs)
+catLefts (Left a:xs) = a : catLefts xs
 catLefts (Right _:xs) = catLefts xs
 
 -- | Given a type and a set of possible typeclass instances, tries to find an unambiguous
@@ -493,7 +493,7 @@ catLefts (Right _:xs) = catLefts xs
 -- returns Nothing.
 --
 unifyAmbiguousEntry :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer (Maybe (Source, Type, (ClassName, Set TypeScheme)))
-unifyAmbiguousEntry (a, t, (ClassName className, tss)) = 
+unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
     do  let unifAction ts =
                 do inst <- instantiateScheme False ts >>= assertNoPred
                    unify a inst t
@@ -501,7 +501,7 @@ unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
         let survivors = filter (isRight . snd) unifyResults
         case rights $ map snd survivors of
             []         -> do t' <- applyMainSubst t
-                             throwError a $ concat [ intercalate "\n\n" $ "" : (map (prettyTab 2 . message) . catLefts $ map snd $ unifyResults)
+                             throwError a $ concat [ intercalate "\n\n" $ "" : (map (prettyTab 2 . message) . catLefts $ map snd unifyResults)
                                                    , "\n\n"
                                                    , "While trying to find matching instance of typeclass "
                                                    , "\n    "
@@ -519,13 +519,10 @@ unifyPending = getPendingUnifications >>= loop
                   let pu' = Set.fromList $ catMaybes newEntries
                   setPendingUnifications pu'
                   when (pu' /= pu) $ loop pu'
-                  
+
 --             do  newEntries <- forM (Set.toList pu) $ \entry@((src, ts), t) ->
 --                                 do  t' <- applyMainSubst t
 --                                     let unifAction = do inst <- instantiate ts >>= assertNoPred
 --                                                         inst' <- applyMainSubst inst
 --                                                         unify src inst' t'
 --                                     result <- runSubInfer $ unifAction >> getState
-
-
-
