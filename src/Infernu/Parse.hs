@@ -46,16 +46,19 @@ src x = (GenInfo False Nothing, x)
 
 decl :: a -> String -> (GenInfo, a)
 decl x n = (GenInfo False (Just n), x)
+
+litBool :: a -> Bool -> Exp (GenInfo, a)           
+litBool z b = ELit (gen z) (LitBoolean b)
            
 fromStatement :: Show a => ES3.Statement a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
 fromStatement (ES3.ExprStmt z e) = singleStmt (gen z) $ fromExpression e
--- TODO: The if/while/do conversion is hacky
-fromStatement (ES3.IfStmt z pred' thenS elseS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ parallelStmts z [thenS, elseS]
-fromStatement (ES3.IfSingleStmt z pred' thenS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement thenS
-fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
-fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray (gen z) [fromExpression pred', ELit (gen z) (LitBoolean False)]) $ fromStatement loopS
+fromStatement (ES3.IfStmt z pred' thenS elseS) = mkIf z pred' thenS elseS
+fromStatement (ES3.IfSingleStmt z pred' thenS) = mkIf z pred' thenS (ES3.EmptyStmt z)
+-- TODO: The while/do conversion is hacky
+fromStatement (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray (gen z) [fromExpression pred', litBool z False]) $ fromStatement loopS
+fromStatement (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray (gen z) [fromExpression pred', litBool z False]) $ fromStatement loopS
 fromStatement (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
 fromStatement (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
 -- try/catch/finally are indepdendent branches that shouldn't be sharing context. catch is a like an
@@ -78,7 +81,7 @@ fromStatement (ES3.ForStmt z init' test increment body) = case init' of
     where forBody = chainExprs z test'' rest
           test'' = case test of
                     Nothing -> EVar (gen z) poo
-                    Just test' -> EArray (gen z) [fromExpression test', ELit (gen z) (LitBoolean False)]
+                    Just test' -> EArray (gen z) [fromExpression test', litBool z False]
           body' = fromStatement body
           rest = case increment of
                    Nothing -> body'
@@ -98,6 +101,18 @@ fromStatement (ES3.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return")
                                         Nothing -> ELit (gen z) LitUndefined
                                         Just x' -> fromExpression x'
 
+-- TODO: Extremely inefficient, the continuation is duplicated between the case branches.
+--                                        
+-- We should have a name source (monad?) we can use here to generate unique names and wrap the whole
+-- case in a let, binding 'k' to a unique name and using EVar to refer to it in the branches.
+mkIf :: Show a => a -> ES3.Expression a -> ES3.Statement a -> ES3.Statement a
+                    -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+mkIf z pred' thenS elseS =
+    \k -> ECase (gen z) (fromExpression pred')
+          . map (\(v,s) -> (v, chainExprs z (fromStatement s $ empty z) id k))
+          $ [ (LitBoolean True, thenS)
+            , (LitBoolean False, elseS)]
+          
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (GenInfo, a)
 toAbs z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'

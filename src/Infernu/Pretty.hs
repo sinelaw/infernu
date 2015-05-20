@@ -85,11 +85,11 @@ instance Pretty (Exp a) where
   prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
   prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
   prettyTab t (ERow _ isOpen props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ (if isOpen then ", " else "") ++ "}"
-  prettyTab t (ECase _ ep es) = "case " ++ prettyTab t ep ++  " of\n" ++ (concatMap formatBranch' es)
-      where formatBranch' (pat, branch) = tab (t+1)
+  prettyTab t (ECase _ ep es) = "case " ++ prettyTab t ep ++  " of" ++ (concatMap formatBranch' es)
+      where formatBranch' (pat, branch) = "\n" ++ tab (t+1)
                                           ++ prettyTab (t+1) pat
                                           ++ " -> "
-                                          ++ prettyTab (t+1) branch
+                                          ++ prettyTab (t+2) branch
   prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
   prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
   prettyTab t (EStringMap _ exprs) = "<" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ " => " ++ prettyTab t v) exprs) ++ ">"
