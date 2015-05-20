@@ -38,7 +38,7 @@ arrayProps elemType = let aType = array elemType in
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
 arrayRowType :: Type -> Infer (TRowList Type)
 arrayRowType elemType = TRowProp TPropSetIndex (ty $ funcN [aType, number, elemType] undef)
-                        . TRowProp TPropGetIndex (ty $ func aType number elemType)
+                        . TRowProp TPropGetIndex (ty $ func aType number elemType) -- $ maybeT elemType)
                         <$> foldM addProp (TRowEnd Nothing) (arrayProps elemType)
   where aType = array elemType
         addProp rowlist (name, propTS) =
