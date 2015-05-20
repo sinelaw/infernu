@@ -162,7 +162,7 @@ toNamedAbs z args stmts (ES3.Id zn name) letBody = let abs' = addDecl zn name $ 
 
 chainDecls :: Show a => [ES3.VarDecl a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 chainDecls [] k = k
-chainDecls (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet (gen z') name (ELit (gen z') LitUndefined) (chainDecls xs k)
+chainDecls (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet (gen z') name (ELit (decl z' name) LitUndefined) (chainDecls xs k)
 chainDecls (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet (gen z') name (addDecl z' name $ fromExpression v) (chainDecls xs k)
 
 makeThis :: Show a => a -> Exp a
