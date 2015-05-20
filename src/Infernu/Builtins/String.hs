@@ -32,6 +32,7 @@ stringProps =
 --  , ("match", ty $ func string regex
 
   , ("replace", TScheme [Flex 0] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)
+  , ("split", ty $ func string string (array string) ) -- TODO review
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
