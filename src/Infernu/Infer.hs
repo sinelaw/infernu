@@ -85,15 +85,16 @@ inferType env expr = do
 inferType' :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType' _ (ELit a lit) = do
   let rtb = return . Fix . TBody
+      mkMaybe = do tv <- Fix . TBody . TVar <$> freshFlex
+                   return $ Fix $ TCons TMaybe [tv]
   t <- case lit of
              LitNumber _ -> rtb TNumber
              LitBoolean _ -> rtb TBoolean
              LitString _ -> rtb TString
              LitRegex{} -> rtb TRegex
-             LitUndefined -> rtb TUndefined
+             LitUndefined -> mkMaybe
              LitNull -> rtb TNull
-             LitEmptyThis -> do tv <- Fix . TBody . TVar <$> freshFlex
-                                return $ Fix $ TCons TMaybe [tv]
+             LitEmptyThis -> mkMaybe
 
   return (qualEmpty t, ELit (a, qualEmpty t) lit)
 inferType' env (EVar a n) =
