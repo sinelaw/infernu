@@ -61,13 +61,15 @@ closeRow t = t
 
 ----------------------------------------------------------------------
 
-
--- For efficiency reasons, types list is returned in reverse order.
 accumInfer :: TypeEnv -> [Exp Source] -> Infer [(QualType, Exp (Source, QualType))]
-accumInfer env =
-  do traceLog ("accumInfer: env: " ++ pretty env)
-     foldM accumInfer' []
-     where accumInfer' types expr =
+accumInfer env exprs = accumInfer' (map (env,) exprs)
+                       
+-- For efficiency reasons, types list is returned in reverse order.
+accumInfer' :: [(TypeEnv, Exp Source)] -> Infer [(QualType, Exp (Source, QualType))]
+accumInfer' exprs =
+  do traceLog ("accumInfer: exprs: " ++ pretty exprs)
+     foldM accumInfer' [] exprs
+     where accumInfer' types (env, expr) =
              do (t, e) <- inferType env expr
                 return ((t,e):types)
 
@@ -237,18 +239,22 @@ inferType' env (ERow a isOpen propExprs) =
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (ECase a eTest eBranches) =
   do (eType, eTest') <- inferType env eTest
-     env' <- case eTest' of
-                 (EApp _ (EVar _ "!==") [ _
-                                        , (EApp _ (EVar _ "typeof") [_, var@(EVar (_,varT) n)])
-                                        , (ELit _ (LitString "undefined"))]
-                     ) -> do tv <- Fix . TBody . TVar <$> freshFlex
-                             unify a (qualType varT) (Fix $ TCons TMaybe [tv]) -- TODO handle preds
-                             addVarScheme env n $ schemeEmpty tv
-                 _ -> return env
-     infPatterns <- accumInfer env' $ map (ELit a . fst) eBranches
+     pEnv <- case eTest' of
+                 (EApp (_,resT) (EVar _ "!==") [ _
+                                               , (EApp _ (EVar _ "typeof") [_, var@(EVar (_,varT) n)])
+                                               , (ELit _ (LitString "undefined"))]
+                     ) -> case unFix . qualType $ resT of
+                              TBody TBoolean ->
+                                  do tv <- Fix . TBody . TVar <$> freshFlex
+                                     unify a (qualType varT) (Fix $ TCons TMaybe [tv]) -- TODO handle preds
+                                     env' <- addVarScheme env n $ schemeEmpty tv
+                                     return $ \p -> if p == LitBoolean True then env' else env
+                              _ -> return $ const env
+                 _ -> return $ const env
+     infPatterns <- accumInfer env $ map (ELit a . fst) eBranches
      let patternTypes = map (qualType . fst) infPatterns
      unifyAll a $ qualType eType : patternTypes
-     infBranches <- accumInfer env' $ map snd eBranches
+     infBranches <- accumInfer' $ map (\(l,p) -> (pEnv l, p)) eBranches
      let branchTypes = map (qualType . fst) infBranches
      unifyAll a branchTypes
      allPreds <- unifyPredsL a . concatMap qualPred $ eType : map fst infPatterns ++ map fst infBranches
