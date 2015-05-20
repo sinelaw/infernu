@@ -9,12 +9,17 @@ import Options.Applicative
 data Options = Options
                { optQuiet :: Bool
                , optShowCore :: Bool
+               , optShowPrettyCore :: Bool
                , optShowParsed :: Bool
                , optFileNames :: [String]
                }
 
 defaultOptions :: Options
-defaultOptions = Options { optQuiet = False, optShowCore = False, optShowParsed = False, optFileNames = [] }
+defaultOptions = Options { optQuiet = False
+                         , optShowCore = False
+                         , optShowPrettyCore = False
+                         , optShowParsed = False
+                         , optFileNames = [] }
                  
 opts :: ParserInfo Options
 opts = info (helper <*> parseOpts)
@@ -27,6 +32,8 @@ parseOpts = Options
             <$> switch (long "quiet"
                         <> short 'q'
                         <> help "Report only errors; don't output the annotated source with inferred types")
+            <*> switch (long "dump-translation-raw"
+                        <> help "Dump internal translation in ugly format (used for debugging infernu)" )
             <*> switch (long "dump-translation"
                         <> help "Dump internal translation (used for debugging infernu)" )
             <*> switch (long "dump-parsed"

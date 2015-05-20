@@ -108,10 +108,11 @@ fromStatement (ES3.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return")
 mkIf :: Show a => a -> ES3.Expression a -> ES3.Statement a -> ES3.Statement a
                     -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 mkIf z pred' thenS elseS =
-    \k -> ECase (gen z) (fromExpression pred')
-          . map (\(v,s) -> (v, chainExprs z (fromStatement s $ empty z) id k))
-          $ [ (LitBoolean True, thenS)
-            , (LitBoolean False, elseS)]
+    \k -> chainExprs z caseExpr' id k
+          where caseExpr' = ECase (gen z) (fromExpression pred')
+                            . map (\(v,s) -> (v, (fromStatement s $ empty z)))
+                            $ [ (LitBoolean True, thenS)
+                              , (LitBoolean False, elseS)]
           
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (GenInfo, a)

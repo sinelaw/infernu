@@ -237,10 +237,18 @@ inferType' env (ERow a isOpen propExprs) =
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (ECase a eTest eBranches) =
   do (eType, eTest') <- inferType env eTest
-     infPatterns <- accumInfer env $ map (ELit a . fst) eBranches
+     env' <- case eTest' of
+                 (EApp _ (EVar _ "!==") [ _
+                                        , (EApp _ (EVar _ "typeof") [_, var@(EVar (_,varT) n)])
+                                        , (ELit _ (LitString "undefined"))]
+                     ) -> case unFix $ qualType varT of
+                              TCons TMaybe [varT'] -> addVarScheme env n $ schemeEmpty varT'
+                              _ -> return env
+                 _ -> return env
+     infPatterns <- accumInfer env' $ map (ELit a . fst) eBranches
      let patternTypes = map (qualType . fst) infPatterns
      unifyAll a $ qualType eType : patternTypes
-     infBranches <- accumInfer env $ map snd eBranches
+     infBranches <- accumInfer env' $ map snd eBranches
      let branchTypes = map (qualType . fst) infBranches
      unifyAll a branchTypes
      allPreds <- unifyPredsL a . concatMap qualPred $ eType : map fst infPatterns ++ map fst infBranches

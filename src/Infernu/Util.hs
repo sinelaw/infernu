@@ -53,7 +53,8 @@ checkFiles options fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   when (optShowParsed options) $ putStrLn $ show $ ES3Pretty.prettyPrint expr
   let expr' = fmap Source $ translate $ expr
-  when (optShowCore options) $ putStrLn $ pretty expr'
+  when (optShowCore options) $ putStrLn $ show expr'
+  when (optShowPrettyCore options) $ putStrLn $ pretty expr'
   let expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
   return res
