@@ -7,6 +7,9 @@ var x = 0;
 x = m.index;
 
 var s = '';
-s = m[0];
+var res = m[0];
+if (typeof res !== 'undefined') {
+    s = res;
+}
 s = m.input;
 

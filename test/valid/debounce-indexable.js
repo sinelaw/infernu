@@ -6,7 +6,7 @@ var $timeout = {
 function debounce(f, millis) {
     var timer = 0;
     var timerSet = false;
-    var scheduledArgs = [];
+    var scheduledArgs;
     function resetTimeout() {
         if (timerSet) {
             $timeout.cancel(timer);
@@ -14,12 +14,16 @@ function debounce(f, millis) {
         timerSet = true;
         timer = $timeout.set(function() {
             // Note: f may end up running more than once per args set.
-            f(scheduledArgs[0]);//.apply(null, scheduledArgs);
+            if (typeof scheduledArgs !== 'undefined') {
+                f(scheduledArgs);//.apply(null, scheduledArgs);
+            } else {
+                throw new Error("Assetion failed: timeout was called somehow before invocation!");
+            }
         }, millis);
         return;
     }
     return function(arg) {
-        scheduledArgs = [arg]; //Array.prototype.slice.call(arguments, 0);
+        scheduledArgs = arg; //Array.prototype.slice.call(arguments, 0);
         return {
             invoke: function() {
                 resetTimeout();

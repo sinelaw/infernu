@@ -1,5 +1,8 @@
 function f(x, i) {
-    return x[i] + x[i];
+    var y = x[i];
+    if (typeof y !== 'undefined') {
+        return y + y;
+    }
 }
 
 f([1,2,3], 0);

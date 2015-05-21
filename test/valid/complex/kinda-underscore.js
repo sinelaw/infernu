@@ -7,7 +7,7 @@ var each = function(list, iteratee) {
 };
 
 var p = [];
-each([1,2,3], function(e,i,l) { p.push(e + 55); });
+each([1,2,3], function(e,i,l) { if (typeof e !== 'undefined') { p.push(e + 55); } });
 // would give an obscure error:
 //each([1,2,3], function(e,i,l) { p.push(e + 'ah'); });
 
