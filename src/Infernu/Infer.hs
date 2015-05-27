@@ -84,14 +84,17 @@ inferType env expr = do
 
 inferType' :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType' _ (ELit a lit) = do
-  let t = Fix $ TBody $ case lit of
-                    LitNumber _ -> TNumber
-                    LitBoolean _ -> TBoolean
-                    LitString _ -> TString
-                    LitRegex{} -> TRegex
-                    LitUndefined -> TUndefined
-                    LitNull -> TNull
-                    LitEmptyThis -> TEmptyThis
+  let rtb = return . Fix . TBody
+  t <- case lit of
+             LitNumber _ -> rtb TNumber
+             LitBoolean _ -> rtb TBoolean
+             LitString _ -> rtb TString
+             LitRegex{} -> rtb TRegex
+             LitUndefined -> rtb TUndefined
+             LitNull -> rtb TNull
+             LitEmptyThis -> do tv <- Fix . TBody . TVar <$> freshFlex
+                                return $ Fix $ TCons TMaybe [tv]
+
   return (qualEmpty t, ELit (a, qualEmpty t) lit)
 inferType' env (EVar a n) =
   do t <- instantiateVar a n env
@@ -111,6 +114,11 @@ inferType' env (EApp a e1 eArgs) =
      traceLog $ "EApp: Inferred types for func args: " ++ intercalate ", " (map pretty argsTE)
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
+         -- tArgs = map (maybify . fst) rargsTE
+         -- maybify q = let tq = qualType q
+         --             in case unFix tq of
+         --                    TCons TMaybe _ -> q
+         --                    _ -> q { qualType = Fix $ TCons TMaybe [tq] }
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:tArgs
      unify a (Fix $ TFunc (map qualType tArgs) tvar) (qualType t1)

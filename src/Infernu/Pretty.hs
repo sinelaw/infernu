@@ -146,12 +146,13 @@ prettyType n (TFunc ts tres) = wrapThis this $ "(" ++ args ++ " -> " ++ prettyTa
                 [] -> (Nothing, nakedSingleOrTuple nonThisArgs)
                 (this_:_) -> (Just this_, nakedSingleOrTuple nonThisArgs)
         wrapThis Nothing s = s
-        wrapThis (Just (Fix (TBody TUndefined))) s = s
-        wrapThis (Just (Fix (TBody TEmptyThis))) s = s
+--        wrapThis (Just (Fix (TBody TUndefined))) s = s
+        --wrapThis (Just (Fix (TBody TEmptyThis))) s = s
         -- if "this" is a recursive type, only show the recursive type name (no params) - this is "lossy"
         wrapThis (Just (Fix (TCons (TName name) _))) s = prettyTab n name ++ "." ++ s
         wrapThis (Just t) s = prettyTab n t ++ "." ++ s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
+prettyType n (TCons TMaybe [t]) = "?" ++ prettyTab n t
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
 prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
 prettyType n (TCons (TName name) ts) = "<" ++ pretty name ++ ": " ++ (unwords $ map (prettyTab n) ts) ++ ">"

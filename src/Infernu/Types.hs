@@ -128,13 +128,13 @@ setTVarName (Flex _) y = Flex y
 setTVarName (Skolem _) y = Skolem y
 
 data TBody = TVar TVarName
-           | TNumber | TBoolean | TString | TRegex | TUndefined | TNull | TEmptyThis
+           | TNumber | TBoolean | TString | TRegex | TNull | TUndefined
              deriving (Show, Eq, Ord)
 
 newtype TypeId = TypeId Int
                 deriving (Show, Eq, Ord)
 
-data TConsName = TArray | TTuple | TName TypeId | TStringMap
+data TConsName = TArray | TTuple | TName TypeId | TStringMap | TMaybe
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName

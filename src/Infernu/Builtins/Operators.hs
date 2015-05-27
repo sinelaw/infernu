@@ -62,7 +62,7 @@ builtins = Map.fromList [
   ("Boolean",      ts [1] $ Fix $ TFunc [undef, tvar 1] (boolean)),
   ("NaN",          ts [] number),
   ("Infinity",     ts [] number),
-  ("undefined",    ts [0] $ undef),
+  ("undefined",    ts [0] $ maybeT $ tvar 0),
   ("isFinite",     ts [0] $ Fix $ TFunc [tvar 0, number] (boolean)),
   ("isNaN",        ts [0] $ Fix $ TFunc [tvar 0, number] (boolean)),
   ("parseFloat",   ts [0] $ Fix $ TFunc [tvar 0, string] (number)),

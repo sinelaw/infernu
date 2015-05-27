@@ -216,16 +216,18 @@ unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 unify' _ a (TBody (TVar (Flex n))) t = varBind a (Flex n) (Fix t)
 unify' _ a t (TBody (TVar (Flex n))) = varBind a (Flex n) (Fix t)
 
+-- | Maybe
+unify' _       _ (TCons TMaybe _) (TBody TUndefined) = return ()
+unify' _       _ (TBody TUndefined) (TCons TMaybe _) = return ()
+unify' recurse a (TCons TMaybe [t1]) (TCons TMaybe [t2]) = recurse a t1 t2
+unify' recurse a (TCons TMaybe [t1]) t2 = recurse a t1 $ Fix t2
+-- HACK: this is lenient
+--unify' recurse a t1 (TCons TMaybe [t2]) = recurse a (Fix t1) t2
+
 -- | Skolem type "variables"
 unify' _ a t1@(TBody (TVar (Skolem n1))) t2@(TBody (TVar (Skolem n2))) = unless (n1 == n2) $ unificationError a t1 t2
 unify' _ a t1 t2@(TBody (TVar (Skolem _))) = unificationError a t1 t2
 unify' _ a t1@(TBody (TVar (Skolem _))) t2 = unificationError a t1 t2
-
--- | TEmptyThis <- something
-unify' _ a (TBody TEmptyThis) t = return ()
-
--- | TUndefined <- TEmptyThis
-unify' _ a (TBody TUndefined) (TBody TEmptyThis) = return ()
 
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
@@ -475,7 +477,7 @@ unifyPredsL a ps = Set.toList . Set.fromList . catMaybes <$>
                           Just ambig ->
                               do  addPendingUnification ambig
                                   return $ Just p
-                                                
+
 isRight :: Either a b -> Bool
 isRight (Right _) = True
 isRight _  = False

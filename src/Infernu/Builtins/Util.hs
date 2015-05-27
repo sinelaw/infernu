@@ -31,6 +31,9 @@ boolean = Fix $ TBody TBoolean
 undef :: Type
 undef = Fix $ TBody TUndefined
 
+maybeT :: Type -> Type
+maybeT t = Fix $ TCons TMaybe [t]
+
 ts :: [Int] -> t -> TScheme t
 ts vs t = TScheme (map Flex vs) $ qualEmpty t
 
