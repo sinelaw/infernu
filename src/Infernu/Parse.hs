@@ -96,7 +96,7 @@ fromStatement (ES3.SwitchStmt z switch cases) = chainExprs z (EArray (gen z) tes
 
 fromStatement (ES3.VarDeclStmt _ decls) = chainDecls decls
 fromStatement (ES3.FunctionStmt z name args stmts) = toNamedAbs z args stmts name
-fromStatement (ES3.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return") (TPropName "value")
+fromStatement (ES3.ReturnStmt z x) = EAssign (gen z) "return"
                                      $ case x of
                                         Nothing -> ELit (gen z) LitUndefined
                                         Just x' -> fromExpression x'
@@ -118,39 +118,40 @@ mkIf z pred' thenS elseS =
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (GenInfo, a)
 toAbs z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'
   -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
-  where body' = case any hasReturn stmts of
-                 True -> ELet (gen z) "return" (ERow (gen z) True []) $ foldStmts stmts $ (EProp (gen z) (EVar (gen z) "return") (TPropName "value"))
-                 False -> ELet (gen z) "return" (empty z) $ foldStmts stmts $ (ELit (gen z) LitUndefined)
-
-
-hasReturn :: ES3.Statement a -> Bool
-hasReturn (ES3.BlockStmt _ stmts) = any hasReturn stmts
-hasReturn (ES3.EmptyStmt _) = False
-hasReturn (ES3.ExprStmt _ _) = False
-hasReturn (ES3.IfStmt _ _ thenS elseS) = any hasReturn [thenS, elseS]
-hasReturn (ES3.IfSingleStmt _ _ thenS) = hasReturn thenS
-hasReturn (ES3.WhileStmt _ _ loopS) = hasReturn loopS
-hasReturn (ES3.DoWhileStmt _ loopS _) = hasReturn loopS
-hasReturn (ES3.BreakStmt _ _) = False
-hasReturn (ES3.ContinueStmt _ _) = False
-hasReturn (ES3.TryStmt _ stmt mCatch mFinally) = any hasReturn (stmt : finallyS ++ catchS)
-  where catchS = case mCatch of
-                  Just (ES3.CatchClause _ _ s) -> [s]
-                  Nothing -> []
-        finallyS = case mFinally of
-                    Just f -> [f]
-                    Nothing -> []
-hasReturn (ES3.ThrowStmt _ _) = False
-hasReturn (ES3.WithStmt _ _ s) = hasReturn s
-hasReturn (ES3.ForInStmt _ _ _ s) = hasReturn s
-hasReturn (ES3.LabelledStmt _ _ s) = hasReturn s
-hasReturn (ES3.ForStmt _ _ _ _ body) = hasReturn body
-hasReturn (ES3.SwitchStmt _ _ cases) = and $ map fromCase cases
-  where fromCase (ES3.CaseClause _ _ s) = any hasReturn s
-        fromCase (ES3.CaseDefault _ stmts) = any hasReturn stmts
-hasReturn (ES3.VarDeclStmt _ _) = False
-hasReturn (ES3.FunctionStmt _ _ _ _) = False
-hasReturn (ES3.ReturnStmt _ _) = True
+  where body' = ELet (gen z) "return" returnProp' $ foldStmts stmts returnValue'
+        returnValue' = (EVar (gen z) "return")
+        returnProp' = if any terminates stmts
+                      then ELit (gen z) LitForallAA
+                      else ELit (gen z) LitUndefined
+            
+terminates :: ES3.Statement a -> Bool
+terminates (ES3.BlockStmt _ stmts) = any terminates stmts
+terminates (ES3.EmptyStmt _) = False
+terminates (ES3.ExprStmt _ _) = False
+terminates (ES3.IfStmt _ _ thenS elseS) = terminates thenS && terminates elseS
+terminates (ES3.IfSingleStmt _ _ _) = False -- because unspecified 'else' branch is left open
+terminates (ES3.WhileStmt _ _ loopS) = terminates loopS
+terminates (ES3.DoWhileStmt _ loopS _) = terminates loopS
+terminates (ES3.BreakStmt _ _) = False
+terminates (ES3.ContinueStmt _ _) = False
+terminates (ES3.TryStmt _ stmt mCatch mFinally) = (terminates stmt && catchTerminates) || finallyTerminates
+  where catchTerminates = case mCatch of
+                  Just (ES3.CatchClause _ _ s) -> terminates s
+                  Nothing -> False
+        finallyTerminates = case mFinally of
+                    Just f -> terminates f
+                    Nothing -> False
+terminates (ES3.ThrowStmt _ _) = False
+terminates (ES3.WithStmt _ _ s) = terminates s
+terminates (ES3.ForInStmt _ _ _ s) = terminates s
+terminates (ES3.LabelledStmt _ _ s) = terminates s
+terminates (ES3.ForStmt _ _ _ _ body) = terminates body
+terminates (ES3.SwitchStmt _ _ cases) = and $ map fromCase cases
+  where fromCase (ES3.CaseClause _ _ stmts) = any terminates stmts
+        fromCase (ES3.CaseDefault _ stmts) = any terminates stmts
+terminates (ES3.VarDeclStmt _ _) = False
+terminates (ES3.FunctionStmt _ _ _ _) = False
+terminates (ES3.ReturnStmt _ _) = True -- return statements terminate!
 
 
 addDecl :: Show a => a -> String -> Exp (GenInfo, a) -> Exp (GenInfo, a)                                

@@ -57,6 +57,7 @@ instance Pretty LitVal where
   prettyTab _ LitUndefined = "undefined"
   prettyTab _ LitNull = "null"
   prettyTab _ LitEmptyThis = "(undefined 'this')"
+  prettyTab _ LitForallAA = "(forall x. x)"
 
 instance Pretty EVarName where
   prettyTab _ x = x

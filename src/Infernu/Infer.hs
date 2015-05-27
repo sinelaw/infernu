@@ -97,6 +97,7 @@ inferType' _ (ELit a lit) = do
              LitUndefined -> mkMaybe
              LitNull -> rtb TNull
              LitEmptyThis -> mkMaybe
+             LitForallAA -> throwError a $ "Unexpected LitForallAA"
 
   return (qualEmpty t, ELit (a, qualEmpty t) lit)
 inferType' env (EVar a n) =
@@ -159,14 +160,23 @@ inferType' env (ENew a e1 eArgs) =
                             _ -> resolvedThisT
      return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
-  do recType <- Fix . TBody . TVar <$> freshFlex
-     recEnv <- addVarScheme env n $ schemeEmpty recType
-     (t1, e1') <- inferType recEnv e1
-     unify a (qualType t1) recType
-     (t', preds) <- generalize e1 env t1
+  do (t', preds, e1') <-
+         case e1 of
+             -- TODO horrible hack!
+             ELit a' LitForallAA ->
+                 do tvN <- freshFlex
+                    let tv = (Fix . TBody $ TVar tvN)
+                        t'' = TScheme [tvN] $ qualEmpty tv 
+                    return (t'', [], ELit (a', qualEmpty tv) LitForallAA)
+             _ -> do recType <- Fix . TBody . TVar <$> freshFlex
+                     recEnv <- addVarScheme env n $ schemeEmpty recType
+                     (t1, e1'') <- inferType recEnv e1
+                     unify a (qualType t1) recType
+                     (t'', preds'') <- generalize e1 env t1
+                     return (t'', preds'' ++ qualPred t1, e1'')
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
-     preds' <- unifyPredsL a $ preds ++ concatMap qualPred [t1, t2]
+     preds' <- unifyPredsL a $ preds ++ concatMap qualPred [t2]
      let resT = TQual preds' $ qualType t2
      return (resT, ELet (a, resT) n e1' e2')
 -- | Handling of mutable variable assignment.
@@ -239,6 +249,7 @@ inferType' env (ERow a isOpen propExprs) =
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (ECase a eTest eBranches) =
   do (eType, eTest') <- inferType env eTest
+     -- TODO make this more robust
      pEnv <- case eTest' of
                  (EApp (_,resT) (EVar _ "!==") [ _
                                                , (EApp _ (EVar _ "typeof") [_, var@(EVar (_,varT) n)])

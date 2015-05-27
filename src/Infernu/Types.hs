@@ -94,6 +94,7 @@ data LitVal = LitNumber Double
             | LitUndefined
             | LitNull
             | LitEmptyThis
+            | LitForallAA
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar a EVarName

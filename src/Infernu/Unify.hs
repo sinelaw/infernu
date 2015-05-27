@@ -217,12 +217,11 @@ unify' _ a (TBody (TVar (Flex n))) t = varBind a (Flex n) (Fix t)
 unify' _ a t (TBody (TVar (Flex n))) = varBind a (Flex n) (Fix t)
 
 -- | Maybe
+-- TODO: This is a form of subtyping, so it probably breaks a lot of things.
 unify' _       _ (TCons TMaybe _) (TBody TUndefined) = return ()
 unify' _       _ (TBody TUndefined) (TCons TMaybe _) = return ()
 unify' recurse a (TCons TMaybe [t1]) (TCons TMaybe [t2]) = recurse a t1 t2
 unify' recurse a (TCons TMaybe [t1]) t2 = recurse a t1 $ Fix t2
--- HACK: this is lenient
---unify' recurse a t1 (TCons TMaybe [t2]) = recurse a (Fix t1) t2
 
 -- | Skolem type "variables"
 unify' _ a t1@(TBody (TVar (Skolem n1))) t2@(TBody (TVar (Skolem n2))) = unless (n1 == n2) $ unificationError a t1 t2
@@ -503,7 +502,7 @@ unifyAmbiguousEntry :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer (May
 unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
     do  let unifAction ts =
                 do inst <- instantiateScheme False ts >>= assertNoPred
-                   unify a inst t
+                   unify a inst t -- inst on left, t on right: this is on purpose, to disallow things like "Maybe Number" where "Number" is required.
         unifyResults <- forM (Set.toList tss) $ \instScheme -> (instScheme, ) <$> runSubInfer (unifAction instScheme >> getState)
         let survivors = filter (isRight . snd) unifyResults
         case rights $ map snd survivors of
