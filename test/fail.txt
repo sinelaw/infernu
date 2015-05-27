@@ -12,4 +12,3 @@
 // FAIL valid/promise.js:30:23: Error:  |   Failed unifying:  {resolve y valid/promise.js
 // FAIL valid/promise-method-workaround.js:30:17r : : Error:  |   Fail y valid/promise-method-workaround.js
 // FAIL valid/promise-simple-api.js:1:1*: Error:  |   Failed unifying: y valid/promise-simple-api.js
-// FAIL  n invalid/index-and-plus.js
