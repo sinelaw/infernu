@@ -8,64 +8,38 @@ import Infernu.Types
 import Infernu.InferState
 import           Infernu.Lib (safeLookup)
 import           Infernu.Prelude
-
-func :: Type -> Type -> Type -> Type
-func this x y = Fix $ TFunc [this, x] y
-
-funcN :: [Fix FType] -> Fix FType -> Fix FType
-funcN xs tres = Fix $ TFunc xs tres
-
-string :: Type
-string = Fix $ TBody TString
-
-number :: Type
-number = Fix $ TBody TNumber
-
-undef :: Type
-undef = Fix $ TBody TUndefined
-
-array :: Type -> Type
-array t = Fix $ TCons TArray [t]
-
-boolean :: Fix FType
-boolean = Fix $ TBody TBoolean
-
-ts :: t -> TScheme t
-ts t = TScheme [] $ qualEmpty t
-
-tvar :: Int -> Type
-tvar = Fix . TBody . TVar . Flex
+import Infernu.Builtins.Util
 
 arrayProps :: Type -> [(String, TypeScheme)]
 arrayProps elemType = let aType = array elemType in
-  [ ("length", ts number)
-  , ("concat", ts $ func aType aType aType)
+  [ ("length", ty number)
+  , ("concat", ty $ func aType aType aType)
      -- TODO support thisArg (requires type variables)
-  , ("every", ts $ func aType (funcN [undef, elemType, number, aType] boolean) boolean) -- missing thisArg
-  , ("filter", ts $ func aType (funcN [undef, elemType, number, aType] boolean) aType) -- missing thisArg
+  , ("every", ts [0] $ func aType (funcN [tvar 0, elemType, number, aType] boolean) boolean) -- missing thisArg
+  , ("filter", ts [0] $ func aType (funcN [tvar 0, elemType, number, aType] boolean) aType) -- missing thisArg
     -- TODO support optional argument for fromIndex (last parameter)
-  , ("indexOf", ts $ funcN [aType, elemType, number] number)
-  , ("join", ts $ func aType string string)
-  , ("lastIndexOf", ts $ func aType number number)
-  , ("map", TScheme [Flex 0, Flex 1] $ qualEmpty (func (array $ tvar 0) (funcN [undef, tvar 0, number, array $ tvar 0] (tvar 1)) (array $ tvar 1)))
-  , ("pop", ts $ funcN [aType] elemType)
-  , ("push", ts $ funcN [aType, elemType] number)
-  , ("reverse", ts $ funcN [aType] aType)
-  , ("shift", ts $ funcN [aType] elemType)
-  , ("slice", ts $ funcN [aType, number, number] aType)
-  , ("some", ts $ func aType (funcN [undef, elemType, number, aType] boolean) aType) -- missing thisArg
-  , ("sort", ts $ func aType (funcN [undef, elemType, elemType] number) aType)
-  , ("splice", ts $ funcN [aType, number, number] aType)
-  , ("unshift", ts $ funcN [aType] elemType)
+  , ("indexOf", ty $ funcN [aType, elemType, number] number)
+  , ("join", ty $ func aType string string)
+  , ("lastIndexOf", ty $ func aType number number)
+  , ("map", ts [0, 1, 2] $ func (array $ tvar 0) (funcN [tvar 2, tvar 0, number, array $ tvar 0] (tvar 1)) (array $ tvar 1))
+  , ("pop", ty $ funcN [aType] elemType)
+  , ("push", ty $ funcN [aType, elemType] number)
+  , ("reverse", ty $ funcN [aType] aType)
+  , ("shift", ty $ funcN [aType] elemType)
+  , ("slice", ty $ funcN [aType, number, number] aType)
+  , ("some", ts [0] $ func aType (funcN [tvar 0, elemType, number, aType] boolean) aType) -- missing thisArg
+  , ("sort", ts [0] $ func aType (funcN [tvar 0, elemType, elemType] number) aType)
+  , ("splice", ty $ funcN [aType, number, number] aType)
+  , ("unshift", ty $ funcN [aType] elemType)
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
 arrayRowType :: Type -> Infer (TRowList Type)
-arrayRowType elemType = TRowProp TPropSetIndex (ts $ funcN [aType, number, elemType] undef)
-                        . TRowProp TPropGetIndex (ts $ func aType number elemType)
-                        <$> (foldM addProp (TRowEnd Nothing) $ arrayProps elemType)
+arrayRowType elemType = TRowProp TPropSetIndex (ty $ funcN [aType, number, elemType] undef)
+                        . TRowProp TPropGetIndex (ty $ func aType number elemType)
+                        <$> foldM addProp (TRowEnd Nothing) (arrayProps elemType)
   where aType = array elemType
         addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> ((tvName,) . Flex <$> fresh)
+          do allocNames <- forM (schemeVars propTS) $ \tvName -> (tvName,) . Flex <$> fresh
              let ts' = mapVarNames (safeLookup allocNames) propTS
              return $ TRowProp (TPropName name) ts' rowlist

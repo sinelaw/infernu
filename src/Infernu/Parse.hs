@@ -151,7 +151,7 @@ chainDecls (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet (gen z') name (E
 chainDecls (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet (gen z') name (addDecl z' name $ fromExpression v) (chainDecls xs k)
 
 makeThis :: Show a => a -> Exp a
-makeThis z = ELit z $ LitNull -- TODO should be undefined
+makeThis z = ELit z $ LitEmptyThis
 
 fromExpression :: Show a => ES3.Expression a -> Exp (GenInfo, a)
 fromExpression (ES3.StringLit z s) = ELit (src z) $ LitString s

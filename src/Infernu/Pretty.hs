@@ -6,7 +6,6 @@ import           Infernu.Types
 import           Infernu.Prelude
     
 import           Data.Char       (chr, ord)
-import qualified Data.Char       as Char
 import qualified Data.Digits     as Digits
 import           Data.List       (intercalate)
 import qualified Data.Map.Lazy   as Map
@@ -154,11 +153,10 @@ prettyType n (TFunc ts tres) = wrapThis this $ "(" ++ args ++ " -> " ++ prettyTa
         wrapThis (Just t) s = prettyTab n t ++ "." ++ s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
 prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
-prettyType n (TCons TArray ts) = error $ "Malformed TArray: " ++ intercalate ", " (map (prettyTab n) ts)
 prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
 prettyType n (TCons (TName name) ts) = "<" ++ pretty name ++ ": " ++ (unwords $ map (prettyTab n) ts) ++ ">"
 prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
-prettyType n (TCons TStringMap ts) = error $ "Malformed TStringMap: " ++ intercalate ", " (map (prettyTab n) ts)  
+prettyType n (TCons tcn ts) = error $ "Malformed TCons: " ++ pretty tcn ++ intercalate ", " (map (prettyTab n) ts)
 prettyType t (TRow label list) =
     concat [ case label of
                  Just l' -> l' ++ "="

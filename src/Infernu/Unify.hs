@@ -332,7 +332,9 @@ unifyTryMakeRow r a leftBiased tRowList t2 =
   do let tRow = TRow Nothing tRowList
      res <- tryMakeRow t2
      case res of
-      Nothing -> unificationError a tRow t2
+      Nothing -> if leftBiased
+                 then unificationError a tRow t2
+                 else unificationError a t2 tRow
       Just rowType -> if leftBiased
                       then r a (Fix tRow) row'
                       else r a row' (Fix tRow)

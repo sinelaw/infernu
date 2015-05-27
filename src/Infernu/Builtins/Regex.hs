@@ -8,37 +8,20 @@ import Infernu.Types
 import Infernu.InferState
 import           Infernu.Lib (safeLookup)
 import Infernu.Prelude
-
-func :: Type -> Type -> Type -> Type
-func this x y = Fix $ TFunc [this, x] y
-
-string :: Type
-string = Fix $ TBody TString
-
-regex :: Type
-regex = Fix $ TBody TRegex
-
-number :: Type
-number = Fix $ TBody TNumber
-        
-ts :: t -> TScheme t
-ts t = TScheme [] $ qualEmpty t
-
-tvar :: Int -> Type
-tvar = Fix . TBody . TVar . Flex
+import Infernu.Builtins.Util
        
 regexMatch :: Type
 regexMatch = Fix . TRow (Just "RegexMatch")
              -- TODO: instead of quantifying 'this', it should be a recursive type (regexMatch itself)
-             . TRowProp (TPropGetIndex) (TScheme [Flex 0] $ qualEmpty $ func (tvar 0) number string)
-             . TRowProp (TPropName "index") (ts $ number)
-             . TRowProp (TPropName "input") (ts $ string)
+             . TRowProp (TPropGetIndex) (ts [0] $ func (tvar 0) number string)
+             . TRowProp (TPropName "index") (ty number)
+             . TRowProp (TPropName "input") (ty string)
              $ TRowEnd Nothing
 
 regexProps :: [(String, TypeScheme)]
 regexProps = 
-  [ ("source", ts string)
-  , ("exec", ts $ func regex string regexMatch)
+  [ ("source", ty string)
+  , ("exec", ty $ func regex string regexMatch)
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars

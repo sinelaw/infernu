@@ -8,37 +8,18 @@ import Infernu.Types
 import Infernu.InferState
 import           Infernu.Lib (safeLookup)
 import           Infernu.Prelude
-
-func :: Type -> Type -> Type -> Type
-func this x y = Fix $ TFunc [this, x] y
-
-funcN :: [Fix FType] -> Fix FType -> Fix FType
-funcN xs tres = Fix $ TFunc xs tres
-
-string :: Type
-string = Fix $ TBody TString
-
-number :: Type
-number = Fix $ TBody TNumber
-        
-ts :: t -> TScheme t
-ts t = TScheme [] $ qualEmpty t
-
-tvar :: Int -> Type
-tvar = Fix . TBody . TVar . Flex
-
-withTypeClass :: String -> a -> a -> TQual a
-withTypeClass n t t' = TQual { qualPred = [TPredIsIn { predClass = ClassName n, predType = t }], qualType = t' }
+import Infernu.Builtins.Util
+    
 
 stringProps :: [(String, TypeScheme)]
 stringProps = 
-  [ ("length", ts number)
-  , ("charAt", ts $ func string number string)
-  , ("charCodeAt", ts $ func string number number)
-  , ("concat", ts $ func string string string) -- TODO: concat really accepts a variable number of arguments
-  , ("indexOf", ts $ func string string number) -- TODO: optional parameter
-  , ("lastIndexOf", ts $ func string string number) -- TODO: optional parameter
-  , ("localeCompare", ts $ func string string number) -- TODO: optional parameters
+  [ ("length", ty number)
+  , ("charAt", ty $ func string number string)
+  , ("charCodeAt", ty $ func string number number)
+  , ("concat", ty $ func string string string) -- TODO: concat really accepty a variable number of arguments
+  , ("indexOf", ty $ func string string number) -- TODO: optional parameter
+  , ("lastIndexOf", ty $ func string string number) -- TODO: optional parameter
+  , ("localeCompare", ty $ func string string number) -- TODO: optional parameters
 
 -- To support 'match' we need to allow different result types, different for global and non-global
 -- regexes.  One possibility is to define two regex types RegexSingle and RegexGlobal and use
@@ -48,7 +29,7 @@ stringProps =
 --     type M RegexLocal = -- match result type for RegexLocal
 --     type M RegexGlobal = [String]
 -- 
---  , ("match", ts $ func string regex
+--  , ("match", ty $ func string regex
 
   , ("replace", TScheme [Flex 0] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)
   ]
@@ -56,7 +37,7 @@ stringProps =
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
 -- TODO: this code is actually pure, refactor to pure function and 'return' wrapper.
 stringRowType :: Infer (TRowList Type)
-stringRowType = TRowProp TPropGetIndex (ts $ func string number string) <$> namedProps
+stringRowType = TRowProp TPropGetIndex (ty $ func string number string) <$> namedProps
   where namedProps = foldM addProp (TRowEnd Nothing) $ stringProps
         addProp rowlist (name, propTS) =
           do allocNames <- forM (schemeVars propTS) $ \tvName -> ((tvName,) . Flex <$> fresh)
