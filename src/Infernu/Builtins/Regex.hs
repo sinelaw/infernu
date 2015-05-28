@@ -22,6 +22,12 @@ regexProps :: [(String, TypeScheme)]
 regexProps = 
   [ ("source", ty string)
   , ("exec", ty $ func regex string regexMatch)
+  , ("lastIndex", ty number)
+  , ("global", ty boolean)
+  , ("ignoreCase", ty boolean)
+  , ("multiline", ty boolean)
+  , ("source", ty string)
+  , ("test", ty $ func regex string boolean)
   ]
 
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
