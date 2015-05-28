@@ -1,14 +1,19 @@
-// FAIL valid/builtins/assign-ops-index.js:3:1*: Error:  |  |  |   Fai y valid/builtins/assign-ops-index.js
+// FAIL valid/arguably/if-undefined.js:8:3: Error:  |   Failed unifyin y valid/arguably/if-undefined.js
+// FAIL valid/builtins/assign-ops-index.js:3:1*: Error:  |   Failed un y valid/builtins/assign-ops-index.js
 // FAIL valid/builtins/regex-exec-2.js:5:5result : : Error:  |   Faile y valid/builtins/regex-exec-2.js
-// FAIL valid/map.js:11:5arnum : : Error:  |   Failed unifying:  ?fk.( y valid/map.js
-// FAIL valid/memoize.js:8:9*: Error:  |   Failed unifying:  Map dc.(( y valid/memoize.js
+// FAIL valid/fmap.js:6:5z : : Error:  |   Failed unifying:  EmptyThis y valid/fmap.js
+// FAIL valid/fmap-poly.js:6:5z : : Error:  |   Failed unifying:  Empt y valid/fmap-poly.js
+// FAIL valid/map.js:11:5arnum : : Error:  |   Failed unifying:  Empty y valid/map.js
+// FAIL valid/memoize.js:8:9*: Error:  |   Failed unifying:  Map df.(( y valid/memoize.js
 // FAIL valid/mutability/array-of-polyfuncs-eta-expanded.js:5:8: Error y valid/mutability/array-of-polyfuncs-eta-expanded.js
 // FAIL valid/mutability/array-of-polyfuncs.js:5:8: Error:  |   Failed y valid/mutability/array-of-polyfuncs.js
-// FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  ?ej.(({bl y valid/new-func.js
+// FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  EmptyThis y valid/new-func.js
 // FAIL valid/new-recursive.js:1:1*: Error:  |   Failed unifying:  { | y valid/new-recursive.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
-// FAIL valid/nothis-as-param.js:8:7: Error:  |   Failed unifying:  ?e y valid/nothis-as-param.js
+// FAIL valid/nothis-as-param.js:8:7: Error:  |   Failed unifying:  Em y valid/nothis-as-param.js
+// FAIL valid/poly-method-rank-3-nothis.js:17:6: Error:  |   Failed un y valid/poly-method-rank-3-nothis.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
-// FAIL valid/promise.js:30:23: Error:  |   Failed unifying:  {resolve y valid/promise.js
 // FAIL valid/promise-method-workaround.js:30:17r : : Error:  |   Fail y valid/promise-method-workaround.js
 // FAIL valid/promise-simple-api.js:1:1*: Error:  |   Failed unifying: y valid/promise-simple-api.js
+// FAIL  n invalid/builtins/string_constr.js
+// FAIL  n invalid/maybe-not-plus.js

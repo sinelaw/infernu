@@ -96,7 +96,7 @@ inferType' _ (ELit a lit) = do
              LitRegex{} -> rtb TRegex
              LitUndefined -> mkMaybe
              LitNull -> rtb TNull
-             LitEmptyThis -> mkMaybe
+             LitEmptyThis -> rtb TEmptyThis
 
   return (qualEmpty t, ELit (a, qualEmpty t) lit)
 inferType' env (EVar a n) =
@@ -176,7 +176,10 @@ inferType' env expr@(EAssign a n expr1 expr2) =
      lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
      traceLog $ "EAssign lvalueScheme: " ++ pretty lvalueScheme
      lvalueT <- instantiate lvalueScheme
-     (rvalueT, expr1') <- inferType env expr1
+     (rvalueT', expr1') <- inferType env expr1
+     let rvalueT = case qualType lvalueT of
+                       Fix (TCons TMaybe [l']) -> TQual { qualPred = qualPred rvalueT', qualType = Fix $ TCons TMaybe [qualType rvalueT'] }
+                       _ -> rvalueT'
      unify a (qualType lvalueT) (qualType rvalueT)
      (tRest, expr2') <- inferType env expr2
      traceLog $ "EAssign lvalueT: " ++ pretty lvalueT

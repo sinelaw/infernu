@@ -26,9 +26,9 @@ function Promise () {
         that.then = function(resolve, reject) { resolve(val); };
         that.resolve = errorFunc;
         that.reject = errorFunc;
-        for (i = 0; i < _thens.length; i++) {
-            _thens[i].resolve(val);
-        }
+        _thens.forEach(function(p,i,_) {
+            p.resolve(val);
+        });
         _thens = [];
     };
     
@@ -43,9 +43,9 @@ function Promise () {
         that.then = function(resolve, reject) { reject(ex); };
         that.resolve = errorFunc;
         that.reject = errorFunc;
-        for (i = 0; i < _thens.length; i++) {
-            _thens[i].reject(ex);
-        }
+        _thens.forEach(function(p,i,_) {
+            p.reject(ex);
+        });
         _thens = [];
     };
 
