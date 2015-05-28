@@ -184,23 +184,41 @@ The two instances of `Plus` currently defined are the types `Number` and `String
 
 ------------
 
+## Author
+
+Noam Lewis.
+
+## Road map
+
+The following needs to be done to make infernu reasonably usable:
+
+- Finish support for basic builtin JS apis.
+- Add support for browser / DOM / web apis.
+- Add ability to declare types for, or wrap external libraries.
+- Add support for some kind of module system.
+- Better error messages.
+
+
 ## Pending discussion
 
-Things that maybe need to be done, but have major drawbacks:
+Things that could be done, but may not be so important:
 
-- [ ] consider adding sum types with guards as pattern matchers. required because some functions, like array index access, can return 'undefined' (e.g. if index is out of range) - breaks parametricity and complicates the inference greatly.
-- [ ] allow empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?
-- [ ] allow defining constructor-object properties using the notation `obj.prototype.something = ...` - requires non-local context to deteremine the type of a constructor function.
-- [ ] find a reasonable solution for optional parameters - perhaps using an implicit "Maybe"-like type or implicit type unions, and require guards?
-- [ ] when concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere)
+- [ ] Allow empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues? General approach should be to add a translation pass that moves var decls down to the first assignment, but care must be taken to avoid escaping usage-before-assignment to an otherwise shadowed name.
+- [ ] When concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere) - nice to have, because currently recursive types are displayed opaquely anyway.
+
+More important but also more complicated or impossible to implement:
+
+- [ ] Find a reasonable solution for optional parameters - perhaps using an implicit "Maybe"-like type or implicit type unions, and require guards?
+- [ ] An (implicitly inferred) maybe type, for better safety of things like array access at index. Unfortunately because the maybe wrap/unwrap will have to implicit, this isn't easy to solve. See branch `maybe`.
+- [ ] Sum types with guards as pattern matchers. Required because some functions, like array index access, can return 'undefined' (e.g. if index is out of range) - breaks parametricity and complicates the inference greatly.
+- [ ] Allow defining constructor-object properties using the notation `obj.prototype.something = ...` - requires non-local context to deteremine the type of a constructor function.
 - [ ] support `arguments` (a tuple?) and function `bind`
 - [ ] Should we treat functions as objects with properties? the only properties they have are: length (very weird! we might as well leave it out), and call/bind/apply (which need special handling)
 
 ### Future
 
-- [ ] type annotations
-- [ ] add support for CommonJS modules
-- [ ] deal better with inferred polymorphic object properties - requires full rank-n unification
+- [ ] Type annotations
+- [ ] Add support for CommonJS modules
 
 p.s.  *(Formerly known as Inferno / Safe JS / SJS)*
 
