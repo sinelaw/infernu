@@ -1,8 +1,13 @@
 // FAIL valid/arguably/if-undefined.js:8:3: Error:  |   Failed unifyin y valid/arguably/if-undefined.js
 // FAIL valid/builtins/regex-exec-2.js:5:5result : : Error:  |   Faile y valid/builtins/regex-exec-2.js
 // FAIL valid/new-func.js:7:5: Error:  |   Failed unifying:  (({bla: e y valid/new-func.js
-// FAIL valid/new-recursive.js:1:1*: Error:  |   Failed unifying:  { | y valid/new-recursive.js
+// FAIL valid/new-recursive.js:1:1*: Error:  |   Failed unifying:  {ba y valid/new-recursive.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:8:7: Error:  |   Failed unifying:  (N y valid/nothis-as-param.js
+// FAIL valid/object-chaining.js:7:5o2 : : Error:  |   Failed unifying y valid/object-chaining.js
+// FAIL valid/poly-array-assign2.js:12:7: Error:  |   Failed unifying: y valid/poly-array-assign2.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
+// FAIL valid/poly-this-new.js:11:3: Error:  |   Failed unifying:  (Nu y valid/poly-this-new.js
+// FAIL valid/promise.js:60:5pb1 : : Error:  |   Failed unifying:  Pro y valid/promise.js
 // FAIL valid/promise-simple-api.js:1:1*: Error:  |   Failed unifying: y valid/promise-simple-api.js
+// FAIL valid/promise-simplified2.js:13:5pb1 : : Error:  |   Failed un y valid/promise-simplified2.js

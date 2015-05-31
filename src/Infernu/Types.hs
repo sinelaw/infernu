@@ -158,8 +158,9 @@ data TRowList t = TRowProp TProp (TScheme t) (TRowList t)
 data FType t = TBody TBody
              | TCons TConsName [t]
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
-               -- and always wrapped in a Tuple - but are expanded to a list here for convenience
-             | TFunc [t] t 
+               -- and always wrapped in a Tuple - but are expanded to a list here for convenience.
+               -- Functions types include their prototypes.
+             | TFunc [t] t (TRowList t)
                -- | Row types have an optional label, so that structural (non-nominal) types can
                -- have a name. The label has no effect on type checking.
              | TRow (Maybe String) (TRowList t)
@@ -248,10 +249,12 @@ instance VarNames t => VarNames (TRowList t) where
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
   freeTypeVars (Fix (TRow _ trlist)) = freeTypeVars trlist
+  freeTypeVars (Fix (TFunc targs tres tproto)) = freeTypeVars targs `Set.union` freeTypeVars tres
   freeTypeVars (Fix t) = freeTypeVars' t
 
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
   mapVarNames f (Fix (TRow l trlist)) = Fix $ TRow l (mapVarNames f trlist)
+  mapVarNames f (Fix (TFunc targs tres tproto)) = Fix $ TFunc (mapVarNames f targs) (mapVarNames f tres) (mapVarNames f tproto)
   mapVarNames f (Fix t) = Fix $ mapVarNames' f t
 
 instance VarNames (FType (Fix FType)) where
@@ -334,13 +337,14 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
   applySubst s ft@(Fix t) =
-    case t of
-     TBody (TVar n) -> substT' n t
-     TRow l r -> Fix $ TRow l $ applySubst s r
-     _ -> if ft `elem` Map.elems s
-          then ft
-          else Fix $ fmap (applySubst s) t
-     where substT' n defaultT = fromMaybe (Fix defaultT) $ Map.lookup n s
+      case t of
+          TBody (TVar n) -> substT' n t
+          TRow l r -> Fix $ TRow l $ applySubst s r
+          TFunc targs tres tproto -> Fix $ TFunc (applySubst s targs) (applySubst s tres) (applySubst s tproto)
+          _ -> if ft `elem` Map.elems s
+               then ft
+               else Fix $ fmap (applySubst s) t
+      where substT' n defaultT = fromMaybe (Fix defaultT) $ Map.lookup n s
     --traverse (fmap f) t
     --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
      --     f t = t

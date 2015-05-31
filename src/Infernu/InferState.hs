@@ -224,17 +224,17 @@ isRecParamOnly n1 typeId t1 =
    TBody _ -> Just []
    TCons (TName typeId') subTs -> recurseIntoNamedType typeId' subTs
    TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
-   TFunc ts tres -> isRecParamOnly n1 Nothing tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
+   TFunc ts tres tproto -> isRecParamOnly n1 Nothing tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts) `mappend` isRecParamRecList n1 tproto
    TRow _ rlist -> isRecParamRecList n1 rlist
-     where isRecParamRecList n' rlist' =
-             case rlist' of
-              TRowEnd _ -> Just []
-              -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
-              -- TODO: Can we safely ignore preds here?
-              TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing $ qualType t') (isRecParamRecList n' rlist'')
-              TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
   where recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
-
+        isRecParamRecList n' rlist' =
+            case rlist' of
+                TRowEnd _ -> Just []
+                -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
+                -- TODO: Can we safely ignore preds here?
+                TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing $ qualType t') (isRecParamRecList n' rlist'')
+                TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
+            
 dropAt :: Integral a => a -> [b] -> [b]
 dropAt _ [] = []
 dropAt 0 (_:xs) = xs
@@ -242,23 +242,23 @@ dropAt n (_:xs) = dropAt (n-1) xs
 
 replaceRecType :: TypeId -> TypeId -> Int -> Type -> Type
 replaceRecType typeId newTypeId indexToDrop t1 =
-    let replace' = replaceRecType typeId newTypeId indexToDrop
-        mapTs' = map replace'
-    in  case unFix t1 of
-            TBody _ -> t1
-            TCons (TName typeId') subTs -> if typeId == typeId'
-                                          then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
-                                          else t1
-            TCons n subTs -> Fix $ TCons n $ mapTs' subTs
-            TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
-            TRow l rlist -> Fix $ TRow l $ go rlist
-             where go rlist' =
-                     case rlist' of
-                      TRowEnd _ -> rlist'
-                      TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (go rlist'')
-                      TRowRec tid ts -> if typeId == tid
-                                        then TRowRec newTypeId $ dropAt indexToDrop ts
-                                        else rlist'
+    case unFix t1 of
+        TBody _ -> t1
+        TCons (TName typeId') subTs -> if typeId == typeId'
+                                       then Fix $ TCons (TName newTypeId) $ dropAt indexToDrop subTs
+                                       else t1
+        TCons n subTs -> Fix $ TCons n $ mapTs' subTs
+        TFunc ts tres tproto -> Fix $ TFunc (mapTs' ts) (replace' tres) (replaceInRow' tproto)
+        TRow l rlist -> Fix $ TRow l $ replaceInRow' rlist
+    where replace' = replaceRecType typeId newTypeId indexToDrop
+          mapTs' = map replace'
+          replaceInRow' rlist' =
+              case rlist' of
+                  TRowEnd _ -> rlist'
+                  TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (replaceInRow' rlist'')
+                  TRowRec tid ts -> if typeId == tid
+                                    then TRowRec newTypeId $ dropAt indexToDrop ts
+                                    else rlist'
 
 allocNamedType :: Source -> TVarName -> Type -> Infer Type
 allocNamedType a n t =
@@ -389,11 +389,10 @@ skolemiseScheme (TScheme tvs ty)
        return (sks1 ++ sks2, ty')
 
 skolemiseType :: QualType -> Infer ([TVarName], QualType)
-skolemiseType q@(TQual ps (Fix (TFunc args_ty res_ty)))
+skolemiseType q@(TQual ps (Fix (TFunc args_ty res_ty proto_ty)))
   = do (sks, TQual ps' res_ty'') <- skolemiseType (qualEmpty res_ty)
-       return (sks, q { qualPred = ps ++ ps',  qualType = Fix $ TFunc args_ty res_ty'' })
-skolemiseType ty
-  = return ([], ty)
+       return (sks, q { qualPred = ps ++ ps',  qualType = Fix $ TFunc args_ty res_ty'' proto_ty})
+skolemiseType ty = return ([], ty)
 
 ----------------------------------------------------------------------
 -- | Generalizes a type to a type scheme, i.e. wraps it in a "forall" that quantifies over all

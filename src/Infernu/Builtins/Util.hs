@@ -5,10 +5,10 @@ import Infernu.Types
 import           Infernu.Prelude
 
 func :: Type -> Type -> Type -> Type
-func this x y = Fix $ TFunc [this, x] y
+func this x y = Fix $ TFunc [this, x] y (TRowEnd Nothing)
 
 funcN :: [Fix FType] -> Fix FType -> Fix FType
-funcN xs tres = Fix $ TFunc xs tres
+funcN xs tres = Fix $ TFunc xs tres (TRowEnd Nothing)
 
 string :: Type
 string = Fix $ TBody TString

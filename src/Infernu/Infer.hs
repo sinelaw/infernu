@@ -101,7 +101,8 @@ inferType' env (EAbs a argNames e2) =
      env' <- foldM (\e (n, t) -> addVarScheme e n $ schemeEmpty t) env $ zip argNames argTypes
      (t1, e2') <- inferType env' e2
      pred' <- unifyPredsL a $ qualPred t1
-     let t = TQual pred' $ Fix $ TFunc argTypes (qualType t1)
+     rowConstraintVar <- RowTVar <$> freshFlex
+     let t = TQual pred' $ Fix $ TFunc argTypes (qualType t1) (TRowEnd $ Just rowConstraintVar)
      return (t, EAbs (a, t) argNames e2')
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> freshFlex
@@ -113,7 +114,8 @@ inferType' env (EApp a e1 eArgs) =
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:tArgs
-     unify a (Fix $ TFunc (map qualType tArgs) tvar) (qualType t1)
+     rowConstraintVar <- RowTVar <$> freshFlex
+     unify a (Fix $ TFunc (map qualType tArgs) tvar (TRowEnd $ Just rowConstraintVar)) (qualType t1)
      traceLog $ "Inferred preds: " ++ intercalate ", " (map pretty preds)
      tvar' <- do  pred' <- unifyPredsL a preds
                   tvarSubsted <- applyMainSubst tvar
@@ -133,10 +135,10 @@ inferType' env (ENew a e1 eArgs) =
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1 : map fst argsTE
-     unify a (qualType t1) (Fix $ TFunc tArgs resT)
-     -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> freshFlex
      unify a (Fix . TRow Nothing . TRowEnd $ Just rowConstraintVar) thisT
+     unify a (qualType t1) (Fix $ TFunc tArgs resT (TRowEnd $ Just rowConstraintVar))
+     -- constrain 'this' to be a row type:
      -- close the row type
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
      unify a thisT (closeRow resolvedThisT)
@@ -189,7 +191,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      -- polymorphic.
      let rvalueSchemeFloated = TScheme [] TQual { qualPred = [], qualType = qualType rvalueT }
          rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
-     unify a (qualType objT) rvalueRowType >> getState
+     unify a (qualType objT) rvalueRowType
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
      preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
      let tRes = TQual preds $ qualType expr2T
@@ -254,15 +256,29 @@ inferType' env (EProp a eObj propName) =
                  Just knownPropTypeScheme -> instantiate knownPropTypeScheme
                  Nothing -> propTypeIfMono
 
-     rowType <- case unFix (qualType tObj) of
-                    TRow _ tRowList -> return $ Just tRowList
-                    _ -> tryMakeRow $ unFix (qualType tObj)
-     propType <-
-         case rowType of
-             Just tRowList -> propTypefromTRow tRowList
-             _ -> propTypeIfMono
+         useTryMakeRow = do row' <- tryMakeRow $ unFix (qualType tObj)
+                            return (row', Nothing)
 
-     return (propType, EProp (a,propType) eObj' propName)
+
+     traceLog $ "EProp: object has type: " ++ pretty tObj
+
+     (rowType, propType) <-
+         case unFix (qualType tObj) of
+             TRow _ tRowList -> return $ (Just tRowList, Nothing)
+             TFunc _ _ tproto ->
+                 if propName == TPropName "prototype"
+                 then do traceLog $ "Found prototype of function: " ++ pretty (TRow Nothing tproto)
+                         return $ (Just tproto, Just $ qualEmpty $ Fix $ TRow Nothing $ tproto)
+                 else useTryMakeRow
+             _ -> useTryMakeRow
+     propType' <-
+         case propType of
+             Nothing -> case rowType of
+                            Just tRowList -> propTypefromTRow tRowList
+                            _ -> propTypeIfMono
+             Just p' -> return p'
+
+     return (propType', EProp (a,propType') eObj' propName)
 
 unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do

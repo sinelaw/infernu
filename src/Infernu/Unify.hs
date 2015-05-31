@@ -259,12 +259,12 @@ unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
 unify' _ a t1@(TCons _ _) t2@(TBody _) = unificationError a t1 t2
 
 -- | A function vs. a simple type
-unify' _ a t1@(TBody _) t2@(TFunc _ _) = unificationError a t1 t2
-unify' _ a t1@(TFunc _ _) t2@(TBody _) = unificationError a t1 t2
+unify' _ a t1@(TBody _) t2@(TFunc _ _ _) = unificationError a t1 t2
+unify' _ a t1@(TFunc _ _ _) t2@(TBody _) = unificationError a t1 t2
 
 -- | A function vs. a type constructor
-unify' _ a t1@(TFunc _ _) t2@(TCons _ _) = unificationError a t1 t2
-unify' _ a t1@(TCons _ _) t2@(TFunc _ _) = unificationError a t1 t2
+unify' _ a t1@(TFunc _ _ _) t2@(TCons _ _) = unificationError a t1 t2
+unify' _ a t1@(TCons _ _) t2@(TFunc _ _ _) = unificationError a t1 t2
 
 -- | Two type constructors
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
@@ -274,19 +274,20 @@ unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
         Just ts -> unifyl recurse a ts
 
 -- | Two functions
-unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
+unify' recurse a t1@(TFunc ts1 tres1 tproto1) t2@(TFunc ts2 tres2 tproto2) =
     case matchZip ts2 ts1 of
         Nothing -> unificationError a t1 t2
         Just ts -> do  unifyl recurse a ts
                        recurse a tres1 tres2
+                       recurse a (Fix $ TRow Nothing tproto1) (Fix $ TRow Nothing tproto2)
 
 -- | Type constructor vs. row type
 unify' r a (TRow _ tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TCons _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
 unify' r a (TRow _ tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
 unify' r a t1@(TBody _)   (TRow _ tRowList)  = unifyTryMakeRow r a False tRowList t1
-unify' r a (TRow _ tRowList) t2@(TFunc _ _)  = unifyTryMakeRow r a True  tRowList t2
-unify' r a t1@(TFunc _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
+unify' r a (TRow _ tRowList) t2@(TFunc _ _ _)  = unifyTryMakeRow r a True  tRowList t2
+unify' r a t1@(TFunc _ _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
 
 
 -- | Two row types
