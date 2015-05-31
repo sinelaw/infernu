@@ -1,5 +1,4 @@
-function Func() {
-    this.thing = 1;
-    this.func = new Func();
+function Foo() {
+    this.bar = function() { return new Foo(); };
 }
 
