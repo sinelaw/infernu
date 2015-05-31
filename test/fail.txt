@@ -3,3 +3,4 @@
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:8:7: Error:  |   Failed unifying:  (N y valid/nothis-as-param.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |   Failed  y valid/poly-method-recursive-this.js
+// FAIL  n invalid/promise-simple-api.js
