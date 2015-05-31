@@ -47,6 +47,7 @@ closeRowList :: TRowList Type -> TRowList Type
 closeRowList (TRowProp n t rest) = TRowProp n t (closeRowList rest)
 closeRowList (TRowEnd _) = TRowEnd Nothing
 -- TODO: Handle TRowRec, by defining a new named type in which all row types within are closed (recursively).
+closeRowList tr = tr
 
 -- | Replaces a top-level open row type with the closed equivalent.
 -- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
@@ -139,7 +140,7 @@ inferType' env (ENew a e1 eArgs) =
      unify a (Fix . TRow Nothing . TRowEnd $ Just rowConstraintVar) thisT
      -- close the row type
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
-     unify a thisT (closeRow resolvedThisT)
+--     unify a thisT (closeRow resolvedThisT)
      -- TODO: If the function returns a row type, it should be the resulting type; other it should be 'thisT'
      preds' <- unifyPredsL a preds
      let thisT' = TQual preds' thisTLabeled
@@ -152,6 +153,11 @@ inferType' env (ELet a n e1 e2) =
      recEnv <- addVarScheme env n $ schemeEmpty recType
      (t1, e1') <- inferType recEnv e1
      unify a (qualType t1) recType
+     recType' <- applyMainSubst recType
+     case unFix recType' of
+         TFunc (thisT:_) _ -> do traceLog $ "Closing 'this' row type: " ++ pretty thisT ++ "\n\twhile inferring type of " ++ pretty n ++ "\n\twhich has type: " ++ pretty recType'
+                                 unify a thisT (closeRow thisT)
+         _ -> return ()
      (t', preds) <- generalize e1 env t1
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2

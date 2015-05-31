@@ -1,23 +1,22 @@
 function Promise() {
     var thens = [];
     var that = this;
-    function applyResolution(cb, promise, val) {
-        return promise.resolve(cb(val));
-    }
-    this.then = function(cb) {
-        var promise = new Promise() ;
-        thens.push({ cb: cb, promise: promise});
-        return promise;
+    that.then = function(cb) {
+        var p = new Promise();
+        thens.push(function(val) { p.resolve(cb(val)); });
+        return p;
     };
-    this.resolve = function(val) {
+    that.resolve = function(val) {
         var i = 0;
         for (i = 0; i < thens.length; i++) {
-//            applyResolution(thens[i].cb, thens[i].promise, val);
+            thens[i](val);
         }
         that.then = function(cb) {
-            var promise = new Promise();
-  //          applyResolution(cb, promise, val);
-            return promise;
+            var p = new Promise();
+            p.resolve(cb(val));
+            return p;
         };
     };
 }; 
+
+
