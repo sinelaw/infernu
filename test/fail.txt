@@ -4,5 +4,4 @@
 // FAIL valid/new-recursive-prototype.js:5:5: Error:  |   Failed unify y valid/new-recursive-prototype.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |   Failed unifying y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:8:7: Error:  |   Failed unifying:  (N y valid/nothis-as-param.js
-// FAIL valid/object-chaining.js:6:8: Error:  |   Failed unifying:  Ob y valid/object-chaining.js
 // FAIL valid/poly-method-recursive-this.js:10:16: Error:  |   Failed  y valid/poly-method-recursive-this.js

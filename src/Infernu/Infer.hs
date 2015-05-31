@@ -14,13 +14,14 @@ module Infernu.Infer
     where
 
 
-import           Control.Monad      (foldM, forM)
+import           Control.Monad      (foldM, forM, when)
 import qualified Data.Graph.Inductive as Graph
 import           Data.Map.Lazy      (Map)
 import qualified Data.Map.Lazy      as Map
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as Set
+import           Data.Char          (isUpper)
 
 import           Data.List          (intercalate)
 
@@ -154,10 +155,11 @@ inferType' env (ELet a n e1 e2) =
      (t1, e1') <- inferType recEnv e1
      unify a (qualType t1) recType
      recType' <- applyMainSubst recType
-     case unFix recType' of
-         TFunc (thisT:_) _ -> do traceLog $ "Closing 'this' row type: " ++ pretty thisT ++ "\n\twhile inferring type of " ++ pretty n ++ "\n\twhich has type: " ++ pretty recType'
-                                 unify a thisT (closeRow thisT)
-         _ -> return ()
+     when (isUpper $ head n) $ -- TODO hacky special treatment of names that start with uppercase letters
+         do case unFix recType' of
+                TFunc (thisT:_) _ -> do traceLog $ "Closing 'this' row type: " ++ pretty thisT ++ "\n\twhile inferring type of " ++ pretty n ++ "\n\twhich has type: " ++ pretty recType'
+                                        unify a thisT (closeRow thisT)
+                _ -> return ()
      (t', preds) <- generalize e1 env t1
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
