@@ -265,7 +265,10 @@ allocNamedType a n t =
   do typeId <- TypeId <$> fresh
      let namedTypeParams = map (Fix . TBody . TVar) . Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          namedType = TCons (TName typeId) namedTypeParams
-         target = replaceFix (TBody (TVar n)) namedType t
+         target = applySubst (singletonSubst n $ Fix namedType) t
+     traceLog $ "===> replacing " ++ pretty n ++ " => " ++ pretty namedType
+     traceLog $ "===> allocNamedType: source = " ++ pretty t
+     traceLog $ "===> allocNamedType: target = " ++ pretty target
      (scheme, ps) <- unsafeGeneralize Map.empty $ qualEmpty target
      traceLog $ "===> Generated scheme for mu type: " ++ pretty scheme
      currentNamedTypes <- filter (\(_, ts) -> areEquivalentNamedTypes (Fix namedType, scheme) ts) . Map.toList . namedTypes <$> get
@@ -299,7 +302,7 @@ resolveSimpleMutualRecursion n t tid ix =
 getNamedType :: Source -> TVarName -> Type -> Infer Type
 getNamedType a n t =
   do let recTypeParamPos = isRecParamOnly n Nothing t
-     traceLog $ "isRecParamOnly: " ++ show n ++ " in " ++ pretty t ++ ": " ++ show (fmap show recTypeParamPos)
+     traceLog $ "isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ show (fmap show recTypeParamPos)
      case recTypeParamPos of
       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
       -- either the variable appears outside a recursive type's type parameter list, or it appears

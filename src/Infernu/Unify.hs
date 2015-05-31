@@ -447,7 +447,7 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                    do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " recursive in: " ++ pretty t ++ ", found enclosing row type: " ++ " = " ++ pretty rowT)
                       recVar <- Flex <$> fresh
                       let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
-                          recT = replaceFix (TBody (TVar n)) (unFix withRecVar) rowT
+                          recT = applySubst (singletonSubst n $ withRecVar) rowT
                       namedType <- getNamedType a recVar recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
