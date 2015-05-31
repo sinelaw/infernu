@@ -475,7 +475,7 @@ unifyPredsL a ps = Set.toList . Set.fromList . catMaybes <$>
                           Just ambig ->
                               do  addPendingUnification ambig
                                   return $ Just p
-                                                
+
 isRight :: Either a b -> Bool
 isRight (Right _) = True
 isRight _  = False

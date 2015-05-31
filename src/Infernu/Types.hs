@@ -115,11 +115,11 @@ data Exp a = EVar a EVarName
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
-                      
+
 data TVarName = Flex Int | Skolem Int
               deriving (Show, Eq, Ord)
 
-unTVarName :: TVarName -> Int                       
+unTVarName :: TVarName -> Int
 unTVarName (Flex x) = x
 unTVarName (Skolem x) = x
 
@@ -159,7 +159,7 @@ data FType t = TBody TBody
              | TCons TConsName [t]
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
-             | TFunc [t] t 
+             | TFunc [t] t
                -- | Row types have an optional label, so that structural (non-nominal) types can
                -- have a name. The label has no effect on type checking.
              | TRow (Maybe String) (TRowList t)
@@ -172,7 +172,7 @@ newtype Source = Source (GenInfo, Pos.SourcePos)
 
 emptySource :: Source
 emptySource = Source (GenInfo True Nothing, Pos.initialPos "")
-               
+
 data TypeError = TypeError { source :: Source, message :: String }
                deriving (Show, Eq, Ord)
 
@@ -523,7 +523,7 @@ instance Substable InferState where
                        , mainSubst = s `composeSubst` mainSubst is
                        , varInstances = Graph.nmap (applySubst s)  $ varInstances is
                        }
-            
+
 -- | Adds a pair of equivalent items to an equivalence map.
 -- >>> import Infernu.Pretty
 -- >>> let m1 = addEquivalence 1 2 Map.empty
