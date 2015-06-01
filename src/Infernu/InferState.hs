@@ -317,13 +317,16 @@ unrollNameByScheme ts qvars = applySubst subst
                      Nothing -> error "Assertion failed: Expected number of types = number of tvars when unrolling a recursive type."
         subst = foldr (\(tvar,destType) s -> singletonSubst tvar destType `composeSubst` s) nullSubst assocs
 
+getNamedTypeScheme :: Source -> TypeId -> Infer TypeScheme
+getNamedTypeScheme a tid = (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
+
 -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
 -- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh
 -- type variables.
 unrollName :: Source -> TypeId -> [Type] -> Infer QualType
 unrollName a tid ts =
     -- TODO: Is it safe to ignore the scheme preds here?
-    do (TScheme qvars t) <- (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
+    do (TScheme qvars t) <- getNamedTypeScheme a tid
        return $ unrollNameByScheme ts qvars t
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).

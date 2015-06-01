@@ -45,20 +45,16 @@ getAnnotations = foldr (:) []
 
 ----------------------------------------------------------------------
 
-closeRowList = decycle2 closeRowList'
-
-closeRowList' :: Maybe (Source -> TRowList Type -> Infer (TRowList Type))
-                 -> Source -> TRowList Type -> Infer (TRowList Type)
-closeRowList' Nothing _ (TRowRec _ _) = return $ TRowEnd Nothing
-closeRowList' Nothing _ rl = return $ rl
-closeRowList' (Just recurse) a (TRowProp n t rest) = TRowProp n t <$> recurse a rest
-closeRowList' (Just recurse) a (TRowEnd _) = return $ TRowEnd Nothing
--- TODO: Handle TRowRec, by defining a new named type in which all row types within are closed (recursively).
-closeRowList' (Just recurse) a (TRowRec tid ts) =
-    do t <- unrollName a tid ts
-       case unFix $ qualType $ t of
-           (TRow _ l) -> recurse a l
-           _ -> error $ "Expected a row type, got: " ++ pretty t
+closeRowList :: Bool -> Source -> TRowList Type -> Infer (TRowList Type)
+closeRowList unrollRec a   (TRowProp p t l) = TRowProp p t <$> closeRowList unrollRec a l
+closeRowList _         _   (TRowEnd _)      = return $ TRowEnd Nothing
+closeRowList unrollRec a r@(TRowRec tid ts) = 
+  if not unrollRec
+  then return $ r
+  else do qt <- unrollName a tid ts
+          case qualType qt of
+            Fix (TRow _ r') -> closeRowList False a r'
+            _ -> error $ "Expected row type, got: " ++ pretty qt
 
 -- | Replaces a top-level open row type with the closed equivalent.
 -- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
@@ -68,7 +64,7 @@ closeRowList' (Just recurse) a (TRowRec tid ts) =
 -- >>> pretty $ closeRow (Fix $ TFunc [Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "a.a" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2))] (Fix $ TBody TString))
 -- "{a: {a.a: Number, ..b}, ..c}.(() -> String)"
 closeRow :: Source -> Type -> Infer Type
-closeRow a (Fix (TRow l r)) = Fix . TRow (fmap (++"*") l) <$> closeRowList a r
+closeRow a (Fix (TRow l r)) = Fix . TRow (fmap (++"*") l) <$> closeRowList True a r
 closeRow _ t = return t
 
 ----------------------------------------------------------------------
@@ -165,17 +161,22 @@ inferType' env (ELet a n e1 e2) =
      (t1, e1') <- inferType recEnv e1
      unify a (qualType t1) recType
      recType' <- applyMainSubst recType
-     when (isUpper $ head n) $ -- TODO hacky special treatment of names that start with uppercase letters
-         do case unFix recType' of
-                TFunc (thisT:_) _ -> do closedThisT <- closeRow a thisT
-                                        traceLog $ "Closing 'this' row type: " ++ pretty thisT ++ "\n\twhile inferring type of " ++ pretty n ++ "\n\twhich has type: " ++ pretty recType'
-                                        traceLog $ "\tClosed: " ++ pretty closedThisT
-                                        unify a thisT closedThisT
-                _ -> return ()
-     (t', preds) <- generalize e1 env t1
+     -- TODO hacky special treatment of names that start with uppercase letters. should perhaps be
+     -- moved to translation layer.
+     t1' <- case (isUpper $ head n, unFix recType') of
+                (True, TFunc (thisT:argsT) resT) ->
+                  do closedThisT <- closeRow a thisT
+                     traceLog $ "Closing 'this' row type: " ++ pretty thisT
+                       ++ "\n\twhile inferring type of " ++ pretty n
+                       ++ "\n\twhich has type: " ++ pretty recType'
+                     traceLog $ "\tClosed: " ++ pretty closedThisT
+                     unify a thisT closedThisT
+                     return $ t1 { qualType = Fix $ TFunc (closedThisT:argsT) resT }
+                _ -> return $ t1
+     (t', preds) <- generalize e1 env t1'
      env' <- addVarScheme env n t'
      (t2, e2') <- inferType env' e2
-     preds' <- unifyPredsL a $ preds ++ concatMap qualPred [t1, t2]
+     preds' <- unifyPredsL a $ preds ++ concatMap qualPred [t1', t2]
      let resT = TQual preds' $ qualType t2
      return (resT, ELet (a, resT) n e1' e2')
 -- | Handling of mutable variable assignment.
