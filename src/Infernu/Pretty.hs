@@ -5,7 +5,7 @@ module Infernu.Pretty where
 
 import           Infernu.Types
 import           Infernu.Prelude
-    
+
 import           Data.Char       (chr, ord)
 import qualified Data.Digits     as Digits
 -- import           Data.List       (intercalate)
@@ -14,7 +14,7 @@ import qualified Data.Graph.Inductive      as Graph
 
 import qualified Data.Set        as Set
 import qualified Text.Parsec.Pos as Pos
-    
+
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 -- tab :: Int -> String
@@ -49,7 +49,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 -- pretty = prettyTab 0
 
 
-    
+
 instance Pretty Pos.SourcePos where
     pretty p = string (Pos.sourceName p) <> string ":" <> (string . show $ Pos.sourceLine p) <> string ":" <> (string . show $ Pos.sourceColumn p)
 
@@ -61,7 +61,7 @@ instance Pretty Source where
         <> pretty pos
         <> maybe empty (\x -> string ":" <> string x <> string ":") (declName genInfo)
 
-                                    
+
 instance Pretty LitVal where
     pretty (LitNumber x) = string $ show x
     pretty (LitBoolean x) = string $ show x
@@ -86,7 +86,7 @@ instance Pretty (Exp a) where
               rest eBody = case eBody of
                                ELet _ nb e1b e2b -> letLine nb e1b e2b
                                _ -> [string "in" <+> align (pretty eBody)]
-            
+
     pretty (ELit _ l) = pretty l
     pretty (EAssign _ n e1 e2) = align $ vsep [ pretty n <+> string ":=" <+> pretty e1 <> string ";"
                                               , pretty e2]
@@ -105,41 +105,52 @@ instance Pretty (Exp a) where
     pretty (EStringMap _ exprs) = encloseSep langle rangle comma $ map (\(n,v) -> pretty n <+> string "=>" <+> pretty v) exprs
 
 
------------------------------------------------------------------------------                                  
-                                  
+-----------------------------------------------------------------------------
+
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + (n - 1))
-          
-ptv :: Int -> String          
+
+ptv :: Int -> String
 ptv x = foldr ((++) . (:[]) . toChr)  [] (Digits.digits 26 (x + 1))
-        
+
+colorFuncs = [ red
+             , green
+             , yellow
+             , blue
+             , magenta
+             , cyan
+             , white
+             ]
+
+colorBy n = colorFuncs!!(n `mod` length colorFuncs)
+
 -- |
 -- >>> pretty (0 :: TVarName)
 -- "a"
 -- >>> pretty (26 :: TVarName)
 -- "aa"
 instance Pretty TVarName where
-    pretty tvn = string $ case tvn of
-                              Flex n -> ptv n
-                              Skolem n -> '!' : ptv n
+    pretty tvn = bold $ case tvn of
+                            Flex n -> colorBy n $ string $ ptv n
+                            Skolem n -> colorBy n $ string $ '!' : ptv n
 
 -- instance Pretty Bool where
 --   prettyTab _ x = show x
 
 instance Pretty TypeId where
-    pretty (TypeId n) = text $ 'R' :  ptv n
+    pretty (TypeId n) = dullred $ text $ 'R' :  ptv n
 
 instance Pretty TBody where
   pretty (TVar n) = pretty n
-  pretty x = text $ case show x of
-                        'T':xs -> xs
-                        xs -> xs
+  pretty x = bold $ text $ case show x of
+                               'T':xs -> xs
+                               xs -> xs
 
 instance Pretty TConsName where
-  pretty = text . show
+  pretty = dullgreen . text . show
 
 instance Pretty RowTVar where
-  pretty t = pretty (getRowTVar t)
+  pretty t = dullblue $ pretty (getRowTVar t)
 
 instance Show t => Pretty (FlatRowEnd t) where
   pretty = text . show
@@ -149,7 +160,7 @@ instance Pretty Type where
 
 instance Pretty (FType Type) where
   pretty = prettyType
-                
+
 prettyType :: FType Type -> Doc
 prettyType (TBody t) = pretty t
 prettyType (TFunc ts tres) = wrapThis this $ parens $ args <+> string "->" <+> pretty tres
@@ -187,13 +198,13 @@ instance Pretty TProp where
     pretty (TPropName n) = pretty n
     pretty TPropGetIndex = text "get[]"
     pretty TPropSetIndex = text "set[]"
-                                
+
 instance Pretty ClassName where
     pretty (ClassName c) = text c
-                    
+
 instance (Pretty t) => Pretty (TPred t) where
     pretty (TPredIsIn cn t) = pretty cn <+> pretty t
-    
+
 instance (VarNames t, Pretty t) => Pretty (TQual t) where
     pretty (TQual [] t) = pretty t
     pretty (TQual preds t) = pretty preds <+> pretty "=>" <+> align (pretty t)
@@ -214,7 +225,7 @@ instance (Pretty k) => Pretty (Set.Set k) where
 
 -- instance Pretty GenInfo where
 --     prettyTab _ g = show g
-    
+
 instance Pretty TypeError where
     pretty (TypeError s m) = pretty s <> text ": Error:" <+> line <+> indent 4 (pretty m)
 
@@ -229,16 +240,15 @@ instance (Ord t, VarNames t, Pretty t) => Pretty (Class t) where
 
 instance (Show a, Show b) => Pretty (Graph.Gr a b) where
     pretty = text . Graph.prettify
-                  
+
 instance Pretty InferState where
     pretty (InferState ns sub vs vi tn cs pu) = text "InferState"
                                                 <+> (align . encloseSep lbrace rbrace comma
-                                                     $ [ fill 10 (string "nameSource: ") <+> pretty ns 
-                                                       , fill 10 (string "subst: ") <+> pretty sub 
-                                                       , fill 10 (string "varSchemes: ") <+> pretty vs 
-                                                       , fill 10 (string "varInstances: ") <+> pretty vi 
-                                                       , fill 10 (string "namedTypes: ") <+> pretty tn 
-                                                       , fill 10 (string "pendingUni: ") <+> pretty pu 
-                                                       , fill 10 (string "classes: ") <+> pretty cs 
+                                                     $ [ fill 10 (string "nameSource: ") <+> pretty ns
+                                                       , fill 10 (string "subst: ") <+> pretty sub
+                                                       , fill 10 (string "varSchemes: ") <+> pretty vs
+                                                       , fill 10 (string "varInstances: ") <+> pretty vi
+                                                       , fill 10 (string "namedTypes: ") <+> pretty tn
+                                                       , fill 10 (string "pendingUni: ") <+> pretty pu
+                                                       , fill 10 (string "classes: ") <+> pretty cs
                                                        ])
-

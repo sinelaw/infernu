@@ -18,6 +18,8 @@ import           Infernu.Infer                (getAnnotations, minifyVars,
 import           Infernu.Parse                (translate)
 import           Infernu.Types (GenInfo(..), Source(..))
 
+import Text.PrettyPrint.ANSI.Leijen (plain)
+    
 infernuPlugin :: Module ()
 infernuPlugin = newModule
     { moduleCmds = return
@@ -35,12 +37,12 @@ sayType :: String -> String
 sayType rest = case  runTypeInference . fmap Source . translate . ES3.unJavaScript <$> ES3Parser.parseFromString rest of
                 Left e -> show e
                 Right res -> case getAnnotations <$> res of
-                              Left e' -> pretty e'
+                              Left e' -> show $ pretty e'
                               Right [] -> show "There is nothing there."
                               Right xs -> concat . intersperse "\n" $ filterGen xs
                                   where filterGen = catMaybes . map (\(Source (GenInfo g n, _), t) ->
                                                                          case (g,n) of
-                                                                             (False, Just n) -> Just (pretty n ++ " : " ++ (pretty $ minifyVars t))
+                                                                             (False, Just n) -> Just (show (plain $ pretty n) ++ " : " ++ (show $ plain $ pretty $ minifyVars t))
                                                                              _ -> Nothing
                                                                     )
 
