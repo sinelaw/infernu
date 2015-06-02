@@ -191,7 +191,7 @@ prettyType (TRow label list) =
              <> rbrace
            ]
   where (props, r) = flattenRow list
-        printProp' (n,v) = fill 6 (pretty n) <> string ":" <+> align (pretty v)
+        printProp' (n,v) = pretty n <> string ":" <+> align (pretty v)
         body' = map printProp' $ Map.toList props
 
 instance Pretty TProp where

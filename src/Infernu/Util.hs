@@ -9,7 +9,7 @@ import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
-import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, squotes)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, squotes, renderPretty, Doc, displayS)
 
 import           Infernu.Prelude
 import           Infernu.Options             (Options(..))
@@ -58,6 +58,11 @@ checkFiles options fileNames = do
       res = fmap getAnnotations expr''
   return res
 
+showWidth :: Int -> Doc -> String
+showWidth w x   = displayS (renderPretty 0.4 w x) ""
+
+showDoc = showWidth 120
+                  
 annotatedSource :: [(Source, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode
@@ -65,4 +70,4 @@ annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filt
         unGenInfo = catMaybes . map (\(Source (g, s), q) -> fmap (\n -> (n, s, q)) $ declName g)
         filterGen :: [(Source, QualType)] -> [(Source, QualType)]
         filterGen = filter (\(Source (g, _), _) -> not . isGen $ g)
-        prettyRes = Set.toList . Set.fromList . fmap (\(n, s, q) -> (s, show $ pretty n <+> string ":" <+> pretty q))
+        prettyRes = Set.toList . Set.fromList . fmap (\(n, s, q) -> (s, showDoc $ pretty n <+> string ":" <+> pretty q))
