@@ -17,6 +17,7 @@ import           Data.Maybe           (catMaybes, mapMaybe)
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
 
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, Doc)
 
 import           Infernu.Prelude
 import           Infernu.Builtins.Array (arrayRowType)
@@ -170,19 +171,17 @@ decycledUnify = decycle3 unify''
 unlessEq :: (Monad m, Eq a) => a -> a -> m () -> m ()
 unlessEq x y = unless (x == y)
 
-mkTypeErrorMessage :: Pretty a => a -> a -> Maybe TypeError -> String
+mkTypeErrorMessage :: Pretty a => a -> a -> Maybe TypeError -> Doc
 mkTypeErrorMessage t1 t2 mte =
-    concat [ "\n"
-           , "  Failed unifying:  "
-           , prettyTab 6 t1
-           , "\n"
-           , "             With:  "
-           , prettyTab 6 t2
-           , case mte of
-                 Nothing -> ""
+    vsep [ text "Failed unifying:"
+         , indent 4 $ pretty t1
+         , text "With:"
+         , indent 4 $ pretty t2
+         , case mte of
+               Nothing -> empty
                          --   "             With:  "
-                 Just te -> "\n          Because:  " ++ prettyTab 2 (message te)
-           ]
+               Just te -> vsep [text "Because:", message te]
+         ]
 
 wrapError :: Pretty b => Source -> b -> b -> Infer a -> Infer a
 wrapError s ta tb = mapError
@@ -191,13 +190,13 @@ wrapError s ta tb = mapError
                                        }
 
 unify'' :: Maybe UnifyF -> UnifyF
-unify'' Nothing _ t1 t2 = traceLog $ "breaking infinite recursion cycle, when unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2
+unify'' Nothing _ t1 t2 = traceLog $ text "breaking infinite recursion cycle, when unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
 unify'' (Just recurse) a t1 t2 =
-  do traceLog $ "unifying: " ++ pretty t1 ++ " ~ " ++ pretty t2
+  do traceLog $ text "unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
      s <- getMainSubst
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
-     traceLog $ "unifying (substed): " ++ pretty t1 ++ " ~ " ++ pretty t2
+     traceLog $ text "unifying (substed): " <+> pretty t1 <+> text " ~ " <+> pretty t2
      wrapError a t1 t2 $ unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
@@ -206,7 +205,7 @@ unificationError pos x y = throwError pos $ mkTypeErrorMessage a b Nothing
 
 assertNoPred :: QualType -> Infer Type
 assertNoPred q =
-    do  unless (null $ qualPred q) $ fail $ "Assertion failed: pred in " ++ pretty q
+    do  unless (null $ qualPred q) $ fail $ show $ text "Assertion failed: pred in " <+> pretty q
         return $ qualType q
 
 -- | Main unification function
@@ -307,9 +306,9 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          --commonTypes :: [(Type, Type)]
          commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
 
-     traceLog $ "row1: " ++ pretty m1 ++ ", " ++ pretty r1
-     traceLog $ "row2: " ++ pretty m2 ++ ", " ++ pretty r2
-     traceLog $ "Common row properties: " ++ show commonNames
+     traceLog $ text "row1: " <+> pretty m1 <+> text ", " <+> pretty r1
+     traceLog $ text "row2: " <+> pretty m2 <+> text ", " <+> pretty r2
+     traceLog $ text "Common row properties: " <+> pretty commonNames
      forM_ commonTypes $ \(ts1, ts2) -> wrapError a ts1 ts2 $ unifyTypeSchemes' recurse a ts1 ts2
 
      let allAreCommon = Set.null $ (names1 `Set.difference` names2) `Set.union` (names2 `Set.difference` names1)
@@ -340,8 +339,8 @@ unifyTryMakeRow r a leftBiased tRowList t2 =
                       else r a row' (Fix tRow)
          where row' = Fix $ TRow label' rowType
                label' = case t2 of
-                            TCons cons _ -> Just $ pretty cons
-                            _ -> Just $ pretty t2
+                            TCons cons _ -> Just $ show $ pretty cons
+                            _ -> Just $ show $ pretty t2
 
 
 unifyTypeSchemes :: Source -> TypeScheme -> TypeScheme -> Infer ()
@@ -350,14 +349,13 @@ unifyTypeSchemes = unifyTypeSchemes' unify
 -- | Biased subsumption-based unification. Succeeds if scheme2 is at least as polymorphic as scheme1
 unifyTypeSchemes' :: UnifyF -> Source -> TypeScheme -> TypeScheme -> Infer ()
 unifyTypeSchemes' recurse a scheme1s scheme2s =
-   do traceLog ("Unifying type schemes: " ++ pretty scheme1s ++ " ~ " ++ pretty scheme2s)
+   do traceLog $ text "Unifying type schemes: " <+> pretty scheme1s <+> text " ~ " <+> pretty scheme2s
 
       (skolemVars, scheme1T) <- skolemiseScheme scheme1s
       scheme2T <- instantiate scheme2s
 
-      traceLog $ "Instantiated skolems: " ++ pretty scheme1T
-      traceLog $ "                      " ++ pretty scheme2T
-      traceLog $ "   skolems : " ++ show skolemVars
+      traceLog $ text "Instantiated skolems: " <+> align (vsep [pretty scheme1T, pretty scheme2T])
+      traceLog $ indent 4 $ text "skolems:" <+> pretty skolemVars
 
       recurse a (qualType scheme1T) (qualType scheme2T)
       let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
@@ -367,19 +365,18 @@ unifyTypeSchemes' recurse a scheme1s scheme2s =
       let escapedSkolems = filter (\x -> isSkolem x && x `notElem` oldSkolems) $ concat ftvs
 
       unless (null escapedSkolems)
-        $ throwError a $ concat [ "\n\t\t"
-                                , pretty scheme2s
-                                , "\n\tis not as polymorphic as \n\t\t"
-                                , pretty scheme1s
-                                , "\n\t (escaped skolems: "
-                                , pretty escapedSkolems
-                                , ")"]
+          $ throwError a $ vsep [ text "Subsumption failed, type:"
+                                , indent 4 $ pretty scheme2s
+                                , text "is not as polymorphic as:"
+                                , indent 4 $ pretty scheme1s
+                                , parens $ text "escaped skolems: " <+> pretty escapedSkolems
+                                ]
 
       -- preds
       preds1' <- qualPred <$> applyMainSubst scheme1T
       preds2' <- qualPred <$> applyMainSubst scheme2T
       -- TODO what to do with the ambiguous preds?
-      traceLog $ "Checking entailment of: \n\t" ++ pretty preds1' ++ "\n  from:\n\t" ++ pretty preds2'
+      traceLog $ text "Checking entailment of: \n\t" <+> pretty preds1' <+> text "\n  from:\n\t" <+> pretty preds2'
       let preds1Set = Set.fromList preds1'
           preds2Set = Set.fromList preds2'
           symDiff s1 s2 = (s1 `Set.difference` s2) `Set.union` (s2 `Set.difference` s1)
@@ -398,7 +395,7 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
                       _ -> r2
            in1NotIn2row = Fix . TRow Nothing . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
 
-       traceLog $ "in1NotIn2row" ++ pretty in1NotIn2row
+       traceLog $ text "in1NotIn2row" <+> pretty in1NotIn2row
        case r2 of
          FlatRowEndTVar Nothing -> if Set.null in1NotIn2
                     then varBind a (getRowTVar r) (Fix $ TRow Nothing $ TRowEnd Nothing)
@@ -444,17 +441,19 @@ varBind a n t =
 varBind' :: Source -> TVarName -> Type -> Infer TSubst
 varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                | Just rowT <- getSingleton $ isInsideRowType n t =
-                   do traceLog ("===> Generalizing mu-type: " ++ pretty n ++ " recursive in: " ++ pretty t ++ ", found enclosing row type: " ++ " = " ++ pretty rowT)
+                   do traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
                       recVar <- Flex <$> fresh
                       let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = applySubst (singletonSubst n $ withRecVar) rowT
                       namedType <- getNamedType a recVar recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
-                      traceLog $ "===> Resulting mu type: " ++ pretty n ++ " = " ++ pretty withRecVar
+                      traceLog $ text "===> Resulting mu type: " <+> pretty n <+> text " = " <+> pretty withRecVar
                       return $ singletonSubst recVar namedType `composeSubst` singletonSubst n withRecVar
                | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t
-                                                 in throwError a $ "Occurs check failed: " ++ pretty (f n) ++ " in " ++ pretty (mapVarNames f t)
+                                                 in throwError a
+                                                    $ text "Occurs check failed: "
+                                                    <+> pretty (f n) <+> text " in " <+> align (pretty (mapVarNames f t))
                | otherwise = return $ singletonSubst n t
 
 unifyAll :: Source -> [Type] -> Infer ()
@@ -468,7 +467,7 @@ unifyPredsL :: Source -> [TPred Type] -> Infer [TPred Type]
 unifyPredsL a ps = Set.toList . Set.fromList . catMaybes <$>
     do  forM ps $ \p@(TPredIsIn className t) ->
                   do  entry <- ((a,t,) . (className,) . Set.fromList . classInstances) <$> lookupClass className
-                               `failWithM` throwError a ("Unknown class: " ++ pretty className ++ " in pred list: " ++ pretty ps)
+                               `failWithM` (throwError a $ text "Unknown class: " <+> pretty className <+> text "in pred list:" <+> pretty ps)
                       remainingAmbiguities <- unifyAmbiguousEntry entry
                       case remainingAmbiguities of
                           Nothing -> return Nothing
@@ -506,14 +505,13 @@ unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
         let survivors = filter (isRight . snd) unifyResults
         case rights $ map snd survivors of
             []         -> do t' <- applyMainSubst t
-                             throwError a $ concat [ intercalate "\n\n" $ "" : (map (prettyTab 2 . message) . catLefts $ map snd unifyResults)
-                                                   , "\n\n"
-                                                   , "While trying to find matching instance of typeclass "
-                                                   , "\n    "
-                                                   , prettyTab 1 className
-                                                   , "\nfor type:\n    "
-                                                   , prettyTab 1 t'
-                                                   ]
+                             throwError a $ vsep [ vsep (map message . catLefts $ map snd unifyResults)
+                                                 , empty
+                                                 , text "While trying to find matching instance of typeclass"
+                                                 , indent 4 $ pretty className
+                                                 , text "for type:"
+                                                 , indent 4 $ pretty t'
+                                                 ]
             [newState] -> setState newState >> return Nothing
             _          -> return . Just . (\x -> (a, t, (ClassName className, x))) . Set.fromList . map fst $ survivors
 

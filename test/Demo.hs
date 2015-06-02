@@ -21,7 +21,7 @@ main = do
   let shouldPass = if shouldPassS == "y" then id else not
       typeChecked = isRight res
       message = case res of
-        Left e -> pretty e
+        Left e -> show $ pretty e
         Right _ -> ""
       toOk = bool "FAIL" "OK" . shouldPass
   --print $ fmap (pretty . snd) res

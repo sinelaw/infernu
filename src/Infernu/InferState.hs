@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE CPP           #-}
+{-# LANGUAGE TupleSections #-}
 
 module Infernu.InferState
        ( Infer
@@ -41,26 +41,28 @@ module Infernu.InferState
          )
        where
 
-import           Data.Foldable              (msum)
-import           Control.Monad              (foldM, forM, forM_, liftM2, when)
-import           Control.Monad.Trans        (lift)
-import           Control.Monad.Trans.Either (EitherT (..), left, runEitherT, bimapEitherT)
-import           Control.Monad.Trans.State  (StateT (..), evalStateT, get, put, modify, mapStateT)
-import qualified Data.Graph.Inductive      as Graph
+import           Control.Monad                (foldM, forM, forM_, liftM2, when)
+import           Control.Monad.Trans          (lift)
+import           Control.Monad.Trans.Either   (EitherT (..), bimapEitherT, left, runEitherT)
+import           Control.Monad.Trans.State    (StateT (..), evalStateT, get, mapStateT, modify, put)
+import           Data.Foldable                (msum)
+import qualified Data.Graph.Inductive         as Graph
 
-import qualified Data.List                  as List
-import           Data.Functor.Identity      (Identity (..), runIdentity)
-import qualified Data.Map.Lazy              as Map
-import           Data.Maybe                 (fromMaybe)
-import qualified Data.Set                   as Set
-import           Data.Set                   (Set)
+import           Data.Functor.Identity        (Identity (..), runIdentity)
+import qualified Data.List                    as List
+import qualified Data.Map.Lazy                as Map
+import           Data.Maybe                   (fromMaybe)
+import           Data.Set                     (Set)
+import qualified Data.Set                     as Set
 
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), Doc, squotes)
+
+import qualified Infernu.Builtins.TypeClasses
+import           Infernu.Lib
+import           Infernu.Log
 import           Infernu.Prelude
 import           Infernu.Pretty
 import           Infernu.Types
-import           Infernu.Log
-import           Infernu.Lib
-import qualified Infernu.Builtins.TypeClasses
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
 type Infer a = StateT InferState (EitherT TypeError Identity) a
@@ -108,7 +110,7 @@ freshFlex = Flex <$> fresh
 freshVarId :: Infer VarId
 freshVarId = VarId <$> fresh
 
-throwError :: Source -> String -> Infer a
+throwError :: Source -> Doc -> Infer a
 throwError p s = lift . left $ TypeError p s
 
 failWith :: Maybe a -> Infer a -> Infer a
@@ -132,17 +134,18 @@ getVarId = Map.lookup
 
 getVarScheme :: Source -> EVarName -> TypeEnv -> Infer (Maybe TypeScheme)
 getVarScheme a n env = case getVarId n env of
-                       Nothing -> throwError a $ "Unbound variable: '" ++ show n ++ "'"
+                       Nothing -> throwError a $ text "Unbound variable:" <+> squotes (pretty n)
                        Just varId -> getVarSchemeByVarId varId
 
 setVarScheme :: TypeEnv -> EVarName -> TypeScheme -> VarId -> Infer TypeEnv
 setVarScheme env n scheme varId = do
-  modify $ \is -> is { varSchemes = trace ("Inserting scheme for " ++ pretty n ++ ": " ++ pretty scheme) . Map.insert varId scheme $ varSchemes is }
-  return $ Map.insert n varId env
+    traceLog $ text "Inserting scheme for " <+> pretty n <+> text ": " <+> pretty scheme
+    modify $ \is -> is { varSchemes = Map.insert varId scheme $ varSchemes is }
+    return $ Map.insert n varId env
 
 addVarScheme :: TypeEnv -> EVarName -> TypeScheme -> Infer TypeEnv
 addVarScheme env n scheme = do
-  varId <- tracePretty ("-- '" ++ pretty n ++ "' = varId") <$> freshVarId
+  varId <- tracePretty (text "-- '" <+> pretty n <+> text "' = varId") <$> freshVarId
   setVarScheme env n scheme varId
 
 --addPendingUnification :: (Source, Type, (ClasSet TypeScheme) -> Infer ()
@@ -163,18 +166,18 @@ setPendingUnifications ts = do
 
 
 addVarInstance :: TVarName -> TVarName -> Infer ()
-addVarInstance x y = modify $ \is -> is { varInstances = tracePretty "updated equivs" $ addEquivalence x y (varInstances is) }
+addVarInstance x y = modify $ \is -> is { varInstances = tracePretty (text "updated equivs") $ addEquivalence x y (varInstances is) }
 
 getFreeTVars :: TypeEnv -> Infer (Set TVarName)
 getFreeTVars env = do
   let collectFreeTVs s varId = Set.union s <$> curFreeTVs
           where curFreeTVs = tr . maybe Set.empty freeTypeVars <$> getVarSchemeByVarId varId
-                tr = tracePretty $ " collected from " ++ pretty varId ++ " free type variables: "
+                tr = tracePretty $ text " collected from" <+> pretty varId <+> text "free type variables:"
   foldM collectFreeTVs Set.empty (Map.elems env)
 
 addNamedType :: TypeId -> Type -> TypeScheme -> Infer ()
 addNamedType tid t scheme = do
-  traceLog ("===> Introducing named type: " ++ pretty tid ++ " => " ++ pretty scheme)
+  traceLog $ text "===> Introducing named type:" <+> pretty tid <+> text "=>" <+> align (pretty scheme)
   modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
   return ()
 
@@ -266,18 +269,18 @@ allocNamedType a n t =
      let namedTypeParams = map (Fix . TBody . TVar) . Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          namedType = TCons (TName typeId) namedTypeParams
          target = applySubst (singletonSubst n $ Fix namedType) t
-     traceLog $ "===> replacing " ++ pretty n ++ " => " ++ pretty namedType
-     traceLog $ "===> allocNamedType: source = " ++ pretty t
-     traceLog $ "===> allocNamedType: target = " ++ pretty target
+     traceLog $ text "===> replacing" <+> pretty n <+> text "=>" <+> align (pretty namedType)
+     traceLog $ text "===> allocNamedType: source =" <+> align (pretty t)
+     traceLog $ text "===> allocNamedType: target =" <+> align (pretty target)
      (scheme, ps) <- unsafeGeneralize Map.empty $ qualEmpty target
-     traceLog $ "===> Generated scheme for mu type: " ++ pretty scheme
+     traceLog $ text "===> Generated scheme for mu type:" <+> align (pretty scheme)
      currentNamedTypes <- filter (\(_, ts) -> areEquivalentNamedTypes (Fix namedType, scheme) ts) . Map.toList . namedTypes <$> get
      case currentNamedTypes of
-      [] -> do traceLog $ "===> Didn't find existing rec type, adding new: " ++ pretty namedType ++ " = " ++ pretty scheme
+      [] -> do traceLog $ text "===> Didn't find existing rec type, adding new: " <+> pretty namedType <+> text "=" <+> align (pretty scheme)
                addNamedType typeId (Fix namedType) scheme
                return $ Fix namedType
       (otherTID, (otherNT, otherScheme)):_ ->
-          do traceLog $ "===> Found existing rec type: " ++ pretty otherNT
+          do traceLog $ text "===> Found existing rec type:" <+> pretty otherNT
              -- TODO: don't ignore the preds!
              qualType <$> unrollName a otherTID namedTypeParams
 
@@ -302,7 +305,7 @@ resolveSimpleMutualRecursion n t tid ix =
 getNamedType :: Source -> TVarName -> Type -> Infer Type
 getNamedType a n t =
   do let recTypeParamPos = isRecParamOnly n Nothing t
-     traceLog $ "isRecParamOnly: " ++ pretty n ++ " in " ++ pretty t ++ ": " ++ show (fmap show recTypeParamPos)
+     traceLog $ text "isRecParamOnly:" <+> pretty n <+> text "in" <+> pretty t <+> text ":" <+> align (text $ show (fmap show recTypeParamPos))
      case recTypeParamPos of
       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
       -- either the variable appears outside a recursive type's type parameter list, or it appears
@@ -318,7 +321,7 @@ unrollNameByScheme ts qvars = applySubst subst
         subst = foldr (\(tvar,destType) s -> singletonSubst tvar destType `composeSubst` s) nullSubst assocs
 
 getNamedTypeScheme :: Source -> TypeId -> Infer TypeScheme
-getNamedTypeScheme a tid = (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a "Unknown type id"
+getNamedTypeScheme a tid = (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a (text "Unknown type id")
 
 -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
 -- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh
@@ -343,7 +346,7 @@ unrollName a tid ts =
 --
 applySubstInfer :: TSubst -> Infer ()
 applySubstInfer s =
-  do traceLog ("applying subst: " ++ pretty s)
+  do traceLog $ text "applying subst: " <+> align (pretty s)
      modify $ applySubst s
 
 -- | Instantiate a type scheme by giving fresh names to all quantified type variables.
@@ -379,9 +382,9 @@ instantiate = instantiateScheme True
 
 instantiateVar :: Source -> EVarName -> TypeEnv -> Infer QualType
 instantiateVar a n env = do
-  varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
-  scheme <- getVarSchemeByVarId varId `failWithM` throwError a ("Assertion failed: missing var scheme for: '" ++ show n ++ "'")
-  tracePretty ("Instantiated var '" ++ pretty n ++ "' with scheme: " ++ pretty scheme ++ " to") <$> instantiate scheme
+  varId <- getVarId n env `failWith` throwError a (text "Unbound variable:" <+> squotes (pretty n))
+  scheme <- getVarSchemeByVarId varId `failWithM` throwError a (text "Assertion failed: missing var scheme for:" <+> squotes (pretty n))
+  tracePretty (text "Instantiated var '" <+> pretty n <+> text "' with scheme: " <+> pretty scheme <+> text "to") <$> instantiate scheme
 
 ----------------------------------------------------------------------
 
@@ -437,12 +440,12 @@ skolemiseType ty
 -- TODO add tests for monotypes
 unsafeGeneralize :: TypeEnv -> QualType -> Infer (TypeScheme, [TPred Type])
 unsafeGeneralize tenv t = do
-    traceLog $ "Generalizing: " ++ pretty t
+    traceLog $ text "Generalizing: " <+> pretty t
     s <- getMainSubst
     let t' = applySubst s t
         ftvs = freeTypeVars t'
     unboundVars <- Set.difference ftvs <$> getFreeTVars tenv
-    traceLog $ "Generalization result: unbound vars = " ++ pretty unboundVars ++ ", type = " ++ pretty t'
+    traceLog $ text "Generalization result: unbound vars =" <+> pretty unboundVars <+> text ", type =" <+> pretty t'
     let t'' = TQual { qualPred = qvarPreds, qualType = qualType t' }
         (qvarPreds, floatedPreds) = List.partition (\p -> Set.null $ freeTypeVars p `Set.intersection` unboundVars) $ qualPred t'
     return (TScheme (Set.toList unboundVars) t', floatedPreds)

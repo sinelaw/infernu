@@ -23,8 +23,8 @@ import           Data.Set           (Set)
 import qualified Data.Set           as Set
 import           Data.Char          (isUpper)
 
-import           Data.List          (intercalate)
-
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, squotes)
+    
 import           Infernu.Prelude
 import qualified Infernu.Builtins.Operators   as Operators
 import           Infernu.InferState
@@ -54,7 +54,7 @@ closeRowList unrollRec a r@(TRowRec tid ts) =
   else do qt <- unrollName a tid ts
           case qualType qt of
             Fix (TRow _ r') -> closeRowList False a r'
-            _ -> error $ "Expected row type, got: " ++ pretty qt
+            _ -> error $ show $ text "Expected row type, got: " <+> pretty qt
 
 -- | Replaces a top-level open row type with the closed equivalent.
 -- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
@@ -73,7 +73,7 @@ closeRow _ t = return t
 -- For efficiency reasons, types list is returned in reverse order.
 accumInfer :: TypeEnv -> [Exp Source] -> Infer [(QualType, Exp (Source, QualType))]
 accumInfer env =
-  do traceLog ("accumInfer: env: " ++ pretty env)
+  do traceLog $ text "accumInfer: env: " <+> pretty env
      foldM accumInfer' []
      where accumInfer' types expr =
              do (t, e) <- inferType env expr
@@ -81,13 +81,13 @@ accumInfer env =
 
 inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
-  traceLog (">> " ++ pretty expr ++ " -- env: " ++ pretty env)
+  traceLog $ text ">> " <+> pretty expr <+> text " -- env: " <+> pretty env
   (t, e) <- inferType' env expr
   unifyPending
   s <- getMainSubst
   st <- getState
-  traceLog (">> " ++ pretty expr ++ " -- inferred :: " ++ pretty (applySubst s t))
-  traceLog ("   infer state: " ++ prettyTab 3 st)
+  traceLog $ text ">> " <+> pretty expr <+> text " -- inferred :: " <+> pretty (applySubst s t)
+  traceLog $ indent 4 $ text "infer state: " <+> pretty st
   return (applySubst s t, fmap (applySubst s) e)
 
 inferType' :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
@@ -114,19 +114,19 @@ inferType' env (EAbs a argNames e2) =
 inferType' env (EApp a e1 eArgs) =
   do tvar <- Fix . TBody . TVar <$> freshFlex
      (t1, e1') <- inferType env e1
-     traceLog $ "EApp: Inferred type for func expr: " ++ pretty t1
+     traceLog $ text "EApp: Inferred type for func expr: " <+> pretty t1
      argsTE <- accumInfer env eArgs
-     traceLog $ "EApp: Inferred types for func args: " ++ intercalate ", " (map pretty argsTE)
+     traceLog $ text "EApp: Inferred types for func args: " <+> pretty argsTE
      let rargsTE = reverse argsTE
          tArgs = map fst rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1:tArgs
      unify a (Fix $ TFunc (map qualType tArgs) tvar) (qualType t1)
-     traceLog $ "Inferred preds: " ++ intercalate ", " (map pretty preds)
+     traceLog $ text "Inferred preds: " <+> pretty preds
      tvar' <- do  pred' <- unifyPredsL a preds
                   tvarSubsted <- applyMainSubst tvar
                   return $ TQual pred' tvarSubsted
-     traceLog ("Inferred func application: " ++ pretty tvar')
+     traceLog $ text "Inferred func application: " <+> pretty tvar'
      return (tvar', EApp (a, tvar') e1' eArgs')
 inferType' env (ENew a e1 eArgs) =
   do (t1, e1') <- inferType env e1
@@ -166,10 +166,11 @@ inferType' env (ELet a n e1 e2) =
      t1' <- case (isUpper $ head n, unFix recType') of
                 (True, TFunc (thisT:argsT) resT) ->
                   do closedThisT <- closeRow a thisT
-                     traceLog $ "Closing 'this' row type: " ++ pretty thisT
-                       ++ "\n\twhile inferring type of " ++ pretty n
-                       ++ "\n\twhich has type: " ++ pretty recType'
-                     traceLog $ "\tClosed: " ++ pretty closedThisT
+                     traceLog $ vsep [ text "Closing 'this' row type: " <+> align (pretty thisT)
+                                     , text "while inferring type of" <+> align (pretty n)
+                                     , text "which has type: " <+> align (pretty recType')
+                                     ]
+                     traceLog $ text "\tClosed: " <+> align (pretty closedThisT)
                      unify a thisT closedThisT
                      return $ t1 { qualType = Fix $ TFunc (closedThisT:argsT) resT }
                 _ -> return $ t1
@@ -182,18 +183,18 @@ inferType' env (ELet a n e1 e2) =
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
 inferType' env expr@(EAssign a n expr1 expr2) =
-  do traceLog $ "EAssign: " ++ pretty expr
-     lvalueScheme <- getVarScheme a n env `failWithM` throwError a ("Unbound variable: " ++ show n ++ " in assignment " ++ pretty expr1)
-     traceLog $ "EAssign lvalueScheme: " ++ pretty lvalueScheme
+  do traceLog $ text "EAssign: " <+> pretty expr
+     lvalueScheme <- getVarScheme a n env `failWithM` (throwError a $ text "Unbound variable: " <+> pretty n <+> text "in assignment" <+> align (pretty expr1))
+     traceLog $ text "EAssign lvalueScheme: " <+> pretty lvalueScheme
      lvalueT <- instantiate lvalueScheme
      (rvalueT, expr1') <- inferType env expr1
      unify a (qualType lvalueT) (qualType rvalueT)
      (tRest, expr2') <- inferType env expr2
-     traceLog $ "EAssign lvalueT: " ++ pretty lvalueT
-     traceLog $ "EAssign Invoking unifyAllInstances on scheme: " ++ pretty lvalueScheme
+     traceLog $ text "EAssign lvalueT: " <+> pretty lvalueT
+     traceLog $ text "EAssign Invoking unifyAllInstances on scheme: " <+> pretty lvalueScheme
      instancePreds <- unifyAllInstances a $ getQuantificands lvalueScheme
      -- update the variable scheme, removing perhaps some quantified tvars
-     varId <- getVarId n env `failWith` throwError a ("Unbound variable: '" ++ show n ++ "'")
+     varId <- getVarId n env `failWith` throwError a (text "Unbound variable:" <+> squotes (pretty n))
      (updatedScheme, floatedPreds) <- generalize expr1 env (schemeType lvalueScheme)
      _ <- setVarScheme env n updatedScheme varId
      --
@@ -264,7 +265,7 @@ inferType' env (EProp a eObj propName) =
      -- determined the type of eObj "good enough" for us to find if it has the required property or
      -- not.  Otherwise we must assume the property is a monotype.
      let propTypeIfMono =
-             do traceLog $ "Failed to find prop: " ++ pretty propName ++ " in type: " ++ pretty tObj
+             do traceLog $ text "Failed to find prop: " <+> pretty propName <+> text " in type: " <+> pretty tObj
                 rowTail <- TRowEnd . Just . RowTVar <$> freshFlex
                 propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> freshFlex
                 unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme rowTail) (qualType tObj)
@@ -289,12 +290,12 @@ unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
 unifyAllInstances a tvs = do
   m <- getVarInstances
 
-  traceLog $ "unifyAllInstances: " ++ pretty a ++ " Unifying all instances of tvars: " ++ intercalate ", " (map pretty tvs)
+  traceLog $ text "unifyAllInstances: " <+> pretty a <+> text " Unifying all instances of tvars: " <+> pretty tvs
   let equivalenceSets = map Set.fromList $ filter (not . null) $ map (mapMaybe (Graph.lab m) . flip Graph.bfs m . unTVarName) tvs
       unifyAll' equivs =
           do  let equivsL = Set.toList equivs
                   qequivsL = map qualType equivsL
-              traceLog $ "unifyAllInstances - equivalence:" ++ pretty qequivsL
+              traceLog $ text "unifyAllInstances - equivalence:" <+> pretty qequivsL
               unifyAll a qequivsL
               return $ concatMap qualPred equivsL
   pred' <- concat <$> mapM unifyAll' equivalenceSets
@@ -429,8 +430,8 @@ typeInference builtins e =
 -- "e.(f -> d.(String -> String))"
 test :: Exp Source -> String
 test e = case runTypeInference e of
-          Left err -> pretty err
-          Right expr -> pretty $ snd . head . getAnnotations . minifyVars $ expr
+          Left err -> show $ pretty err
+          Right expr -> show $ pretty $ snd . head . getAnnotations . minifyVars $ expr
 
 
 runTypeInference :: Exp Source -> Either TypeError (Exp (Source, QualType))

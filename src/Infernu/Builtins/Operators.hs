@@ -56,7 +56,7 @@ builtins = Map.fromList [
   -- avoid coercions on == and !=
   ("==",           ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0, tvar 0] boolean),
   ("!=",           ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0, tvar 0] boolean),
-  ("RegExp",       ts [] $ Fix $ TFunc [string, string] (regex)),
+  ("RegExp",       ts [] $ Fix $ TFunc [undef, string, string] (regex)),
   ("String",       ts [1] $ Fix $ TFunc [undef, tvar 1] (string)),
   ("Number",       ts [1] $ Fix $ TFunc [undef, tvar 1] (number)),
   ("Boolean",      ts [1] $ Fix $ TFunc [undef, tvar 1] (boolean)),

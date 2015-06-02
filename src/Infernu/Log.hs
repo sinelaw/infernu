@@ -8,7 +8,7 @@ module Infernu.Log
 
 import           Infernu.Prelude
 import           Infernu.Pretty
-
+import Text.PrettyPrint.ANSI.Leijen (Pretty(..), text, (<+>), Doc)
 
 #if TRACE
 import           Debug.Trace                (trace)
@@ -17,12 +17,12 @@ trace :: a -> b -> b
 trace _ y = y
 #endif
 
-tracePretty :: Pretty a => String -> a -> a
-tracePretty prefix x = trace (prefix ++ " " ++ pretty x) x
+tracePretty :: Pretty a => Doc -> a -> a
+tracePretty prefix x = trace (show $ prefix <+> pretty x) x
 
 traceLogVal :: Applicative f => String -> a -> f a
 traceLogVal !s !r = pure $! trace s r `seq` r
 
-traceLog :: Applicative f => String -> f ()
-traceLog !s = pure $! trace s () `seq` ()
+traceLog :: Applicative f => Doc -> f ()
+traceLog !s = pure $! trace (show s) () `seq` ()
                     

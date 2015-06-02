@@ -67,7 +67,8 @@ import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
 import qualified Data.Graph.Inductive      as Graph
 import qualified Text.Parsec.Pos           as Pos
-
+import Text.PrettyPrint.ANSI.Leijen (Doc)
+    
 import           Infernu.Fix               (Fix (..), replaceFix)
 import           Infernu.Prelude
 import Prelude ()
@@ -173,8 +174,8 @@ newtype Source = Source (GenInfo, Pos.SourcePos)
 emptySource :: Source
 emptySource = Source (GenInfo True Nothing, Pos.initialPos "")
 
-data TypeError = TypeError { source :: Source, message :: String }
-               deriving (Show, Eq, Ord)
+data TypeError = TypeError { source :: Source, message :: Doc }
+               deriving (Show)
 
 ----------------------------------------------------------------------
 

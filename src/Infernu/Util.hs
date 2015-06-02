@@ -9,13 +9,13 @@ import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, squotes)
 
 import           Infernu.Prelude
 import           Infernu.Options             (Options(..))
 import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
-import           Infernu.Pretty              (pretty)
 import           Infernu.Types               (GenInfo (..), QualType, Source (..), TypeError (..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
@@ -42,7 +42,7 @@ indexList = zip [1..]
 
 checkSource :: String -> Either TypeError [(Source, QualType)]
 checkSource src = case ES3Parser.parseFromString src of
-                   Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing, Pos.initialPos "<global>"), message = show parseError }
+                   Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing, Pos.initialPos "<global>"), message = string (show parseError) }
                    Right expr -> -- case ES3.isValid expr of
                                  --     False -> Left $ TypeError { source = Source (GenInfo True, Pos.initialPos "<global>"), message = "Invalid syntax" }
                                  --     True ->
@@ -53,7 +53,7 @@ checkFiles options fileNames = do
   expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
   when (optShowParsed options) $ putStrLn $ show $ ES3Pretty.prettyPrint expr
   let expr' = fmap Source $ translate $ expr
-  when (optShowCore options) $ putStrLn $ pretty expr'
+  when (optShowCore options) $ putStrLn $ show $ pretty expr'
   let expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
   return res
@@ -65,4 +65,4 @@ annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filt
         unGenInfo = catMaybes . map (\(Source (g, s), q) -> fmap (\n -> (n, s, q)) $ declName g)
         filterGen :: [(Source, QualType)] -> [(Source, QualType)]
         filterGen = filter (\(Source (g, _), _) -> not . isGen $ g)
-        prettyRes = Set.toList . Set.fromList . fmap (\(n, s, q) -> (s, pretty n ++ " : " ++ pretty q))
+        prettyRes = Set.toList . Set.fromList . fmap (\(n, s, q) -> (s, show $ pretty n <+> string ":" <+> pretty q))

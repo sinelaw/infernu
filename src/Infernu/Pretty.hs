@@ -2,146 +2,158 @@
 module Infernu.Pretty where
 
 
+
 import           Infernu.Types
 import           Infernu.Prelude
     
 import           Data.Char       (chr, ord)
 import qualified Data.Digits     as Digits
-import           Data.List       (intercalate)
-import qualified Data.Map.Lazy   as Map
+-- import           Data.List       (intercalate)
+import qualified Data.Map   as Map
 import qualified Data.Graph.Inductive      as Graph
 
 import qualified Data.Set        as Set
 import qualified Text.Parsec.Pos as Pos
+    
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+
+-- tab :: Int -> String
+-- tab t = replicate (t*4) ' '
+
+-- class Pretty a where
+--   prettyTab :: Int -> a -> String
+
+-- instance Pretty a => Pretty (Maybe a) where
+--   pretty x = maybe "Nothing" pretty x
+
+-- instance (Pretty a, Pretty b) => Pretty (a,b) where
+--   pretty (a,b) = "(" ++ pretty a ++ ", " ++ pretty b ++ ")"
+
+-- instance (Pretty a, Pretty b, Pretty c) => Pretty (a,b,c) where
+--   pretty (a,b,c) = "(" ++ pretty a ++ ", " ++ pretty b ++ ", " ++ pretty c ++ ")"
+
+-- prettyList :: Pretty a => [a] -> String
+-- prettyList [] = "[]"
+-- prettyList xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
+
+-- instance Pretty [String] where
+--   pretty = prettyList
+
+-- instance Pretty [Type] where
+--   pretty  = prettyList
+
+-- instance (Pretty a, Pretty b) => Pretty [(a,b)] where
+--   pretty xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
+
+-- pretty :: Pretty a => a -> String
+-- pretty = prettyTab 0
 
 
-tab :: Int -> String
-tab t = replicate (t*4) ' '
+    
+instance Pretty Pos.SourcePos where
+    pretty p = string (Pos.sourceName p) <> string ":" <> (string . show $ Pos.sourceLine p) <> string ":" <> (string . show $ Pos.sourceColumn p)
 
-class Pretty a where
-  prettyTab :: Int -> a -> String
-
-instance Pretty a => Pretty (Maybe a) where
-  prettyTab _ x = maybe "Nothing" pretty x
-
-instance (Pretty a, Pretty b) => Pretty (a,b) where
-  prettyTab _ (a,b) = "(" ++ pretty a ++ ", " ++ pretty b ++ ")"
-
-instance (Pretty a, Pretty b, Pretty c) => Pretty (a,b,c) where
-  prettyTab _ (a,b,c) = "(" ++ pretty a ++ ", " ++ pretty b ++ ", " ++ pretty c ++ ")"
-
-prettyList :: Pretty a => [a] -> String
-prettyList [] = "[]"
-prettyList xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
-
-instance Pretty [String] where
-  prettyTab _ = prettyList
-
-instance Pretty [Type] where
-  prettyTab _  = prettyList
-
-instance (Pretty a, Pretty b) => Pretty [(a,b)] where
-  prettyTab _ xs = "[" ++ intercalate "," (map pretty xs) ++ "]"
-
-pretty :: Pretty a => a -> String
-pretty = prettyTab 0
+ifStr b s = if b then string s else empty
 
 instance Pretty Source where
-    prettyTab _ (Source (genInfo, pos)) = pretty pos ++ (if isGen genInfo then "*" else "") ++ (maybe "" (\x -> pretty x ++ " : ") $ declName genInfo)
-         
+    pretty (Source (genInfo, pos)) =
+        ifStr (isGen genInfo) "*"
+        <> pretty pos
+        <> maybe empty (\x -> string ":" <> string x <> string ":") (declName genInfo)
+
+                                    
 instance Pretty LitVal where
-  prettyTab _ (LitNumber x) = show x
-  prettyTab _ (LitBoolean x) = show x
-  prettyTab _ (LitString x) = show x
-  prettyTab _ (LitRegex x g i) = "/" ++ x ++ "/" ++ (if g then "g" else "") ++ (if i then "i" else "") ++ (if g || i then "/" else "")
-  prettyTab _ LitUndefined = "undefined"
-  prettyTab _ LitNull = "null"
-  prettyTab _ LitEmptyThis = "(undefined 'this')"
+    pretty (LitNumber x) = string $ show x
+    pretty (LitBoolean x) = string $ show x
+    pretty (LitString x) = string $ show x
+    pretty (LitRegex x g i) = enclose (string "/") (string "/") (string x) <> (ifStr g "g") <> (ifStr i "i")
+    pretty LitUndefined = string "undefined"
+    pretty LitNull = string "null"
+    pretty LitEmptyThis = string "(undefined 'this')"
 
-instance Pretty EVarName where
-  prettyTab _ x = x
-
-
-nakedSingleOrTuple :: [String] -> String
-nakedSingleOrTuple [] = "()"
-nakedSingleOrTuple [x] = x
-nakedSingleOrTuple xs = "(" ++ intercalate ", " xs ++ ")"
+nakedSingleOrTuple :: Pretty a => [a] -> Doc
+nakedSingleOrTuple [] = string "()"
+nakedSingleOrTuple [x] = pretty x
+nakedSingleOrTuple xs = tupled $ map pretty xs
 
 instance Pretty (Exp a) where
-  prettyTab t (EVar _ n) = prettyTab t n
-  prettyTab t (EApp _ e1 args) = "(" ++ prettyTab t e1 ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args) ++")"
-  prettyTab t (EAbs _ args e) = "(\\" ++ nakedSingleOrTuple (map (prettyTab t) args) ++ " -> " ++ prettyTab (t+1) e ++ ")"
-  prettyTab t (ELet _ n e1 e2) = "\n" ++ tab t ++ "let " ++ letLine n e1 e2
-      where letLine n' e' eBody = prettyTab t n'
-                                  ++ " = "
-                                  ++ prettyTab (t+1) e'
-                                  ++ "\n" ++ tab (t+1)
-                                  ++ case eBody of
-                                         ELet _ nb e1b e2b -> letLine nb e1b e2b
-                                         _ -> pretty " in " ++ prettyTab (t+1) eBody
-  prettyTab t (ELit _ l) = prettyTab t l
-  prettyTab t (EAssign _ n e1 e2) = prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab (t+1) ++ prettyTab (t+1) e2
-  prettyTab t (EPropAssign _ obj n e1 e2) = prettyTab t obj ++ "." ++ prettyTab t n ++ " := " ++ prettyTab t e1 ++ ";\n" ++ tab (t+1) ++ prettyTab (t+1) e2
-  prettyTab t (EArray _ es) = "[" ++ intercalate ", " (map (prettyTab t) es) ++ "]"
-  prettyTab t (ETuple _ es) = "(" ++ intercalate ", " (map (prettyTab t) es) ++ ")"
-  prettyTab t (ERow _ isOpen props) = "{" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ ": " ++ prettyTab t v) props)  ++ (if isOpen then ", " else "") ++ "}"
-  prettyTab t (ECase _ ep es) = "case " ++ prettyTab t ep ++  " of" ++ (concatMap formatBranch' es)
-      where formatBranch' (pat, branch) = "\n" ++ tab (t+1)
-                                          ++ prettyTab (t+1) pat
-                                          ++ " -> "
-                                          ++ prettyTab (t+2) branch
-  prettyTab t (EProp _ e n) = prettyTab t e ++ "." ++ pretty n
-  prettyTab t (ENew _ e args) = "new " ++ prettyTab t e ++ " " ++ nakedSingleOrTuple (map (prettyTab t) args)
-  prettyTab t (EStringMap _ exprs) = "<" ++ intercalate ", " (map (\(n,v) -> prettyTab t n ++ " => " ++ prettyTab t v) exprs) ++ ">"
+    pretty (EVar _ n) = string n
+    pretty (EApp _ e1 args) = parens $ pretty e1 <> nakedSingleOrTuple args
+    pretty (EAbs _ args e) = parens $ string "\\" <> nakedSingleOrTuple args <+> string "->" <+> pretty e
+    pretty (ELet _ n e1 e2) = string "let" <+> align (vsep $ letLine n e1 e2)
+        where letLine n' e' eBody = curLine n' e' : rest eBody
+              curLine n' e' = pretty n' <+> string "=" <+> pretty e'
+              rest eBody = case eBody of
+                               ELet _ nb e1b e2b -> letLine nb e1b e2b
+                               _ -> [string "in" <+> align (pretty eBody)]
+            
+    pretty (ELit _ l) = pretty l
+    pretty (EAssign _ n e1 e2) = align $ vsep [ pretty n <+> string ":=" <+> pretty e1 <> string ";"
+                                              , pretty e2]
+    pretty (EPropAssign _ obj n e1 e2) = align $ vsep [ pretty obj <> dot <> pretty n <+> string ":=" <+> pretty e1 <> string ";"
+                                                      , pretty e2]
+    pretty (EArray _ es) = encloseSep lbracket rbracket comma $ map pretty es
+    pretty (ETuple _ es) = pretty es
+    pretty (ERow _ isOpen props) = encloseSep lbrace rbrace comma
+                                   $ map (\(n,v) -> fill 6 (pretty n) <> string ":" <> space <> pretty v) props
+--                                   <> ifStr isOpen " | ? "
+    pretty (ECase _ ep es) = hang 4 $
+                             string "case" <+> pretty ep <+> string "of" <+> vsep (map formatBranch' es)
+        where formatBranch' (pat, branch) = fill 6 (pretty pat) <+> string "->" <+> align (pretty branch)
+    pretty (EProp _ e n) = pretty e <> dot <> pretty n
+    pretty (ENew _ e args) = string "new" <> space <> pretty e <> space <> nakedSingleOrTuple (map pretty args)
+    pretty (EStringMap _ exprs) = encloseSep langle rangle comma $ map (\(n,v) -> pretty n <+> string "=>" <+> pretty v) exprs
 
+
+-----------------------------------------------------------------------------                                  
+                                  
 toChr :: Int -> Char
 toChr n = chr (ord 'a' + (n - 1))
-
           
 ptv :: Int -> String          
 ptv x = foldr ((++) . (:[]) . toChr)  [] (Digits.digits 26 (x + 1))
         
 -- |
--- >>> prettyTab 0 (0 :: TVarName)
+-- >>> pretty (0 :: TVarName)
 -- "a"
--- >>> prettyTab 0 (26 :: TVarName)
+-- >>> pretty (26 :: TVarName)
 -- "aa"
 instance Pretty TVarName where
-  prettyTab _ tvn = case tvn of
-                      Flex n -> ptv n
-                      Skolem n -> '!' : ptv n
+    pretty tvn = string $ case tvn of
+                              Flex n -> ptv n
+                              Skolem n -> '!' : ptv n
 
-instance Pretty Bool where
-  prettyTab _ x = show x
+-- instance Pretty Bool where
+--   prettyTab _ x = show x
 
 instance Pretty TypeId where
-  prettyTab _ (TypeId n) = 'R' :  ptv n
+    pretty (TypeId n) = text $ 'R' :  ptv n
 
 instance Pretty TBody where
-  prettyTab t (TVar n) = prettyTab t n
-  prettyTab _ x = case show x of
-                      'T':xs -> xs
-                      xs -> xs
+  pretty (TVar n) = pretty n
+  pretty x = text $ case show x of
+                        'T':xs -> xs
+                        xs -> xs
 
 instance Pretty TConsName where
-  prettyTab _ = show
+  pretty = text . show
 
 instance Pretty RowTVar where
-  prettyTab _ t = pretty (getRowTVar t)
+  pretty t = pretty (getRowTVar t)
 
 instance Show t => Pretty (FlatRowEnd t) where
-  prettyTab _ t = show t
+  pretty = text . show
 
 instance Pretty Type where
-  prettyTab x = prettyType x . unFix
+  pretty = prettyType . unFix
 
 instance Pretty (FType Type) where
-  prettyTab = prettyType
+  pretty = prettyType
                 
-prettyType :: Int -> FType Type -> String
-prettyType n (TBody t) = prettyTab n t
-prettyType n (TFunc ts tres) = wrapThis this $ "(" ++ args ++ " -> " ++ prettyTab n tres ++ ")"
-  where nonThisArgs = map (prettyTab n) . drop 1 $ ts
+prettyType :: FType Type -> Doc
+prettyType (TBody t) = pretty t
+prettyType (TFunc ts tres) = wrapThis this $ parens $ args <+> string "->" <+> pretty tres
+  where nonThisArgs = map pretty . drop 1 $ ts
         (this, args) = case ts of
                 [] -> (Nothing, nakedSingleOrTuple nonThisArgs)
                 (this_:_) -> (Just this_, nakedSingleOrTuple nonThisArgs)
@@ -149,96 +161,84 @@ prettyType n (TFunc ts tres) = wrapThis this $ "(" ++ args ++ " -> " ++ prettyTa
         wrapThis (Just (Fix (TBody TUndefined))) s = s
         wrapThis (Just (Fix (TBody TEmptyThis))) s = s
         -- if "this" is a recursive type, only show the recursive type name (no params) - this is "lossy"
-        wrapThis (Just (Fix (TCons (TName name) _))) s = prettyTab n name ++ "." ++ s
-        wrapThis (Just t) s = prettyTab n t ++ "." ++ s
+        wrapThis (Just (Fix (TCons (TName name) _))) s = pretty name <> dot <> s
+        wrapThis (Just t) s = pretty t <> dot <> s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
-prettyType n (TCons TArray [t]) = "[" ++ prettyTab n t ++ "]"
-prettyType n (TCons TTuple ts) = "(" ++ intercalate ", " (map (prettyTab n) ts) ++ ")"
-prettyType n (TCons (TName name) ts) = "<" ++ pretty name ++ ": " ++ (unwords $ map (prettyTab n) ts) ++ ">"
-prettyType n (TCons TStringMap [t]) = "Map " ++ prettyTab n t
-prettyType n (TCons tcn ts) = error $ "Malformed TCons: " ++ pretty tcn ++ intercalate ", " (map (prettyTab n) ts)
-prettyType t (TRow label list) =
-    concat [ case label of
-                 Just l' -> l' ++ "="
-                 Nothing -> ""
-           , "{"
-           , body'
-           , case r of
-                  FlatRowEndTVar r' -> maybe "" ((" | "++) . pretty) r'
-                  FlatRowEndRec tid ts -> ", " ++ prettyTab (t+1) (Fix $ TCons (TName tid) ts) -- TODO
-           , "}"
+prettyType (TCons TArray [t]) = brackets $ pretty t
+prettyType (TCons TTuple ts) = pretty ts
+prettyType (TCons (TName name) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
+prettyType (TCons TStringMap [t]) = text "StringMap " <+> pretty t
+prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
+prettyType (TRow label list) =
+    hsep [ case label of
+                 Just l' -> string l' <> string "="
+                 Nothing -> empty
+           , encloseSep (string "{ ") space (string ", ") body'
+             <> case r of
+                    FlatRowEndTVar r' -> maybe empty ((text "|" <+>) . pretty) r'
+                    FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TCons (TName tid) ts)) -- TODO
+             <> rbrace
            ]
   where (props, r) = flattenRow list
-        printProp' = (\(n,v) -> prettyTab (t+1) n ++ ": " ++ prettyTab (t+1) v)
-        body' = case Map.toList props of
-                    [] -> ""
-                    [p] -> printProp' p
-                    ps -> "\n" ++ tab (t+1) ++ intercalate (",\n" ++ tab (t+1)) (map printProp' ps) ++ "\n" ++ tab t
+        printProp' (n,v) = fill 6 (pretty n) <> string ":" <+> align (pretty v)
+        body' = map printProp' $ Map.toList props
 
 instance Pretty TProp where
-    prettyTab t (TPropName n) = prettyTab t n
-    prettyTab _ TPropGetIndex = "get[]"
-    prettyTab _ TPropSetIndex = "set[]"
+    pretty (TPropName n) = pretty n
+    pretty TPropGetIndex = text "get[]"
+    pretty TPropSetIndex = text "set[]"
                                 
 instance Pretty ClassName where
-    prettyTab _ (ClassName c) = c
+    pretty (ClassName c) = text c
                     
 instance (Pretty t) => Pretty (TPred t) where
-    prettyTab _ (TPredIsIn cn t) = pretty cn ++ " " ++ pretty t
+    pretty (TPredIsIn cn t) = pretty cn <+> pretty t
     
-instance (Pretty t) => Pretty [TPred t] where
-    prettyTab n p = intercalate ", " $ map (prettyTab n) p
-
 instance (VarNames t, Pretty t) => Pretty (TQual t) where
-    prettyTab n (TQual [] t) = prettyTab n t
-    prettyTab n (TQual preds t) = prettyTab n preds ++ " => " ++ prettyTab n t
+    pretty (TQual [] t) = pretty t
+    pretty (TQual preds t) = pretty preds <+> pretty "=>" <+> align (pretty t)
 
 instance (Ord t, VarNames t, Pretty t) => Pretty (TScheme t) where
-  prettyTab n (TScheme vars t) = forall ++ prettyTab n t
-      where forall = if null vars then "" else "forall " ++ unwords (map (prettyTab n) vars) ++ ". "
+    pretty (TScheme vars t) = forall <> align (pretty t)
+        where forall = if null vars then empty else text "forall" <+> hsep (map pretty vars) <> pretty "." <> space
 
-instance (Pretty a, Pretty b) => Pretty (Either a b) where
-    prettyTab n (Left x) = "Error: " ++ prettyTab n x
-    prettyTab n (Right x) = prettyTab n x
+-- instance (Pretty a, Pretty b) => Pretty (Either a b) where
+--     prettyTab n (Left x) = "Error: " ++ prettyTab n x
+--     prettyTab n (Right x) = prettyTab n x
 
 instance (Pretty k, Pretty v) => Pretty (Map.Map k v) where
-  prettyTab n s = "Map (" ++ str' ++ ")"
-    where str' = intercalate ", " . map (\(k,v) -> prettyTab n k ++ " => " ++ prettyTab n v) . Map.toList $ s
+    pretty s = string "Map" <+> (encloseSep lbrace rbrace comma $ map (\(k,v) -> pretty k <+> pretty "=>" <+> pretty v) $ Map.toList s)
 
 instance (Pretty k) => Pretty (Set.Set k) where
-  prettyTab n s = "Set {" ++ str' ++ "}"
-    where str' = intercalate ", " . map (prettyTab n) . Set.toList $ s
+    pretty s = string "Set" <+> (encloseSep lbrace rbrace comma $ map pretty $ Set.toList s)
 
-instance Pretty Pos.SourcePos where
-    prettyTab _ p = Pos.sourceName p ++ ":" ++ show (Pos.sourceLine p) ++ ":" ++ show (Pos.sourceColumn p)
-
-instance Pretty GenInfo where
-    prettyTab _ g = show g
+-- instance Pretty GenInfo where
+--     prettyTab _ g = show g
     
 instance Pretty TypeError where
-  prettyTab t (TypeError s m) = prettyTab t s ++ ": Error: " ++ prettyTab (t+1) m
+    pretty (TypeError s m) = pretty s <> text ": Error:" <+> line <+> indent 4 (pretty m)
 
 instance Pretty NameSource where
-  prettyTab _ = show
+    pretty = string . show
 
 instance Pretty VarId where
-  prettyTab _ = show
+    pretty = string . show
 
 instance (Ord t, VarNames t, Pretty t) => Pretty (Class t) where
-    prettyTab n c = "{ instances = [" ++ s' ++ "] }"
-        where s' = intercalate ", " . map (prettyTab n) $ classInstances c
+    pretty c = braces $ string "instances = " <+> pretty (classInstances c)
 
 instance (Show a, Show b) => Pretty (Graph.Gr a b) where
-    prettyTab _ = Graph.prettify
+    pretty = text . Graph.prettify
                   
 instance Pretty InferState where
-  prettyTab t (InferState ns sub vs vi tn cs pu) = "InferState { nameSource: "
-                                             ++ pretty ns ++ newline
-                                             ++ ", subst: " ++ pretty sub ++ newline
-                                             ++ ", varSchemes: " ++ pretty vs ++ newline
-                                             ++ ", varInstances: " ++ pretty vi ++ newline
-                                             ++ ", namedTypes: " ++ pretty tn ++ newline
-                                             ++ ", pendingUni: " ++ pretty pu ++ newline
-                                             ++ ", classes: " ++ pretty cs ++ newline
-                                             ++ "}"
-    where newline = "\n" ++ tab (t+1)
+    pretty (InferState ns sub vs vi tn cs pu) = text "InferState"
+                                                <+> (align . encloseSep lbrace rbrace comma
+                                                     $ [ fill 10 (string "nameSource: ") <+> pretty ns 
+                                                       , fill 10 (string "subst: ") <+> pretty sub 
+                                                       , fill 10 (string "varSchemes: ") <+> pretty vs 
+                                                       , fill 10 (string "varInstances: ") <+> pretty vi 
+                                                       , fill 10 (string "namedTypes: ") <+> pretty tn 
+                                                       , fill 10 (string "pendingUni: ") <+> pretty pu 
+                                                       , fill 10 (string "classes: ") <+> pretty cs 
+                                                       ])
+

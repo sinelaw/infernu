@@ -24,5 +24,5 @@ main = do
         Right ts -> when (not $ optQuiet options) $ do sourceCodes <- forM files $ \f -> do d <- readFile f
                                                                                             return (f, lines d)
                                                        putStrLn $ process ts sourceCodes
-        Left e -> putStrLn (pretty e) >> exitFailure
+        Left e -> putStrLn (show $ pretty e) >> exitFailure
 
