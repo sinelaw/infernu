@@ -28,7 +28,7 @@ instance Hashable EPropName where
 data LitVal = LitNumber !Double
             | LitBoolean !Bool
             | LitString !String
-            | LitRegex !String !Bool !Bool
+            | LitRegex !String !Bool !Bool !Bool
             | LitUndefined
             | LitNull
             | LitEmptyThis

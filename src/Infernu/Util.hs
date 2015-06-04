@@ -5,9 +5,10 @@ import           Control.Monad               (forM, when)
 import           Data.Maybe                  (catMaybes)
 import           Data.List                   (intercalate)
 import qualified Data.Set                    as Set
-import qualified Language.ECMAScript3.Parser as ES3Parser
-import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
-import qualified Language.ECMAScript3.Syntax as ES3
+import qualified Language.ECMAScript5.Parser as ES5Parser
+import qualified Language.ECMAScript5.PrettyPrint as ES5Pretty
+import qualified Language.ECMAScript5.Syntax as ES5
+import qualified Language.ECMAScript5.ParserState as ES5PS
 import qualified Text.Parsec.Pos             as Pos
 import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), (<+>), string, renderPretty, Doc, displayS)
 
@@ -42,18 +43,20 @@ indexList = zip [1..]
 
 
 checkSource :: String -> Either TypeError [(Source, QualType)]
-checkSource src = case ES3Parser.parseFromString src of
+checkSource src = case ES5Parser.parseFromString src of
                    Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing, Pos.initialPos "<global>"), message = string (show parseError) }
-                   Right expr -> -- case ES3.isValid expr of
+                   Right expr -> -- case ES5.isValid expr of
                                  --     False -> Left $ TypeError { source = Source (GenInfo True, Pos.initialPos "<global>"), message = "Invalid syntax" }
                                  --     True ->
-                                 fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap Source $ translate $ ES3.unJavaScript expr
+                                 fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap (Source) $ translate $ map (fmap getSource) $ ES5.unProgram expr
+
+getSource (ES5PS.SourceSpan (a, _), _) = a
 
 checkFiles :: Options -> [String] -> IO (Either TypeError [(Source, QualType)])
 checkFiles options fileNames = do
-  expr <- concatMap ES3.unJavaScript <$> forM fileNames ES3Parser.parseFromFile
-  when (optShowParsed options) $ putStrLn $ show $ ES3Pretty.prettyPrint expr
-  let expr' = fmap Source $ translate $ expr
+  expr <- concatMap ES5.unProgram <$> forM fileNames ES5Parser.parseFromFile
+  when (optShowParsed options) $ putStrLn $ show $ ES5Pretty.prettyPrint expr
+  let expr' = fmap Source $ translate $ map (fmap getSource) expr
   when (optShowCore options) $ putStrLn $ show $ pretty expr'
   let expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
@@ -63,7 +66,7 @@ showWidth :: Int -> Doc -> String
 showWidth w x   = displayS (renderPretty 0.4 w x) ""
 
 showDoc :: Doc -> String
-showDoc = showWidth 120
+showDoc = showWidth 100
 
 annotatedSource :: [(Source, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filterGen xs) indexedSource

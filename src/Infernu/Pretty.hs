@@ -71,7 +71,7 @@ instance Pretty LitVal where
     pretty (LitNumber x) = pretty x
     pretty (LitBoolean x) = pretty x
     pretty (LitString x) = pretty x
-    pretty (LitRegex x g i) = enclose (string "/") (string "/") (string x) <> (ifStr g "g") <> (ifStr i "i")
+    pretty (LitRegex x g i m) = enclose (string "/") (string "/") (string x) <> (ifStr g "g") <> (ifStr i "i") <> (ifStr m "m")
     pretty LitUndefined = string "undefined"
     pretty LitNull = string "null"
     pretty LitEmptyThis = string "(undefined 'this')"

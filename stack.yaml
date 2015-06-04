@@ -1,6 +1,9 @@
 flags: {}
 packages:
 - '.'
+- location:
+    git: git@github.com:jswebtools/language-ecmascript.git
+    commit: fabf7d0c98b1d169d67da6446c41b1a20a554f04
 extra-deps:
 - digits-0.2
 - base-orphans-0.3.3
