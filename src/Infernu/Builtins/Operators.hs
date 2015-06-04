@@ -33,6 +33,7 @@ builtins = Map.fromList [
   ("!",            unaryFunc boolean boolean),
   ("~",            unaryFunc number  number),
   ("typeof",       ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0] string),
+  ("instanceof",          ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
   ("+",            TScheme [Flex 0, Flex 1] $ TQual { qualPred = [TPredIsIn (ClassName "Plus") (tvar 1)]
                                          , qualType = binarySimpleFunc (tvar 0) (tvar 1) }),
   ("-",            numOp),
