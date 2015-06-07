@@ -71,5 +71,11 @@ builtins = Map.fromList [
   ("decodeURI",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
   ("decodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
   ("encodeURI",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
-  ("encodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] (string))
+  ("encodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
+  ("Date",         ts [0] $ Fix $ TRow (Just "Date[Constructor]")
+                                $ TRowProp TPropFun            (ts [] $ Fix $ TFunc [Fix $ TBody TDate] string)
+                                $ TRowProp (TPropName "now")   (ts [] $ Fix $ TFunc [tvar 0] (Fix $ TBody TDate))
+                                $ TRowProp (TPropName "parse") (ts [] $ Fix $ TFunc [tvar 0, string] (Fix $ TBody TDate))
+                                $ TRowProp (TPropName "UTC")   (ts [] $ Fix $ TFunc [tvar 0, number, number, number, number, number, number, number] (Fix $ TBody TDate))
+                                $ TRowEnd Nothing)
   ]

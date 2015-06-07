@@ -13,6 +13,9 @@ funcN xs tres = Fix $ TFunc xs tres
 string :: Type
 string = Fix $ TBody TString
 
+date :: Type
+date = Fix $ TBody TDate
+
 regex :: Type
 regex = Fix $ TBody TRegex
 

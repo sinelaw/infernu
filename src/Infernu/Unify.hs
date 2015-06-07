@@ -21,6 +21,7 @@ import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), 
 
 import           Infernu.Prelude
 import           Infernu.Builtins.Array (arrayRowType)
+import           Infernu.Builtins.Date (dateRowType)
 import           Infernu.Builtins.Regex (regexRowType)
 import           Infernu.Builtins.String (stringRowType)
 import           Infernu.Builtins.StringMap (stringMapRowType)
@@ -38,6 +39,7 @@ tryMakeRow (TCons TStringMap [t]) = Just <$> stringMapRowType t
 tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
 tryMakeRow (TBody TRegex) = Just <$> regexRowType
 tryMakeRow (TBody TString) = Just <$> stringRowType
+tryMakeRow (TBody TDate) = Just <$> dateRowType
 tryMakeRow (TRow _ rl) = Just <$> return rl
 tryMakeRow (TFunc targs tres) = Just <$> (return
                                           . TRowProp TPropFun (schemeEmpty $ Fix $ TFunc targs tres)
@@ -176,12 +178,18 @@ decycledUnify = decycle3 unify''
 unlessEq :: (Monad m, Eq a) => a -> a -> m () -> m ()
 unlessEq x y = unless (x == y)
 
-mkTypeErrorMessage :: Pretty a => a -> a -> Maybe TypeError -> Doc
-mkTypeErrorMessage t1 t2 mte =
-    vsep [ text "Failed unifying:"
-         , indent 4 $ pretty t1
-         , text "With:"
-         , indent 4 $ pretty t2
+wrapWithUnifyError :: Pretty a => a -> a -> Maybe TypeError -> Doc
+wrapWithUnifyError t1 t2 mte =
+    mkTypeErrorMessage msg mte
+    where msg = vsep [text "Failed unifying:"
+                     , indent 4 $ pretty t1
+                     , text "With:"
+                     , indent 4 $ pretty t2
+                     ]
+
+mkTypeErrorMessage :: Doc -> Maybe TypeError -> Doc
+mkTypeErrorMessage msg mte =
+    vsep [ msg
          , case mte of
                Nothing -> empty
                          --   "             With:  "
@@ -191,7 +199,7 @@ mkTypeErrorMessage t1 t2 mte =
 wrapError :: Pretty b => Source -> b -> b -> Infer a -> Infer a
 wrapError s ta tb = mapError
                     $ \te -> TypeError { source = s,
-                                         message = mkTypeErrorMessage ta tb (Just te)
+                                         message = wrapWithUnifyError ta tb (Just te)
                                        }
 
 unify'' :: Maybe UnifyF -> UnifyF
@@ -205,7 +213,7 @@ unify'' (Just recurse) a t1 t2 =
      wrapError a t1 t2 $ unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
-unificationError pos x y = throwError pos $ mkTypeErrorMessage a b Nothing
+unificationError pos x y = throwError pos $ wrapWithUnifyError a b Nothing
   where [a, b] = minifyVars [x, y]
 
 assertNoPred :: QualType -> Infer Type
@@ -290,7 +298,15 @@ unify' r a t1@(TCons{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TRow{})  t2@(TBody{}) = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TBody{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TRow{})  t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
-unify' r a t1@(TFunc{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
+--unify' r a t1@(TFunc{}) t2@(TRow{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TFunc{}) t2@(TRow  _ rl) =
+    case (Map.lookup TPropFun . fst $ flattenRow rl) of
+        Nothing -> unificationError a t1 t2
+        Just ts -> do t2' <- instantiate ts
+                      r a (Fix t1) $ qualType t2'
+
+
+
 
 -- | Two row types
 -- TODO: un-hackify!
@@ -340,6 +356,7 @@ unifyTryMakeRow r a t1 t2 =
                t2' = Fix $ TRow (label t2) rowType2
                label t = case t of
                             TCons cons _ -> Just $ show $ pretty cons
+                            TRow l _ -> l
                             _ -> Just $ show $ pretty $ Fix t
       _ -> unificationError a t1 t2
 
@@ -399,8 +416,12 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
        traceLog $ text "in1NotIn2row" <+> pretty in1NotIn2row
        case r2 of
          FlatRowEndTVar Nothing -> if Set.null in1NotIn2
-                    then varBind a (getRowTVar r) (Fix $ TRow Nothing $ TRowEnd Nothing)
-                    else unificationError a t1 t2
+                                   then varBind a (getRowTVar r) (Fix $ TRow Nothing $ TRowEnd Nothing)
+                                   else throwError a $ vsep [ text "The following properties:"
+                                                            , indent 4 $ pretty $ Set.toList in1NotIn2
+                                                            , text "are missing from row:"
+                                                            , indent 4 $ pretty t2
+                                                            ]
          FlatRowEndTVar (Just r2') -> recurse a in1NotIn2row (Fix . TBody . TVar $ getRowTVar r2')
          FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TCons (TName tid) ts)
 

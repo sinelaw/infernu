@@ -129,7 +129,7 @@ setTVarName (Flex _) y = Flex y
 setTVarName (Skolem _) y = Skolem y
 
 data TBody = TVar TVarName
-           | TNumber | TBoolean | TString | TRegex | TUndefined | TNull | TEmptyThis
+           | TNumber | TBoolean | TString | TRegex | TUndefined | TNull | TEmptyThis | TDate
              deriving (Show, Eq, Ord)
 
 newtype TypeId = TypeId Int

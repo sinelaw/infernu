@@ -141,7 +141,7 @@ inferType' env (ENew a e1 eArgs) =
          tArgs = thisT : map (qualType . fst) rargsTE
          eArgs' = map snd rargsTE
          preds = concatMap qualPred $ t1 : map fst argsTE
-     unify a (qualType t1) (Fix $ TFunc tArgs resT)
+     unify a (Fix $ TFunc tArgs resT) (qualType t1)
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> freshFlex
      unify a (Fix . TRow Nothing . TRowEnd $ Just rowConstraintVar) thisT

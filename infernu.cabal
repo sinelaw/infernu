@@ -53,6 +53,7 @@ flag debug
 library
   hs-source-dirs:      src
   exposed-modules:   Infernu.Builtins.Array
+                   , Infernu.Builtins.Date
                    , Infernu.Builtins.Operators
                    , Infernu.Builtins.Regex
                    , Infernu.Builtins.String
