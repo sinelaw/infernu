@@ -38,6 +38,7 @@ tryMakeRow (TCons TStringMap [t]) = Just <$> stringMapRowType t
 tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
 tryMakeRow (TBody TRegex) = Just <$> regexRowType
 tryMakeRow (TBody TString) = Just <$> stringRowType
+tryMakeRow (TRow _ rl) = Just <$> return rl
 tryMakeRow _ = return Nothing
 
 ----------------------------------------------------------------------
@@ -280,13 +281,12 @@ unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
                        recurse a tres1 tres2
 
 -- | Type constructor vs. row type
-unify' r a (TRow _ tRowList) t2@(TCons _ _)  = unifyTryMakeRow r a True  tRowList t2
-unify' r a t1@(TCons _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
-unify' r a (TRow _ tRowList) t2@(TBody _)    = unifyTryMakeRow r a True  tRowList t2
-unify' r a t1@(TBody _)   (TRow _ tRowList)  = unifyTryMakeRow r a False tRowList t1
-unify' r a (TRow _ tRowList) t2@(TFunc _ _)  = unifyTryMakeRow r a True  tRowList t2
-unify' r a t1@(TFunc _ _)  (TRow _ tRowList) = unifyTryMakeRow r a False tRowList t1
-
+unify' r a t1@(TRow{})  t2@(TCons{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TCons{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TRow{})  t2@(TBody{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TBody{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TRow{})  t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TFunc{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 
 -- | Two row types
 -- TODO: un-hackify!
@@ -326,21 +326,18 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          then unifyRowTVars unifyDifferences
          else unifyDifferences
 
-unifyTryMakeRow :: UnifyF -> Source -> Bool -> TRowList Type -> FType Type -> Infer ()
-unifyTryMakeRow r a leftBiased tRowList t2 =
-  do let tRow = TRow Nothing tRowList
-     res <- tryMakeRow t2
-     case res of
-      Nothing -> if leftBiased
-                 then unificationError a tRow t2
-                 else unificationError a t2 tRow
-      Just rowType -> if leftBiased
-                      then r a (Fix tRow) row'
-                      else r a row' (Fix tRow)
-         where row' = Fix $ TRow label' rowType
-               label' = case t2 of
+unifyTryMakeRow :: UnifyF -> Source -> FType Type -> FType Type -> Infer ()
+unifyTryMakeRow r a t1 t2 =
+  do res1 <- tryMakeRow t1
+     res2 <- tryMakeRow t2
+     case (res1, res2) of
+      (Just rowType1, Just rowType2) -> r a t1' t2'
+         where t1' = Fix $ TRow (label t1) rowType1
+               t2' = Fix $ TRow (label t2) rowType2
+               label t = case t of
                             TCons cons _ -> Just $ show $ pretty cons
-                            _ -> Just $ show $ pretty t2
+                            _ -> Just $ show $ pretty $ Fix t
+      _ -> unificationError a t1 t2
 
 
 unifyTypeSchemes :: Source -> TypeScheme -> TypeScheme -> Infer ()
