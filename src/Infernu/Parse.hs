@@ -10,7 +10,7 @@ import           Infernu.Types
 import qualified Text.Parsec.Pos                  as Pos
 import qualified Infernu.Log as Log
 import           Infernu.Prelude
-    
+
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
 poo = "_/_"
@@ -18,7 +18,7 @@ poo = "_/_"
 -- | A dummy expression that does nothing (but has a type).
 empty :: a -> Exp (GenInfo, a)
 empty z = ELit (gen z) LitUndefined -- EVar z poo
-          
+
 errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
 errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES3PP.prettyPrint expr)
 
@@ -31,7 +31,7 @@ foldStmts (x:xs) expr = fromStatement x (foldStmts xs expr)
 parallelStmts :: Show a => a -> [ES3.Statement a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 parallelStmts _ [] expr = expr
 parallelStmts z stmts expr = ETuple (gen z) $ expr : map (flip fromStatement $ empty z) stmts
-    
+
 chainExprs :: Show a => a -> Exp (GenInfo, a) -> (Exp (GenInfo, a) -> Exp (GenInfo, a)) -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 chainExprs a init' getExpr expr = ELet (gen a) poo init' $ getExpr expr
 
@@ -42,14 +42,14 @@ gen :: a -> (GenInfo, a)
 gen x = (GenInfo True Nothing, x)
 
 src :: a -> (GenInfo, a)
-src x = (GenInfo False Nothing, x)        
+src x = (GenInfo False Nothing, x)
 
 decl :: a -> String -> (GenInfo, a)
 decl x n = (GenInfo False (Just n), x)
 
-litBool :: a -> Bool -> Exp (GenInfo, a)           
+litBool :: a -> Bool -> Exp (GenInfo, a)
 litBool z b = ELit (gen z) (LitBoolean b)
-           
+
 fromStatement :: Show a => ES3.Statement a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
@@ -102,7 +102,7 @@ fromStatement (ES3.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return")
                                         Just x' -> fromExpression x'
 
 -- TODO: Extremely inefficient, the continuation is duplicated between the case branches.
---                                        
+--
 -- We should have a name source (monad?) we can use here to generate unique names and wrap the whole
 -- case in a let, binding 'k' to a unique name and using EVar to refer to it in the branches.
 mkIf :: Show a => a -> ES3.Expression a -> ES3.Statement a -> ES3.Statement a
@@ -112,7 +112,7 @@ mkIf z pred' thenS elseS =
           . map (\(v,s) -> (v, chainExprs z (fromStatement s $ empty z) id k))
           $ [ (LitBoolean True, thenS)
             , (LitBoolean False, elseS)]
-          
+
 -- | Creates an EAbs (function abstraction)
 toAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> Exp (GenInfo, a)
 toAbs z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'
@@ -152,10 +152,10 @@ hasReturn (ES3.FunctionStmt _ _ _ _) = False
 hasReturn (ES3.ReturnStmt _ _) = True
 
 
-addDecl :: Show a => a -> String -> Exp (GenInfo, a) -> Exp (GenInfo, a)                                
+addDecl :: Show a => a -> String -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 addDecl z name expr = Log.trace ("addDecl: " ++ show res) res
-    where res = mapTopAnnotation (const $ decl z name) expr 
-                                 
+    where res = mapTopAnnotation (const $ decl z name) expr
+
 toNamedAbs :: Show a => a -> [ES3.Id c] -> [ES3.Statement a] -> ES3.Id a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 toNamedAbs z args stmts (ES3.Id zn name) letBody = let abs' = addDecl zn name $ toAbs z args stmts
                                                    in ELet (gen z) name abs' letBody
@@ -178,7 +178,7 @@ fromExpression (ES3.NullLit z) = ELit (src z) LitNull
 fromExpression (ES3.ArrayLit z exprs) = EArray (src z) $ map fromExpression exprs
 fromExpression (ES3.ObjectLit z props) = let stringProps = map (fromPropString . fst) props
                                          in if all (\x -> x /= Nothing) stringProps
-                                            then EStringMap (src z) $ zip (catMaybes stringProps) (map (fromExpression . snd) props) 
+                                            then EStringMap (src z) $ zip (catMaybes stringProps) (map (fromExpression . snd) props)
                                             else ERow (src z) False $ map (fromProp *** fromExpression) props
 fromExpression (ES3.BracketRef z arrExpr indexExpr) = getIndex z arrExpr indexExpr
 fromExpression (ES3.VarRef z name) = EVar (src z) $ ES3.unId name
@@ -273,7 +273,7 @@ assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp (GenInfo
 assignToProperty  z objExpr name expr = EPropAssign (src z) objExpr' (TPropName name) expr $ EProp (src z) objExpr' (TPropName name)
   where objExpr' = fromExpression objExpr
 
-applyPropFunc :: a -> TProp -> Exp (GenInfo, a) -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)                   
+applyPropFunc :: a -> TProp -> Exp (GenInfo, a) -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)
 applyPropFunc z prop arrExpr args = ELet (gen z) obj' arrExpr $ applyPropFunc'
     where obj' = "bracketObj"
           objVar = EVar (gen z) obj'
@@ -282,7 +282,7 @@ applyPropFunc z prop arrExpr args = ELet (gen z) obj' arrExpr $ applyPropFunc'
 
 getIndex :: Show a => a -> ES3.Expression a -> ES3.Expression a -> Exp (GenInfo, a)
 getIndex z arrExpr indexExpr = applyPropFunc z TPropGetIndex (fromExpression arrExpr) [fromExpression indexExpr]
-                               
+
 assignToIndex :: Show a => a -> ES3.Expression a  -> ES3.Expression a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 assignToIndex z objExpr idxExpr expr = applyPropFunc z TPropSetIndex objExpr' [idxExpr', expr]
   where objExpr' = fromExpression objExpr
@@ -297,7 +297,7 @@ fromProp (ES3.PropNum _ x) = show x
 fromPropString :: ES3.Prop a -> Maybe String
 fromPropString (ES3.PropString _ x) = Just x
 fromPropString _ = Nothing
-                  
+
 -- -- ------------------------------------------------------------------------
 
 translate :: [ES3.Statement Pos.SourcePos] -> Exp (GenInfo, Pos.SourcePos)

@@ -68,7 +68,7 @@ import qualified Data.Set                  as Set
 import qualified Data.Graph.Inductive      as Graph
 import qualified Text.Parsec.Pos           as Pos
 import Text.PrettyPrint.ANSI.Leijen (Doc)
-    
+
 import           Infernu.Fix               (Fix (..), replaceFix)
 import           Infernu.Prelude
 import Prelude ()
@@ -88,36 +88,37 @@ data GenInfo = GenInfo { isGen :: Bool, declName :: Maybe String }
 type EVarName = String
 type EPropName = String
 
-data LitVal = LitNumber Double
-            | LitBoolean Bool
-            | LitString String
-            | LitRegex String Bool Bool
+data LitVal = LitNumber !Double
+            | LitBoolean !Bool
+            | LitString !String
+            | LitRegex !String !Bool !Bool
             | LitUndefined
             | LitNull
             | LitEmptyThis
             deriving (Show, Eq, Ord)
 
-data Exp a = EVar a EVarName
-           | EAssign a EVarName (Exp a) (Exp a)
-           | EApp a (Exp a) [Exp a]
-           | EAbs a [EVarName] (Exp a)
-           | ELet a EVarName (Exp a) (Exp a)
-           | ECase a (Exp a) [(LitVal, Exp a)]
-           | EProp a (Exp a) TProp
-           | EPropAssign a (Exp a) TProp (Exp a) (Exp a)
+data Exp a = EVar !a !EVarName
+           | EAssign !a !EVarName !(Exp a) !(Exp a)
+           | EApp !a !(Exp a) ![Exp a]
+           | EAbs !a ![EVarName] !(Exp a)
+           | ELet !a !EVarName !(Exp a) !(Exp a)
+           | ECase !a !(Exp a) ![(LitVal, Exp a)]
+           | EProp !a !(Exp a) !TProp
+           | EPropAssign !a !(Exp a) !TProp !(Exp a) !(Exp a)
              -- TODO consider better options for causing rows to become closed outside the 'new' call
-           | ENew a (Exp a) [Exp a]
+           | ENew !a !(Exp a) ![Exp a]
              -- Various literal expressions
-           | ELit a LitVal
-           | EArray a [Exp a]
-           | ETuple a [Exp a]
-           | ERow a Bool [(EPropName, Exp a)]
-           | EStringMap a [(String, Exp a)]
+           | ELit !a !LitVal
+           | EArray !a ![Exp a]
+           | ETuple !a ![Exp a]
+           | ERow !a !Bool ![(EPropName, Exp a)]
+           | EStringMap !a ![(String, Exp a)]
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
 
-data TVarName = Flex Int | Skolem Int
+data TVarName = Flex !Int
+              | Skolem !Int
               deriving (Show, Eq, Ord)
 
 unTVarName :: TVarName -> Int
@@ -128,14 +129,14 @@ setTVarName :: TVarName -> Int -> TVarName
 setTVarName (Flex _) y = Flex y
 setTVarName (Skolem _) y = Skolem y
 
-data TBody = TVar TVarName
+data TBody = TVar !TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull | TEmptyThis | TDate
              deriving (Show, Eq, Ord)
 
 newtype TypeId = TypeId Int
                 deriving (Show, Eq, Ord)
 
-data TConsName = TArray | TTuple | TName TypeId | TStringMap
+data TConsName = TArray | TTuple | TName !TypeId | TStringMap
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -148,22 +149,22 @@ liftRowTVar :: (TVarName -> TVarName) -> RowTVar -> RowTVar
 liftRowTVar f (RowTVar x) = RowTVar (f x)
 
 -- | Row type.
-data TProp = TPropName EPropName | TPropGetIndex | TPropSetIndex | TPropFun
+data TProp = TPropName !EPropName | TPropGetIndex | TPropSetIndex | TPropFun
            deriving (Show, Eq, Ord)
 
-data TRowList t = TRowProp TProp (TScheme t) (TRowList t)
-                | TRowEnd (Maybe RowTVar)
-                | TRowRec TypeId [t]
+data TRowList t = TRowProp !TProp !(TScheme t) !(TRowList t)
+                | TRowEnd !(Maybe RowTVar)
+                | TRowRec !TypeId [t]
                   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-data FType t = TBody TBody
-             | TCons TConsName [t]
+data FType t = TBody !TBody
+             | TCons !TConsName [t]
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
              | TFunc [t] t
                -- | Row types have an optional label, so that structural (non-nominal) types can
                -- have a name. The label has no effect on type checking.
-             | TRow (Maybe String) (TRowList t)
+             | TRow !(Maybe String) !(TRowList t)
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type Type = Fix FType
