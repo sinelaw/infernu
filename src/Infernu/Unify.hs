@@ -39,6 +39,10 @@ tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
 tryMakeRow (TBody TRegex) = Just <$> regexRowType
 tryMakeRow (TBody TString) = Just <$> stringRowType
 tryMakeRow (TRow _ rl) = Just <$> return rl
+tryMakeRow (TFunc targs tres) = Just <$> (return
+                                          . TRowProp TPropFun (schemeEmpty $ Fix $ TFunc targs tres)
+                                          $ TRowEnd Nothing)
+
 tryMakeRow _ = return Nothing
 
 ----------------------------------------------------------------------
@@ -254,18 +258,6 @@ unify' recurse a t1 (TCons (TName n2) targs2) =
     >>= assertNoPred
     >>= recurse a (Fix t1)
 
--- | A type constructor vs. a simple type
-unify' _ a t1@(TBody _) t2@(TCons _ _) = unificationError a t1 t2
-unify' _ a t1@(TCons _ _) t2@(TBody _) = unificationError a t1 t2
-
--- | A function vs. a simple type
-unify' _ a t1@(TBody _) t2@(TFunc _ _) = unificationError a t1 t2
-unify' _ a t1@(TFunc _ _) t2@(TBody _) = unificationError a t1 t2
-
--- | A function vs. a type constructor
-unify' _ a t1@(TFunc _ _) t2@(TCons _ _) = unificationError a t1 t2
-unify' _ a t1@(TCons _ _) t2@(TFunc _ _) = unificationError a t1 t2
-
 -- | Two type constructors
 unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
   do  when (n1 /= n2) $ unificationError a t1 t2
@@ -279,6 +271,18 @@ unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
         Nothing -> unificationError a t1 t2
         Just ts -> do  unifyl recurse a ts
                        recurse a tres1 tres2
+
+-- | A type constructor vs. a simple type
+unify' r a t1@(TBody{}) t2@(TCons{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TCons{}) t2@(TBody{}) = unifyTryMakeRow r a t1 t2
+
+-- | A function vs. a simple type
+unify' r a t1@(TBody{}) t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TFunc{}) t2@(TBody{}) = unifyTryMakeRow r a t1 t2
+
+-- | A function vs. a type constructor
+unify' r a t1@(TFunc{}) t2@(TCons{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TCons{}) t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
 
 -- | Type constructor vs. row type
 unify' r a t1@(TRow{})  t2@(TCons{}) = unifyTryMakeRow r a t1 t2

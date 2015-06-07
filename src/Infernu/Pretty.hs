@@ -198,6 +198,7 @@ instance Pretty TProp where
     pretty (TPropName n) = pretty n
     pretty TPropGetIndex = text "get[]"
     pretty TPropSetIndex = text "set[]"
+    pretty TPropFun      = text "func()"
 
 instance Pretty ClassName where
     pretty (ClassName c) = text c

@@ -148,7 +148,7 @@ liftRowTVar :: (TVarName -> TVarName) -> RowTVar -> RowTVar
 liftRowTVar f (RowTVar x) = RowTVar (f x)
 
 -- | Row type.
-data TProp = TPropName EPropName | TPropGetIndex | TPropSetIndex
+data TProp = TPropName EPropName | TPropGetIndex | TPropSetIndex | TPropFun
            deriving (Show, Eq, Ord)
 
 data TRowList t = TRowProp TProp (TScheme t) (TRowList t)
