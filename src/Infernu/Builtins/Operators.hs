@@ -9,7 +9,7 @@ import qualified Data.Map.Lazy              as Map
 import           Data.Map.Lazy              (Map)
 
 import Infernu.Builtins.Util
-           
+
 unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = ts [0] $ Fix $ TFunc [tvar 0, t1] t2
 

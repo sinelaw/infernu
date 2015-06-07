@@ -4,7 +4,7 @@ module Infernu.Options
 
 import           Infernu.Prelude
 
-import Options.Applicative 
+import Options.Applicative
 
 data Options = Options
                { optQuiet :: Bool
@@ -15,13 +15,13 @@ data Options = Options
 
 defaultOptions :: Options
 defaultOptions = Options { optQuiet = False, optShowCore = False, optShowParsed = False, optFileNames = [] }
-                 
+
 opts :: ParserInfo Options
 opts = info (helper <*> parseOpts)
        ( fullDesc
          <> progDesc "Infer types in the given JavaScript FILES and check for type errors. Unless -q is given, the source annotated with type signatures is outputted."
          <> header "infernu - static type checker for JavaScript using full type inference" )
-               
+
 parseOpts :: Parser Options
 parseOpts = Options
             <$> switch (long "quiet"
@@ -32,5 +32,5 @@ parseOpts = Options
             <*> switch (long "dump-parsed"
                         <> help "Dump parsed JS syntax tree (used for debugging infernu)" )
             <*> some (argument str (metavar "FILES..."))
-      
-    
+
+

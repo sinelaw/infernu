@@ -8,4 +8,4 @@ main = do
   res <- runAllTests
   print res
   return ()
-  
+

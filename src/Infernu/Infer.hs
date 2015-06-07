@@ -24,7 +24,7 @@ import qualified Data.Set           as Set
 import           Data.Char          (isUpper)
 
 import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, squotes)
-    
+
 import           Infernu.Prelude
 import qualified Infernu.Builtins.Operators   as Operators
 import           Infernu.InferState
@@ -48,7 +48,7 @@ getAnnotations = foldr (:) []
 closeRowList :: Bool -> Source -> TRowList Type -> Infer (TRowList Type)
 closeRowList unrollRec a   (TRowProp p t l) = TRowProp p t <$> closeRowList unrollRec a l
 closeRowList _         _   (TRowEnd _)      = return $ TRowEnd Nothing
-closeRowList unrollRec a r@(TRowRec tid ts) = 
+closeRowList unrollRec a r@(TRowRec tid ts) =
   if not unrollRec
   then return $ r
   else do qt <- unrollName a tid ts

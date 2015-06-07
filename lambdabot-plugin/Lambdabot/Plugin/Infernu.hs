@@ -19,7 +19,7 @@ import           Infernu.Parse                (translate)
 import           Infernu.Types (GenInfo(..), Source(..))
 
 import Text.PrettyPrint.ANSI.Leijen (plain, displayS, renderPretty, Doc)
-    
+
 infernuPlugin :: Module ()
 infernuPlugin = newModule
     { moduleCmds = return

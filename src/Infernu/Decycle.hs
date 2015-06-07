@@ -13,7 +13,7 @@ decycleOn toOrd f = go Set.empty
   where
     go :: Set.Set b -> a -> res
     go visited x = f (mRecurse visited (toOrd x)) x
-    
+
     mRecurse :: Set.Set b -> b -> Maybe (a -> res)
     mRecurse visited o = if Set.member o visited
                          then Nothing

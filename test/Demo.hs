@@ -6,7 +6,7 @@ import           Infernu.Infer      (pretty)
 import           Infernu.Util       (checkFiles)
 import           Infernu.Options    (defaultOptions)
 import           Infernu.Prelude
-    
+
 import           System.Environment (getArgs)
 
 isRight :: Either a b -> Bool

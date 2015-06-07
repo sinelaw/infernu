@@ -25,4 +25,4 @@ traceLogVal !s !r = pure $! trace s r `seq` r
 
 traceLog :: Applicative f => Doc -> f ()
 traceLog !s = pure $! trace (show s) () `seq` ()
-                    
+

@@ -16,7 +16,7 @@ data Value = VString String
            | VUndef
            | VRow (Map String Value)
            | VFun (RealWorld -> Value -> Value -> (RealWorld, Value))
-             
+
 instance Show Value where
     show (VString s) = "VString " ++ show s
     show (VBool b) = "VBool " ++ show b
@@ -24,7 +24,7 @@ instance Show Value where
     show VUndef = "undefined"
     show (VRow props) = "VRow " ++ show props
     show (VFun _) = "VFun" -- "VFun (" ++ show props ++ ", <fun>)"
-                    
+
 data Expr = Var String
           | Lit Value
           | App Expr Expr
@@ -79,9 +79,9 @@ location x env = snd $ lookup' x env
 emean :: Expr -> Env -> RealWorld -> (RealWorld, Value)
 
 emean (Lit v) = \env rw -> (rw, v)
-                       
+
 --emean (Var x) =
-         
+
 -- | Function expressions
 
 --Return values are passed using a special "return" name pushed onto the environment. The result of a function is the value bound in the environment to that value when the function completes.
@@ -89,7 +89,7 @@ emean (Lit v) = \env rw -> (rw, v)
 emean (Abs args body) =
     \env rw ->
         ( rw
-        , VFun 
+        , VFun
           $ \rw' ->
                 \this args' ->
                     case (smean body) halt (push (NameId args) args' . push (NameId "this") this . push ReturnId VUndef $ env) rw' of
@@ -115,7 +115,7 @@ smean :: Statement
          -> Env -> RealWorld -> (Env, RealWorld)
 
 smean Empty = id
-              
+
 -- | Return statement
 
 smean (Return expr stmt) =
@@ -193,4 +193,4 @@ smean (Let x expr stmt) = \k env rw ->
 
 
 test = (App (Abs "y" (Return (Lit $ VNum 91) Empty)) (Lit $ VBool False))
-        
+

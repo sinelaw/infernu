@@ -9,10 +9,10 @@ import Infernu.InferState
 import           Infernu.Lib (safeLookup)
 import           Infernu.Prelude
 import Infernu.Builtins.Util
-    
+
 
 stringProps :: [(String, TypeScheme)]
-stringProps = 
+stringProps =
   [ ("length", ty number)
   , ("charAt", ty $ func string number string)
   , ("charCodeAt", ty $ func string number number)
@@ -28,7 +28,7 @@ stringProps =
 --     type R r = r
 --     type M RegexLocal = -- match result type for RegexLocal
 --     type M RegexGlobal = [String]
--- 
+--
 --  , ("match", ty $ func string regex
 
   , ("replace", TScheme [Flex 0] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)

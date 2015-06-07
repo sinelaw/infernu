@@ -9,7 +9,7 @@ import Infernu.InferState
 import           Infernu.Lib (safeLookup)
 import Infernu.Prelude
 import Infernu.Builtins.Util
-       
+
 regexMatch :: Type
 regexMatch = Fix . TRow (Just "RegexMatch")
              -- TODO: instead of quantifying 'this', it should be a recursive type (regexMatch itself)
@@ -19,7 +19,7 @@ regexMatch = Fix . TRow (Just "RegexMatch")
              $ TRowEnd Nothing
 
 regexProps :: [(String, TypeScheme)]
-regexProps = 
+regexProps =
   [ ("source", ty string)
   , ("exec", ty $ func regex string regexMatch)
   , ("lastIndex", ty number)
