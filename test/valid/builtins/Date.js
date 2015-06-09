@@ -24,3 +24,30 @@ n = x.getUTCMilliseconds();
 n = x.getUTCMinutes();
 n = x.getUTCMonth();
 n = x.getUTCSeconds();
+n = x.valueOf();
+
+x.setDate(n);
+x.setFullYear(n);
+x.setHours(n);
+x.setMilliseconds(n);
+x.setMinutes(n);
+x.setMonth(n);
+x.setSeconds(n);
+x.setTime(n);
+x.setUTCDate(n);
+x.setUTCFullYear(n);
+x.setUTCHours(n);
+x.setUTCMilliseconds(n);
+x.setUTCMinutes(n);
+x.setUTCMonth(n);
+x.setUTCSeconds(n);
+//x.setYear(n);
+
+var s = '';
+s = x.toDateString();
+s = x.toISOString();
+s = x.toJSON();
+s = x.toString();
+s = x.toTimeString();
+s = x.toUTCString();
+
