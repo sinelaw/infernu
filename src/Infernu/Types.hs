@@ -425,7 +425,8 @@ instance VarNames t => VarNames (TQual t) where
 -- >>> applySubst s qt
 -- TQual {qualPred = [TPredIsIn {predClass = ClassName "Bla", predType = Fix (TBody TNumber)}], qualType = Fix (TBody TNumber)}
 instance (Substable t, VarNames t) => Substable (TQual t) where
-    applySubst s (TQual preds t) = TQual (applySubst s preds) (applySubst s t)
+    applySubst s (TQual preds t) = TQual { qualPred = filter (not . Set.null . freeTypeVars) (applySubst s preds)
+                                         , qualType = applySubst s t }
 
 instance VarNames t => VarNames (TPred t) where
     freeTypeVars (TPredIsIn _ t) = freeTypeVars t
