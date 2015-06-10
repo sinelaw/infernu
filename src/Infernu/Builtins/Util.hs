@@ -28,6 +28,9 @@ number = Fix $ TBody TNumber
 array :: Type -> Type
 array t = Fix $ TCons TArray [t]
 
+stringMap :: Type -> Type
+stringMap t = Fix $ TCons TStringMap [t]
+
 boolean :: Fix FType
 boolean = Fix $ TBody TBoolean
 
@@ -37,6 +40,9 @@ undef = Fix $ TBody TUndefined
 ts :: [Int] -> t -> TScheme t
 ts vs t = TScheme (map Flex vs) $ qualEmpty t
 
+tsq :: [Int] -> TQual t -> TScheme t
+tsq vs = TScheme (map Flex vs)
+
 ty :: t -> TScheme t
 ty t = TScheme [] $ qualEmpty t
 
@@ -45,3 +51,10 @@ tvar = Fix . TBody . TVar . Flex
 
 withTypeClass :: String -> a -> a -> TQual a
 withTypeClass n t t' = TQual { qualPred = [TPredIsIn { predClass = ClassName n, predType = t }], qualType = t' }
+
+openRow :: Int -> Type
+openRow tv = Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex tv)
+
+prop :: EPropName -> TScheme t -> TRowList t -> TRowList t
+prop name = TRowProp (TPropName name)
+

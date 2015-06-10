@@ -2,13 +2,15 @@ module Infernu.Builtins.Operators
        (builtins)
        where
 
-import           Infernu.Types
 import           Infernu.Prelude
+import           Infernu.Types
 
-import qualified Data.Map.Lazy              as Map
-import           Data.Map.Lazy              (Map)
+import           Data.Map.Lazy         (Map)
+import qualified Data.Map.Lazy         as Map
 
-import Infernu.Builtins.Util
+import           Infernu.Builtins.Math (math)
+import           Infernu.Builtins.Object (object)
+import           Infernu.Builtins.Util
 
 unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = ts [0] $ Fix $ TFunc [tvar 0, t1] t2
@@ -28,107 +30,57 @@ numRelation = binaryFuncS number number boolean
 numOp :: TypeScheme
 numOp = binaryFuncS number number number
 
-numProp name = TRowProp (TPropName name) $ ts [] $ number
-
-numFuncProp name = TRowProp (TPropName name) $ ts [] $ Fix $ TFunc [tvar 0, number] number
-numFuncProp2 name = TRowProp (TPropName name) $ ts [] $ Fix $ TFunc [tvar 0, number, number] number
 
 builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
-  ("!",            unaryFunc boolean boolean),
-  ("~",            unaryFunc number  number),
-  ("typeof",       ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0] string),
-  ("instanceof",          ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
-  ("+",            TScheme [Flex 0, Flex 1] $ TQual { qualPred = [TPredIsIn (ClassName "Plus") (tvar 1)]
-                                         , qualType = binarySimpleFunc (tvar 0) (tvar 1) }),
-  ("-",            numOp),
-  ("*",            numOp),
-  ("/",            numOp),
-  ("%",            numOp),
-  ("<<",           numOp),
-  (">>",           numOp),
-  (">>>",          numOp),
-  ("&",            numOp),
-  ("^",            numOp),
-  ("|",            numOp),
-  ("<",            numRelation),
-  ("<=",           numRelation),
-  (">",            numRelation),
-  (">=",           numRelation),
-  ("===",          ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
-  ("!==",          ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
-  ("&&",           ts [0, 1] $ Fix $ TFunc [tvar 0, tvar 1, tvar 1] (tvar 1)),
-  ("||",           ts [0, 1] $ Fix $ TFunc [tvar 0, tvar 1, tvar 1] (tvar 1)),
-  -- avoid coercions on == and !=
-  ("==",           ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0, tvar 0] boolean),
-  ("!=",           ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0, tvar 0] boolean),
-  ("RegExp",       ts [] $ Fix $ TFunc [undef, string, string] (regex)),
-  ("String",       ts [1] $ Fix $ TFunc [undef, tvar 1] (string)),
-  ("Number",       ts [1] $ Fix $ TFunc [undef, tvar 1] (number)),
-  ("Boolean",      ts [1] $ Fix $ TFunc [undef, tvar 1] (boolean)),
-  ("NaN",          ts [] number),
-  ("Infinity",     ts [] number),
-  ("undefined",    ts [0] $ undef),
-  ("isFinite",     ts [0] $ Fix $ TFunc [tvar 0, number] (boolean)),
-  ("isNaN",        ts [0] $ Fix $ TFunc [tvar 0, number] (boolean)),
-  ("parseFloat",   ts [0] $ Fix $ TFunc [tvar 0, string] (number)),
-  ("parseInt",     ts [0] $ Fix $ TFunc [tvar 0, string, number] (number)),
-  ("decodeURI",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
-  ("decodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
-  ("encodeURI",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
-  ("encodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] (string)),
-  ("Date",         ts [0] $ Fix $ TRow (Just "Date[Constructor]")
-                                $ TRowProp TPropFun            (ts [] $ Fix $ TFunc [Fix $ TBody TDate] string)
-                                $ TRowProp (TPropName "now")   (ts [] $ Fix $ TFunc [tvar 0] (Fix $ TBody TDate))
-                                $ TRowProp (TPropName "parse") (ts [] $ Fix $ TFunc [tvar 0, string] (Fix $ TBody TDate))
-                                $ TRowProp (TPropName "UTC")   (ts [] $ Fix $ TFunc [tvar 0, number, number, number, number, number, number, number] (Fix $ TBody TDate))
-                                $ TRowEnd Nothing),
-  ("Math",         ts [0] $ Fix $ TRow (Just "Math")
-                                $ numProp "E"
-                                $ numProp "LN10"
-                                $ numProp "LN2"
-                                $ numProp "LOG10E"
-                                $ numProp "LOG2E"
-                                $ numProp "PI"
-                                $ numProp "SQRT1_2"
-                                $ numProp "SQRT2"
-                                $ numFuncProp "abs"
-                                $ numFuncProp "acos"
-   --                             $ numFuncProp "acosh"
-                                $ numFuncProp "asin"
-     --                           $ numFuncProp "asinh"
-                                $ numFuncProp "atan"
-                                $ numFuncProp2 "atan2"
- --                               $ numFuncProp "atanh"
- --                               $ numFuncProp "cbrt"
-                                $ numFuncProp "ceil"
- --                               $ numFuncProp "clz32"
-                                $ numFuncProp "cos"
- --                               $ numFuncProp "cosh"
-                                $ numFuncProp "exp"
- --                               $ numFuncProp "expm1"
-                                $ numFuncProp "floor"
-                                --   $ numFuncProp "fround"
-                                --   $ numFuncProp "hypot"
-                                --   $ numFuncProp "imul"
-                                $ numFuncProp "log"
-                                --   $ numFuncProp "log10"
-                                --   $ numFuncProp "log1p"
-                                --   $ numFuncProp "log2"
-
-                                -- Requires support for variable number of arguments
-                                --   $ numFuncProp "max"
-                                --   $ numFuncProp "min"
-
-                                $ numFuncProp2 "pow"
-                                $ TRowProp (TPropName "random") (ts [] $ Fix $ TFunc [tvar 0] number)
-                                $ numFuncProp "round"
-                                $ numFuncProp "sign"
-                                $ numFuncProp "sin"
-                                --   $ numFuncProp "sinh"
-                                $ numFuncProp "sqrt"
-                                $ numFuncProp "tan"
-                                --   $ numFuncProp "tanh"
-                                --   $ numFuncProp "trunc"
-                                $ TRowEnd Nothing)
-  ]
+    ("!",            unaryFunc boolean boolean),
+    ("~",            unaryFunc number  number),
+    ("typeof",       ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0] string),
+    ("instanceof",   ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
+    ("+",            TScheme [Flex 0, Flex 1] TQual { qualPred = [TPredIsIn (ClassName "Plus") (tvar 1)]
+                                                    , qualType = binarySimpleFunc (tvar 0) (tvar 1) }),
+    ("-",            numOp),
+    ("*",            numOp),
+    ("/",            numOp),
+    ("%",            numOp),
+    ("<<",           numOp),
+    (">>",           numOp),
+    (">>>",          numOp),
+    ("&",            numOp),
+    ("^",            numOp),
+    ("|",            numOp),
+    ("<",            numRelation),
+    ("<=",           numRelation),
+    (">",            numRelation),
+    (">=",           numRelation),
+    ("===",          ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
+    ("!==",          ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
+    ("&&",           ts [0, 1] $ Fix $ TFunc [tvar 0, tvar 1, tvar 1] (tvar 1)),
+    ("||",           ts [0, 1] $ Fix $ TFunc [tvar 0, tvar 1, tvar 1] (tvar 1)),
+    -- avoid coercions on == and !=
+    ("==",           ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0, tvar 0] boolean),
+    ("!=",           ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0, tvar 0] boolean),
+    ("RegExp",       ts [] $ Fix $ TFunc [undef, string, string] regex),
+    ("String",       ts [1] $ Fix $ TFunc [undef, tvar 1] string),
+    ("Number",       ts [1] $ Fix $ TFunc [undef, tvar 1] number),
+    ("Boolean",      ts [1] $ Fix $ TFunc [undef, tvar 1] boolean),
+    ("NaN",          ts [] number),
+    ("Infinity",     ts [] number),
+    ("undefined",    ts [0] undef),
+    ("isFinite",     ts [0] $ Fix $ TFunc [tvar 0, number] boolean),
+    ("isNaN",        ts [0] $ Fix $ TFunc [tvar 0, number] boolean),
+    ("parseFloat",   ts [0] $ Fix $ TFunc [tvar 0, string] number),
+    ("parseInt",     ts [0] $ Fix $ TFunc [tvar 0, string, number] number),
+    ("decodeURI",    ts [0] $ Fix $ TFunc [tvar 0, string] string),
+    ("decodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] string),
+    ("encodeURI",    ts [0] $ Fix $ TFunc [tvar 0, string] string),
+    ("encodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] string),
+    ("Date",         ts [] $ Fix $ TRow (Just "Date[Constructor]")
+                                 $ TRowProp TPropFun            (ts [] $ Fix $ TFunc [Fix $ TBody TDate] string)
+                                 $ TRowProp (TPropName "now")   (ts [0] $ Fix $ TFunc [tvar 0] number)
+                                 $ TRowProp (TPropName "parse") (ts [0] $ Fix $ TFunc [tvar 0, string] (Fix $ TBody TDate))
+                                 $ TRowProp (TPropName "UTC")   (ts [0] $ Fix $ TFunc [tvar 0, number, number, number, number, number, number, number] (Fix $ TBody TDate))
+                                 $ TRowEnd Nothing),
+    ("Math",         math),
+    ("Object",       object)
+    ]

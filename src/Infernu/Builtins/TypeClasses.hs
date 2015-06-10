@@ -2,8 +2,9 @@ module Infernu.Builtins.TypeClasses
        (typeClasses)
        where
 
-import           Infernu.Types
+import           Infernu.Builtins.Util
 import           Infernu.Prelude
+import           Infernu.Types
 
 typeClasses :: [(ClassName, Class (Fix FType))]
 typeClasses =
@@ -16,4 +17,9 @@ typeClasses =
                                          [ schemeEmpty $ Fix $ TBody TNumber
                                          , schemeEmpty $ Fix $ TBody TString
                                          ]})
+    , (ClassName "StringKeys", Class { classInstances =
+                                               [ ts [0] $ openRow 0
+                                               , ts [0] $ array (tvar 0)
+                                               , ts [0] $ stringMap (tvar 0)
+                                               ]})
     ]

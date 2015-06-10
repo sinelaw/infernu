@@ -19,7 +19,7 @@ description:         This version is highly experimental and may set your comput
                      dynamic-style coding flexibility.
                      .
                      See the .md files included in the package for more information.
-                                          
+
 license:             GPL-2
 homepage:            https://github.com/sinelaw/infernu
 bug-reports:         https://github.com/sinelaw/infernu/issues
@@ -37,7 +37,7 @@ source-repository head
   type: git
   location: git@github.com:sinelaw/infernu.git
 
-                       
+
 flag quickcheck
   default: False
   manual: True
@@ -54,6 +54,8 @@ library
   hs-source-dirs:      src
   exposed-modules:   Infernu.Builtins.Array
                    , Infernu.Builtins.Date
+                   , Infernu.Builtins.Math
+                   , Infernu.Builtins.Object
                    , Infernu.Builtins.Operators
                    , Infernu.Builtins.Regex
                    , Infernu.Builtins.String
