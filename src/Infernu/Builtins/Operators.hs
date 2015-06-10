@@ -82,5 +82,10 @@ builtins = Map.fromList [
                                  $ TRowProp (TPropName "UTC")   (ts [0] $ Fix $ TFunc [tvar 0, number, number, number, number, number, number, number] (Fix $ TBody TDate))
                                  $ TRowEnd Nothing),
     ("Math",         math),
-    ("Object",       object)
+    ("Object",       object),
+    ("JSON",         ts [] $ Fix $ TRow (Just "JSON")
+                                 $ prop "stringify" (ts [0, 1] $ Fix $ TFunc [tvar 0, tvar 1] string)
+                                 -- TODO: should really be "maybe (tvar 1)"
+                                 $ prop "parse"     (ts [0, 1] $ Fix $ TFunc [tvar 0, string] (tvar 1))
+                                 $ TRowEnd Nothing)
     ]
