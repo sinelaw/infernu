@@ -14,7 +14,7 @@
    id="svg2"
    version="1.1"
    inkscape:version="0.48.4 r9939"
-   sodipodi:docname="New document 1">
+   sodipodi:docname="infernu.svg">
   <defs
      id="defs4">
     <inkscape:perspective
@@ -32,11 +32,11 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="0.98994949"
-     inkscape:cx="380.71429"
-     inkscape:cy="514.28571"
+     inkscape:zoom="0.7"
+     inkscape:cx="301.24443"
+     inkscape:cy="357.15432"
      inkscape:document-units="px"
-     inkscape:current-layer="layer1"
+     inkscape:current-layer="g3834"
      showgrid="false"
      inkscape:window-width="1600"
      inkscape:window-height="837"
@@ -59,20 +59,50 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1">
-    <text
-       xml:space="preserve"
-       style="font-size:40px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Aldrich;-inkscape-font-specification:Aldrich"
-       x="96.390129"
-       y="499.21066"
-       id="text2985"
-       sodipodi:linespacing="125%"><tspan
-         sodipodi:role="line"
-         id="tspan2987"
-         x="96.390129"
-         y="499.21066"
-         style="font-size:144px;letter-spacing:0px;-inkscape-font-specification:Ellinia CLM Light;font-family:Ellinia CLM;font-weight:300;font-style:normal;font-stretch:normal;font-variant:normal;word-spacing:0px"
-         dx="0">Infer<tspan
-   style="fill:#808000;-inkscape-font-specification:Ellinia CLM Light;font-family:Ellinia CLM;font-weight:300;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:0px;word-spacing:0px"
-   id="tspan2995">nu</tspan></tspan></text>
+    <g
+       id="g3834">
+      <g
+         id="g3843"
+         inkscape:export-filename="/local-home/user18/repos/infernu/docs/infernu.png"
+         inkscape:export-xdpi="47.32"
+         inkscape:export-ydpi="47.32">
+        <path
+           id="rect3018-2"
+           d="M 128 729.84375 L 128 857.6875 L 508.375 857.6875 L 508.375 767.21875 L 471 729.84375 L 128 729.84375 z "
+           style="fill:#f0db4f;fill-opacity:1;stroke:none" />
+        <text
+           xml:space="preserve"
+           style="font-size:40px;font-style:normal;font-variant:normal;font-weight:500;font-stretch:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:KacstDigital;-inkscape-font-specification:KacstDigital Medium"
+           x="129.37544"
+           y="847.25916"
+           id="text2985-4-8"
+           sodipodi:linespacing="125%"
+           inkscape:export-xdpi="35.835522"
+           inkscape:export-ydpi="35.835522"
+           inkscape:export-filename="/local-home/user18/repos/infernu/infernu.png"><tspan
+             sodipodi:role="line"
+             id="tspan2987-0-0"
+             x="129.37544"
+             y="847.25916"
+             style="font-size:144px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;letter-spacing:-7.15001106px;word-spacing:0px;font-family:Dosis;-inkscape-font-specification:Dosis"><tspan
+   style="font-weight:bold"
+   id="tspan3790-9">infer</tspan>nu</tspan></text>
+      </g>
+      <text
+         inkscape:export-filename="/local-home/user18/repos/infernu/docs/infernu.png"
+         inkscape:export-ydpi="53.189999"
+         inkscape:export-xdpi="53.189999"
+         sodipodi:linespacing="125%"
+         id="text2985-4-8-0"
+         y="394.42712"
+         x="172.61652"
+         style="font-size:40px;font-style:normal;font-variant:normal;font-weight:500;font-stretch:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:KacstDigital;-inkscape-font-specification:KacstDigital Medium"
+         xml:space="preserve"><tspan
+           style="font-size:144px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;letter-spacing:-7.15001106px;word-spacing:0px;font-family:Dosis;-inkscape-font-specification:Dosis"
+           y="394.42712"
+           x="172.61652"
+           id="tspan2987-0-0-2"
+           sodipodi:role="line">infernu</tspan></text>
+    </g>
   </g>
 </svg>
