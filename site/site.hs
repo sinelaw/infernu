@@ -11,17 +11,25 @@ main = hakyll $ do
         route   idRoute
         compile copyFileCompiler
 
-    match "css/*" $ do
-        route   idRoute
-        compile compressCssCompiler
+    match "less/**" $
+        compile getResourceBody
 
-    match (fromList ["about.rst", "contact.markdown"]) $ do
+    create ["css/main.css"] $ do
+        route idRoute
+        compile $ do
+            getMatches "less/**"
+            loadBody "less/all.less"
+                >>= makeItem
+                >>= withItemBody
+                  (unixFilter "lessc" ["-"])
+
+    match (fromList ["about.rst"]) $ do -- , "contact.markdown"]) $ do
         route   $ setExtension "html"
         compile $ pandocCompiler
             >>= loadAndApplyTemplate "templates/default.html" defaultContext
             >>= relativizeUrls
 
-    match "posts/*" $ do
+    match (fromGlob "posts/*.md") $ do
         route $ setExtension "html"
         compile $ pandocCompiler
             >>= loadAndApplyTemplate "templates/post.html"    postCtx
@@ -31,7 +39,7 @@ main = hakyll $ do
     create ["archive.html"] $ do
         route idRoute
         compile $ do
-            posts <- recentFirst =<< loadAll "posts/*"
+            posts <- loadAll (fromGlob "posts/*.md")
             let archiveCtx =
                     listField "posts" postCtx (return posts) `mappend`
                     constField "title" "Archives"            `mappend`
@@ -46,10 +54,10 @@ main = hakyll $ do
     match "index.html" $ do
         route idRoute
         compile $ do
-            posts <- recentFirst =<< loadAll "posts/*"
+            posts <- loadAll (fromGlob "posts/*.md")
             let indexCtx =
                     listField "posts" postCtx (return posts) `mappend`
-                    constField "title" "Home"                `mappend`
+--                    constField "title" "Home"                `mappend`
                     defaultContext
 
             getResourceBody
@@ -63,5 +71,6 @@ main = hakyll $ do
 --------------------------------------------------------------------------------
 postCtx :: Context String
 postCtx =
-    dateField "date" "%B %e, %Y" `mappend`
+--    dateField "date" "%B %e, %Y" `mappend`
+--    constField "date" "2015-01-01" `mappend`
     defaultContext

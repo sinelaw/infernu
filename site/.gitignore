@@ -1,1 +1,5 @@
 site
+_cache/
+_site/
+node_modules/
+npm-debug.log

@@ -1,0 +1,20 @@
+{
+  "name": "infernu",
+  "version": "0.0.0",
+  "homepage": "https://github.com/sinelaw/infernu",
+  "authors": [
+    "Noam Lewis"
+  ],
+  "license": "All Rights Reserved",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "bootstrap-less": "~3.3.4"
+  }
+}
