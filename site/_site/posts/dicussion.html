@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <title>infernu - static type inference for JavaScript</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- <link rel="stylesheet" href="styles/main.less.css"/> -->
+    <link href="../css/fonts/dosis.css" rel="stylesheet" type="text/css" />
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="../css/main.css" />
+  </head>
+  <body>
+
+    <nav class="navbar navbar-default">
+      <div class="container">
+        <!-- Brand and toggle get grouped for better mobile display -->
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">infernu</a>
+        </div>
+
+        <!-- Collect the nav links, forms, and other content for toggling -->
+        <div class="collapse navbar-collapse">
+          <ul class="nav navbar-nav">
+            <li><a href="../">Home</a></li>
+            <li><a href="../archive.html">Archive</a></li>
+          </ul>
+        </div><!-- /.navbar-collapse -->
+      </div><!-- /.container-fluid -->
+    </nav>
+
+
+    <div class="container" id="content">
+      <!-- <h1>dicussion</h1> -->
+
+      <div class="info">
+    
+</div>
+
+<p><strong>Note</strong>: Most of this is outdated and/or unmaintained.</p>
+<h1 id="discussions">Discussions</h1>
+<h2 id="ast-translation-to-core-language-yes-or-no">AST translation to core language: yes or no?</h2>
+<p>There are two general approaches to implement type inference on a new syntax:</p>
+<ol style="list-style-type: decimal">
+<li>Implement type inference directly on the given AST</li>
+<li>Map the AST to a simpler core language, and use well-understood algorithms to infer types on the core language. Finally, map the inferred types back to the original AST.</li>
+</ol>
+<p>Currently the (incomplete, buggy) code takes the first approach - it infers types directly on (a subset of) the JS syntax. However to make the code simpler and more robust, it may make more sense to take the translation approach.</p>
+<p>One advantage of the direct approach (no translation) is that it allows us to directly deal with language constructs such as while, for, if, return, and the quirks that come with them.</p>
+<h3 id="mapping-to-a-core-language">Mapping to a core language</h3>
+<p>One possible target core language is Damas-Hindley-Milner (simply typed lambda calculus with parameteric polymorphism and let-bindings) plus row type polymorphism, reference cells, and something similar to SML-style value restriction.</p>
+<p>The mapping will have to deal with statement sequences (function and if/while/for blocks), various statement types, etc. An example mapping is:</p>
+<ul>
+<li>Statment sequences such as <code>st1; st2;</code> to <code>(\_ -&gt; st2) st1</code></li>
+<li><code>function f(a,b) { statements... }</code> to <code>\a -&gt; \b -&gt; ...</code></li>
+<li><code>var x = 2; x = x + 1</code> to <code>let x = ref 2 in x := !x + 1</code></li>
+<li>and so on.</li>
+</ul>
+<h2 id="polymorphism-and-the-value-restriction">Polymorphism and the value restriction</h2>
+<p>Javascript variables are storage cells. If we compare JS to Standard ML, JS variables seem to be equivalent to <code>ref</code> values. SML has the concept of value restriction: but it applies to let-bound names, and <code>ref</code> variables in SML are <em>always</em> monotypes. If we followed suit when inferring JS variable types, all our variables would be monotypes and we would lose all polymorphism.</p>
+<p>A safe behavior for a JS variable can be either a monotype (<code>'a ref</code> in ML) or, when storing polymorphic values (such as an empty list or polymorphic functions), something more like an ocaml record with a mutable cell with a quantified type variable (forall).</p>
+<p>A mutable monotype variable has the same type as ocaml’s <code>ref</code>, which is:</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="kw">type</span> 'a <span class="dt">ref</span> = { <span class="kw">mutable</span> content : 'a } ;;</code></pre></div>
+<p>Here’s (in ocaml) a mutable variable that can only contain the polymorphic empty list. The inner record field has a <code>forall</code> quantifier on the type of the list item.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="kw">type</span> t1 = { <span class="kw">mutable</span> v1 : 'a. 'a <span class="dt">list</span> } ;; <span class="co">(* notice the quantifier 'a. *)</span>
+
+<span class="kw">let</span> x = { v1 = [] } ;;
+x.v1 &lt;- [] ;; <span class="co">(* not too many things we can put in there... *)</span></code></pre></div>
+<p>More interesting is the type of a mutable variable that contains polymorphic functions of type <code>'a -&gt; 'a list</code> (or <code>a -&gt; [a]</code> if you prefer):</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="kw">type</span> t2 = { <span class="kw">mutable</span> v2 : 'a. 'a -&gt; 'a <span class="dt">list</span> } ;;
+
+<span class="kw">let</span> y = { v2 = <span class="kw">fun</span> x -&gt; [ x; x; ] };;
+y.v2 <span class="dv">3</span>;; <span class="co">(* evaluates to [ 3; 3 ]*)</span>
+y.v2 <span class="ch">'a'</span>;; <span class="co">(* [ 'a'; 'a' ] *)</span>
+
+y.v2 &lt;- <span class="kw">fun</span> x -&gt; [ x; x; x; ] ;;
+y.v2 <span class="dv">3</span>;; <span class="co">(* [ 3; 3; 3 ] *)</span>
+etc..</code></pre></div>
+<h3 id="possibly-solutions-to-polymorphism-of-mutable-variables">Possibly solutions to polymorphism of mutable variables</h3>
+<ol style="list-style-type: decimal">
+<li>Infer types, and allow full polymorphism of mutable variables, allowing even nonsense like <code>x = 'a'; x = 3;</code>, which makes this solution useless.</li>
+<li>Infer types, and disable polymorphism (treating JS vars like ML <code>ref</code>s). Variables are still allowed to be of types where <strong><code>a</code> is free</strong> (such as <code>a -&gt; a</code>), but not allowed to be of <strong>closed types</strong> (such as <code>forall a. a -&gt; a</code>).</li>
+<li>Don’t infer types - require programmer to annotate code with type ascriptions. Interpret all type variables as universally quantified, e.g. <code>a</code> is interpreted as <code>forall a. a</code> (and no value can ever be assigned) or more usefully, <code>a -&gt; [a]</code> will be interpreted as <code>forall a. a -&gt; [a]</code> (and many list-constructing functions will inhabit this type). This approach is similar to ocaml’s <strong>mutable record fields</strong>.</li>
+<li>Infer types, but allow polymorphism only in certain cases. <strong>TODO: Which cases?</strong></li>
+</ol>
+<h3 id="examples">Examples</h3>
+<p>Consider the following examples:</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="kw">var</span> x <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>
+x <span class="op">=</span> <span class="st">'a'</span><span class="op">;</span> <span class="co">// should not type check</span></code></pre></div>
+<p>Here we have assigned two types to the same variable (recall that variables are reference cells), which should not be allowed.</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="kw">var</span> x <span class="op">=</span> []<span class="op">;</span>
+x <span class="op">=</span> [<span class="dv">1</span>]<span class="op">;</span>
+x <span class="op">=</span> [<span class="st">'a'</span>]<span class="op">;</span> <span class="co">// should not type check</span></code></pre></div>
+<p>Here again we used two types. Unlike the previous example, we initially assign a value with unknown type (<code>[a]</code>, but we don’t know what <code>a</code> is).</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="kw">var</span> x<span class="op">;</span>
+x <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>
+x <span class="op">=</span> <span class="st">'a'</span><span class="op">;</span> <span class="co">// should not type check</span></code></pre></div>
+<p>In the above example we have no information at all about <code>x</code>’s type at declaration time. There is no analogy for this in SML-like languages.</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="kw">var</span> f <span class="op">=</span> <span class="kw">function</span> (x) <span class="op">{</span> <span class="cf">return</span> x<span class="op">;</span> <span class="op">}</span>
+<span class="kw">var</span> n <span class="op">=</span> <span class="at">f</span>(<span class="dv">1</span>)<span class="op">;</span>
+<span class="kw">var</span> s <span class="op">=</span> <span class="at">f</span>(<span class="st">'a'</span>)<span class="op">;</span> <span class="co">// ok</span></code></pre></div>
+<p>Here we have assigned a polymorphic function (of type <code>a -&gt; a</code>) to the variable <code>f</code>. Later we invoke this function twice, using different types each time, which should be allowed. This is an example of desired polymorphism.</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="kw">var</span> f <span class="op">=</span> <span class="kw">function</span>() <span class="op">{</span> <span class="cf">return</span> <span class="kw">function</span>(x) <span class="op">{</span> <span class="cf">return</span> x<span class="op">;</span> <span class="op">}</span> <span class="op">}</span>
+<span class="kw">var</span> g <span class="op">=</span> <span class="at">f</span>()<span class="op">;</span> <span class="co">// g should also be polymorphic</span>
+<span class="kw">var</span> n <span class="op">=</span> <span class="at">g</span>(<span class="dv">1</span>)<span class="op">;</span>
+<span class="kw">var</span> s <span class="op">=</span> <span class="at">g</span>(<span class="st">'a'</span>)<span class="op">;</span> <span class="co">// this is ok, but value restriction would not allow this to type check</span></code></pre></div>
+<p>Here again we make use of polymorphism. However, because we’re assigning <code>g</code> from an expression that isn’t a syntactic value (<code>f()</code> is a function invocation), languages such as SML will restrict <code>g</code> to a monotype and unify <code>g</code> to type <code>number -&gt; number</code> after the call to <code>g(1)</code>. When designing our type system we must consider applying this limitation, to avoid other problems that the value restriction was designed to avoid.</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="kw">var</span> x <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>
+<span class="kw">var</span> f <span class="op">=</span> <span class="kw">function</span>(y) <span class="op">{</span> <span class="kw">var</span> res <span class="op">=</span> x<span class="op">;</span> x <span class="op">=</span> y<span class="op">;</span> <span class="cf">return</span> res<span class="op">;</span> <span class="op">}</span> <span class="co">// should get type: number -&gt; number</span></code></pre></div>
+<p>The above function, in pure (dynamically typed) JS will return the value that was passed “last time” the function was called, regardless of its type. With unmodified HM, the inferred type is <code>number -&gt; number</code> because <code>x</code> has been assigned a number <code>1</code>, and everything is fine. What should happen when <code>x</code> is not assigned (only declared)?</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="kw">var</span> x<span class="op">;</span>
+<span class="kw">var</span> f <span class="op">=</span> <span class="kw">function</span>(y) <span class="op">{</span> <span class="kw">var</span> res <span class="op">=</span> x<span class="op">;</span> x <span class="op">=</span> y<span class="op">;</span> <span class="cf">return</span> res<span class="op">;</span> <span class="op">}</span> <span class="co">// type ???</span></code></pre></div>
+<p>A variable’s type can’t be determined at declaration time (<code>var x;</code>). Only when the variable is assigned <code>x = expr</code> we can infer its type. The declaration serves simply to bind the variable’s name to the current scope and to possibly shadow variables declared in outer scopes (a variable’s scope in JS is always the nearest function, if any, or otherwise the global scope).</p>
+<p>To solve this problem we must “wait” until the first assignment to the newly declared variable occurs.</p>
+<h3 id="desired-polymorphism">Desired polymorphism</h3>
+<ul>
+<li>function polymorphism (function calls instantiate type schemes)</li>
+<li>row type polymorphism</li>
+</ul>
+<p>Implementation options:</p>
+<ol style="list-style-type: decimal">
+<li>In unification allow also negative rules such as: t != function, and we can use them in assignment expressions (in <code>f = ...</code> =&gt; f must not be a function)</li>
+<li>In call expressions, tell the lvalue subexpr that it can instantiate a type scheme. Otherwise, var exprs do not really instantiate type schemes (they don’t allow any bound tvars)</li>
+<li>Switch from type schemes to “forall” as a basic type (higher order types):</li>
+</ol>
+<p>example (of option 3):</p>
+<pre><code>makeFunc :: () -&gt; (forall t. t -&gt; t)
+obj.a = makeFunc() // will get: obj.a :: forall t. t -&gt; t</code></pre>
+<p>Examples:</p>
+<pre><code>var x, y, f, g, h;
+x = { a: 1 }; // x has type '{ &quot;a&quot;: number, ... }'
+x = 2; // type error
+y = { a: 2, b: 'bla' }; // y has type '{ &quot;a&quot;: number, &quot;b&quot;: string, ... }'
+x = y; // OK! x is more general (a la 'subtyping' but not really)
+y = x; // type error - x's type has no &quot;b&quot; field
+
+// f has type *scheme*: \t -&gt; function(t) : [t]
+f = function(a) { return [a]; };
+f = 2; // type error
+g = f(2); // g has type [number]
+h = f('a'); // h has type [string] -- crucial point! function calls cause instantiation of type scheme</code></pre>
+<h1 id="normalizing-recursive-types-on-outermost-scope">Normalizing recursive types on outermost scope</h1>
+<pre><code>t = { method: t, x: String } -&gt; Int
+    { method: { method: t, x: String } -&gt; Int, x: String } -&gt; Int
+
+=&gt; o = { method: t, x: String }
+
+    t = o -&gt; Int
+
+=&gt; o = { method: o -&gt; Int, x: String }
+
+    { method: o -&gt; Int, x: String } -&gt; Int
+    o -&gt; Int</code></pre>
+<h1 id="higher-rank-polymorphism-for-object-methods">Higher-rank polymorphism for object methods</h1>
+<p>See:</p>
+<ul>
+<li>http://blog.huoc.org/higher-rank-polymorphism.html</li>
+<li>“Semi-Explicit First-Class Polymorphism for ML” (1999), by Jacques Guarrigue and Didier Rémy. (1999) http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.46.4858</li>
+</ul>
+
+    </div>
+  </body>
+</html>

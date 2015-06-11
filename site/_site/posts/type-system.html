@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <title>infernu - static type inference for JavaScript</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- <link rel="stylesheet" href="styles/main.less.css"/> -->
+    <link href="../css/fonts/dosis.css" rel="stylesheet" type="text/css" />
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="../css/main.css" />
+  </head>
+  <body>
+
+    <nav class="navbar navbar-default">
+      <div class="container">
+        <!-- Brand and toggle get grouped for better mobile display -->
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">infernu</a>
+        </div>
+
+        <!-- Collect the nav links, forms, and other content for toggling -->
+        <div class="collapse navbar-collapse">
+          <ul class="nav navbar-nav">
+            <li><a href="../">Home</a></li>
+            <li><a href="../archive.html">Archive</a></li>
+          </ul>
+        </div><!-- /.navbar-collapse -->
+      </div><!-- /.container-fluid -->
+    </nav>
+
+
+    <div class="container" id="content">
+      <!-- <h1>type-system</h1> -->
+
+      <div class="info">
+    
+</div>
+
+<h1 id="infernus-type-system">Infernu’s Type System</h1>
+<h1 id="early-draft---comments-welcome-github-issues-or-via-other-medium">EARLY DRAFT - Comments welcome (github issues or via other medium)</h1>
+<h2 id="quick-summary">Quick Summary</h2>
+<p>Infernu’s type system is polymorphic and structural. It is built to allow the compiler to infer all types without any annotations by the user.</p>
+<p>The type system features:</p>
+<ul>
+<li>Full type inference: the most generic type is always inferred without help from the user.</li>
+<li>Parametric polymorphism (aka “generics”), based on Hindley-Milner type inference.</li>
+<li>Row-type polymorphism, otherwise known as “static duck typing” or structural typing.</li>
+<li>Simple type classes (which allow for example correct support of JS <code>+</code> and <code>[]</code> operators), allowing for ad-hoc polymorphism.</li>
+<li>Recursive types for true representation of object-oriented methods.</li>
+<li>Correct handling of JS’s <code>this</code> dynamic scoping rules.</li>
+<li>Polymorphic “methods” are supported, so rows may have rank-2 types.</li>
+<li>Mutability is not represented in the types, but affects type inference (polymorphism is restricted for mutable variables).</li>
+</ul>
+<p><strong>Note</strong>: Currently, all types are inferred. Support for type annotations for specifically constraining or for documentation is planned.</p>
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#primitive-types">Primitive Types</a></li>
+<li><a href="#generics-or-parametric-polymorphism">Generics, or Parametric Polymorphism</a></li>
+<li><a href="#type-variables">Type Variables</a></li>
+<li><a href="#built-in-parameterized-types">Built-in Parameterized Types</a></li>
+<li><a href="#functions">Functions</a></li>
+<li><a href="#row-types">Row types</a></li>
+<li><a href="#type-classes">Type Classes</a></li>
+</ul>
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+<h2 id="overview">Overview</h2>
+<p>Infernu is a type checker for JavaScript. Since JavaScript is dynamically and weakly typed, it makes no sense to talk about “type errors” in arbitrary JavaScript code. Consequently Infernu makes assumptions about the code and expects it to follow certain rules that are not required by plain JavaScript (for example, implicit coercions such as <code>3 + 'a'</code> are not allowed.)</p>
+<p>Infernu’s type system is designed for writing dynamic-looking code in a safe statically type-checked environment. Type annotations are not required (though they would be nice to support, for various reasons). Instead, Infernu <em>infers</em> the types of expressions by examining the code. If the inferred types contradict each other, Infernu reports the contradiction as an error.</p>
+<p>Infernu places restrictions on JS programs that are otherwise valid. In other words, Infernu is a <strong>subset of JavaScript</strong>. Infernu tries to strike a balance between type system complexity and dynamic-style coding flexibility.</p>
+<p>Infernu can deduce the types without any type annotations at all. Such complete type inference is more powerful than what languages such as C#’s “var” and C++’s “auto” keywords represent. Infernu tracks types throughout the code so you never need to specify them. The type inference algorithm guarantees that the type being inferred is always the most generic type possible.</p>
+<p><strong>Notation:</strong> Concrete types are capitalized; type variables are lowercase letters (a, b, c, etc.)</p>
+<h3 id="for-type-system-geeks">For type system geeks</h3>
+<p>Infernu’s type system is based on Damas-Hindley-Milner (and Algorithm W) with added mutable variables (monomorphically constrained using value restriction), and with row type polymorphism, equi-recursive types (constrained to go through row types), rank-2 row types (for polymorphic methods), and simple type classes. Functions are uncurried.</p>
+<h2 id="primitive-types">Primitive Types</h2>
+<ul>
+<li><code>Number</code></li>
+<li><code>Boolean</code></li>
+<li><code>String</code></li>
+<li><code>Regex</code></li>
+<li><code>Undefined</code></li>
+<li><code>Null</code> (may be removed in the future)</li>
+</ul>
+<p>(<code>Date</code> should probably be added)</p>
+<h2 id="generics-or-parametric-polymorphism">Generics, or Parametric Polymorphism</h2>
+<p>Parameterized types take one or more type parameters. Infernu can infer about code that it requires a certain parameterized type without necessarily fixing the parameter. For example, <code>a[0] = x</code> may be interpreted as “assignment to an array of elements which have the same type as <code>x</code>” (actually Infernu places a weaker assumption on such code - see <em>type classes</em> below).</p>
+<h2 id="type-variables">Type Variables</h2>
+<p>Type variables represent a type that is not fully constrained to any particular type. A type variable can represent a <em>partial</em> constraint:</p>
+<ul>
+<li>The same type variable can be referred to multiple times, constraining all those types to be the same. For example, <code>a -&gt; a</code> - a function returns the same type as its argument.</li>
+<li>Sometimes a type variable is constrained by a type class predicate, such as <code>Plus a =&gt; (a, a) -&gt; a</code> (the type of the <code>+</code> operator). See <em>type classes</em> below.</li>
+</ul>
+<h3 id="polymorphic-vs.free-type-variables">Polymorphic vs. Free Type Variables</h3>
+<p>There are two cases where type variables are needed:</p>
+<ul>
+<li>A <em>polymorphic</em> type variable is <strong>allowed to vary</strong>. For example, a function that can take any type for its argument and returns a String, can be represented as <code>a -&gt; String</code> but the type variable <code>a</code> must be allowed to vary. Being “allowed to vary” means: if we use this function in a way that forces <code>a</code> to be, say, the type <code>Number</code>, doesn’t mean that now <code>a</code> will always be <code>Number</code>: other pieces of code can use our function in a different way, having <code>a</code> be whatever other type. A polymorphic type variable such as this <code>a</code> is known as <em>universally quantified</em> (or “foralled”). The type of that function is really <code>forall a. a -&gt; String</code>, or “given any type, call it <code>a</code>, this function will have the type <code>a -&gt; String</code>” (Currently the pretty-printing mechanism of Infernu doesn’t print out the “forall” parts).</li>
+<li>A <em>free</em> (or non-polymorphic) type variable is used when a certain type is not known. If we add more code to the program we may end up determining what the type variable should represent, for example some type variable <code>b</code> that appears throughout the code before the change, may turn out to be a <code>String</code> due to a new line of code that uses it as such.</li>
+</ul>
+<p>Free type variables are not very useful, but they represent code that can be made generic (for example by wrapping it in a function).</p>
+<h3 id="polymorphism-and-mutable-variables">Polymorphism and Mutable Variables</h3>
+<p>In short: variables that are assigned to beyond the declaration (mutable variables) are restricted to a non-polymorphic type. Also, some immutable variables are also restricted to non-polymorphic types, for example if they are declared to be an array (because an array is itself mutable).</p>
+<p>(You may skip this if you don’t care about type inference details.)</p>
+<h4 id="value-restriction">Value Restriction</h4>
+<p>There is a well known difficulty in combining inference of polymorphic types with mutability (usually reference cells). In Standard ML and family (including OCaml) the issue is handled by the <em>value restriction</em>, which prevents some bindings (term variables) from being generalized to a polymorphic type. The criteria for preventing polymorphism of a binding is a simple syntactic rule (in OCaml this was elaborated, if I understand correctly).</p>
+<h4 id="immutability-assumption">Immutability Assumption</h4>
+<p>In Infernu, the value restriction isn’t enough: unlike ML-family languages, Infernu’s AST includes <em>mutable bindings</em>. In other languages bindings are actually not variables - they are immutable names of values which themselves could be mutable (such as a reference cell). In Infernu, bindings and reference cells are one and the same. Every name binding can be assigned to, hence the name “variable” is accurate. Treating all JS variables as mutable reference cells would render polymorphism degenerate: all variables would be value-restricted to monomorphic types. Instead, Infernu’s type inference algorithm assumes that a variable is immutable unless it’s assigned to (beyond the variable declaration). If a variable is assigned to, so that it “turns out to be mutable”, we then restrict it to monomorphic types.</p>
+<h2 id="built-in-parameterized-types">Built-in Parameterized Types</h2>
+<ul>
+<li><code>[a]</code> - Arrays of items of type <code>a</code></li>
+<li><code>Map a</code> - Maps from <code>String</code> to <code>a</code>. Maps correspond to plain JS objects that are used via dynamic keys (e.g. <code>obj[key] = value</code>). See the section “row types” for another view of JS objects.</li>
+</ul>
+<p>In plain JS, arrays are <em>heterogeneous</em> and can contain a mix of values: numbers, booleans, objects, functions, etc. For example, <code>['a', 3, { b: [] } ]</code> is a valid JS array. In Infernu, arrays are restricted to be <em>homogeneous</em>: all items must be of the same type.</p>
+<p>Arrays, string maps, and plain strings can all be accessed using the bracket notation in JS. Infernu defines instances of all three types for the <code>Indexable</code> type class. More on that later.</p>
+<h2 id="functions">Functions</h2>
+<p>Functions are similar to other parameterized types, but are represented slightly differently to support <code>this</code> and because they can be constructors (when using the <code>new</code> keyword).</p>
+<p>Notation:</p>
+<p><code>a.(b,c,...) -&gt; r</code> represents functions that take <code>this</code> of type <code>a</code>, arguments of types <code>b</code>, <code>c</code>, … and return a result of type <code>r</code>.</p>
+<p>For constructors, there are also properties one can tack onto the <code>.prototype</code> of a constructor function (support for <code>.prototype</code> is still in the works).</p>
+<h2 id="row-types">Row types</h2>
+<p>JavaScript objects can be viewed as either maps from strings (property names) to values, or as records (or “rows”) containing a set of fields, each field having a certain type. Infernu supports both of these two views, maps and rows, but represents them as separate (incompatible) types. This section is about the second view of objects, as rows.</p>
+<p>The basic notation for row types is: <code>{ prop1: type1, ... , propN: typeN }</code> where <code>prop</code> are strings, names of properties, with their corresponding types. The ellipsis are meant to say that there can be any number of properties.</p>
+<p>Row types can be either <strong>closed</strong> or <strong>open</strong>:</p>
+<ul>
+<li>A <strong>closed</strong> row type has a set number of properties with specific names: it is not compatible with any other closed row.</li>
+<li>An <strong>open</strong> row type is a row that is known to have some properties, but may have (and is compatible with) more properties, as long as their names don’t collide with the existing properties. An open row type has a <em>row type variable</em> representing the “tail” or remaining properties.</li>
+</ul>
+<p>The notation for an open row type is:</p>
+<p><code>{ prop1: type1, ..., propN: typeN, ..r }</code> where <code>r</code> is the row type variable.</p>
+<p>Open row types are most useful as function arguments or return types. For example consider the following function:</p>
+<pre><code>function getLength(x) {
+    return x.length;
+}</code></pre>
+<p>What is the type of <code>getLength</code>? It expects a row type that a property <code>length</code>, but doesn’t care if <code>x</code> has other properties, nor does it care about the type of <code>length</code>. So the type is: <code>{ length: a, ..b } -&gt; a</code> or, in words: a function that takes a row that has <strong>at least a property named “length” of type <code>a</code></strong> and returns the type <code>a</code>. The type parameter <code>b</code> isn’t used, but it represents that the input argument is an open row type, and it can have additional properties.</p>
+<h2 id="type-classes">Type Classes</h2>
+<h3 id="why-do-we-need-type-classes">Why do we need type classes?</h3>
+<p>Some operators in JS can be used in multiple contexts. For example, <code>+</code> can be used to add numbers or to concatenate strings (Infernu doesn’t allow implicit conversions). Consider the following function:</p>
+<pre><code>function add(x,y) { return x + y; }</code></pre>
+<p>What is the type of <code>add</code>? It isn’t <code>(Number, Number) -&gt; Number)</code> because it could work on strings. We are tempted to say the type is: <code>(a, a) -&gt; a</code>: given two arguments of type <code>a</code>, whatever it is, <code>add</code> returns the same type. However such a permissive type is wrong: we wouldn’t want the user to call <code>add(false, true)</code>, for example.</p>
+<p>The solution adopted by Infernu is inspired by Haskell’s type classes (which have nothing to do with object-oriented “classes”). A type class in Infernu is like an interface in Java/C#, but without any associated functions (in the future, support for type class functions may be added). A type can be <em>an instance of a type class</em>.</p>
+<p>For example, Infernu defines the built-in type class <code>Plus</code>. The types <code>Number</code> and <code>String</code> are instances of the type class <code>Plus</code>. The notation <code>Plus a =&gt; a</code> means “given any type <code>a</code> which must be an instance of the type class <code>Plus</code>, the type of this thing is <code>a</code>”.</p>
+<p>Back to our <code>add</code> function, the type would be: <code>Plus a =&gt; (a, a) -&gt; a</code> or “given any type <code>a</code> that is an instance of the <code>Plus</code> type class, the type of this function is <code>(a,a) -&gt; a</code>.</p>
+<h3 id="type-classes-are-closed">Type Classes are Closed</h3>
+<p>Currently all type classes in Infernu are <em>closed</em>. Every type class has a pre-determined set of instances, and no other types can be made an instance. Closed type classes are useful for inference, because they allow determining the full set of types that inhabit a given set of constraints. The <code>Indexable</code> multi-parameter type class below shows how closed type classes are useful.</p>
+<h3 id="indexable">Indexable</h3>
+<p>Aside from <code>Plus</code>, Infernu also defines another type class: <code>Indexable</code>. Indexable takes three parameters: the <strong>container</strong> type, an <strong>index</strong> type, and an <strong>element</strong> type. Instances of indexable are:</p>
+<ul>
+<li><code>Indexable ([a], Number, a)</code> - arrays, where the container is an array <code>[a]</code> of elements with type <code>a</code>, and the index type is <code>Number</code>.</li>
+<li><code>Indexable (Map a, String, a)</code> - string maps, where the container is a map from string to <code>a</code>, the index type is <code>String</code>, and the element type is <code>a</code>.</li>
+<li><code>Indexable (String, Number, String)</code> - strings are indexable too: the “container” is a string, the index is a number and the elements at each position are (single-character) strings (since JS has no character type: it may be interesting to add them to Infernu).</li>
+</ul>
+<p>Example of using the bracket syntax to read:</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="co">//Indexable (c, d, b) =&gt; a.((c, d) -&gt; b)</span>
+<span class="kw">function</span> <span class="at">getAt</span>(thing<span class="op">,</span> i) <span class="op">{</span>
+    <span class="cf">return</span> thing[i]<span class="op">;</span>
+<span class="op">}</span></code></pre></div>
+<p>The bracket get expression <code>thing[i]</code> requires the three types involved (container, index, element) together to be an instance of <code>Indexable</code>.</p>
+<p>The <code>Indexable</code> type class simplifies inference because it’s a <em>closed</em> type class. A somewhat contrived example:</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span class="co">//a.((Map b, String) -&gt; b)</span>
+<span class="kw">function</span> <span class="at">getByKey</span>(thing<span class="op">,</span> key) <span class="op">{</span>
+    <span class="cf">if</span> (key <span class="op">===</span> <span class="st">'timestamp'</span>) <span class="op">{</span>
+        <span class="co">// timestamp deprecated in favor of betterTimestamp</span>
+        <span class="cf">return</span> thing[<span class="st">'betterTimestamp'</span>]<span class="op">;</span>
+    <span class="op">}</span>
+    <span class="cf">return</span> thing[key]<span class="op">;</span>
+<span class="op">}</span></code></pre></div>
+<p>Because there are only three possible instances of <code>Indexable</code> and only one of them has strings as index types (middle type parameter), Infernu can deduce the exact types involved: <code>thing</code> must be a <code>Map</code>, it cannot be an array or a string. If the <code>Indexable</code> type class wasn’t closed, we would have to allow arbitrary unknown instances that may have strings as index types.</p>
+<h2 id="polymorphic-methods-rank-2-row-types">Polymorphic methods / rank-2 row types</h2>
+<p>TODO</p>
+<h2 id="equi-recursive-types">Equi-recursive types</h2>
+<p>Equi-recursive types are constrained to at least include a row type in the recursion to prevent inference of evil recursive types.</p>
+<p>TODO</p>
+<!--  LocalWords:  Damas Hindley Milner equi foralled forall Indexable
+ -->
+
+    </div>
+  </body>
+</html>
