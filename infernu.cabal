@@ -91,7 +91,7 @@ library
 
 executable infernu
   main-is: Main.hs
-  build-depends:       base, parsec, infernu, optparse-applicative
+  build-depends:       base, parsec, infernu, optparse-applicative, ansi-wl-pprint
   default-language:    Haskell2010
   default-extensions: NoImplicitPrelude
   ghc-options:  -Wall -O2 -rtsopts -threaded
@@ -107,7 +107,7 @@ executable infernu
 executable infernu-demo
   main-is: Demo.hs
   hs-source-dirs: test
-  build-depends:       base, infernu
+  build-depends:       base, infernu, ansi-wl-pprint
   default-language:    Haskell2010
   default-extensions: NoImplicitPrelude
   ghc-options: -Wall  -O2 -main-is Demo

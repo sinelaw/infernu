@@ -9,7 +9,7 @@ import qualified Language.ECMAScript3.Parser as ES3Parser
 import qualified Language.ECMAScript3.PrettyPrint as ES3Pretty
 import qualified Language.ECMAScript3.Syntax as ES3
 import qualified Text.Parsec.Pos             as Pos
-import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, squotes, renderPretty, Doc, displayS)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), (<+>), string, renderPretty, Doc, displayS)
 
 import           Infernu.Prelude
 import           Infernu.Options             (Options(..))
@@ -61,8 +61,9 @@ checkFiles options fileNames = do
 showWidth :: Int -> Doc -> String
 showWidth w x   = displayS (renderPretty 0.4 w x) ""
 
+showDoc :: Doc -> String
 showDoc = showWidth 120
-                  
+
 annotatedSource :: [(Source, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode

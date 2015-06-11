@@ -7,7 +7,6 @@ module Infernu.Unify
 
 
 import           Control.Monad        (forM, forM_, when, unless)
-import           Data.List            (intercalate)
 
 import           Data.Either          (rights)
 import           Data.Map.Lazy        (Map)
@@ -17,7 +16,7 @@ import           Data.Maybe           (catMaybes, mapMaybe)
 import           Data.Set             (Set)
 import qualified Data.Set             as Set
 
-import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, Doc)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, parens, Doc)
 
 import           Infernu.Prelude
 import           Infernu.Builtins.Array (arrayRowType)
@@ -29,7 +28,7 @@ import           Infernu.Decycle
 import           Infernu.InferState
 import           Infernu.Lib          (matchZip)
 import           Infernu.Log
-import           Infernu.Pretty
+import           Infernu.Pretty()
 import           Infernu.Types
 
 ----------------------------------------------------------------------
@@ -179,8 +178,8 @@ unlessEq :: (Monad m, Eq a) => a -> a -> m () -> m ()
 unlessEq x y = unless (x == y)
 
 wrapWithUnifyError :: Pretty a => a -> a -> Maybe TypeError -> Doc
-wrapWithUnifyError t1 t2 mte =
-    mkTypeErrorMessage msg mte
+wrapWithUnifyError t1 t2 =
+    mkTypeErrorMessage msg
     where msg = vsep [text "Failed unifying:"
                      , indent 4 $ pretty t1
                      , text "With:"
@@ -234,10 +233,10 @@ unify' _ a t1 t2@(TBody (TVar (Skolem _))) = unificationError a t1 t2
 unify' _ a t1@(TBody (TVar (Skolem _))) t2 = unificationError a t1 t2
 
 -- | TEmptyThis <- something
-unify' _ a (TBody TEmptyThis) t = return ()
+unify' _ _ (TBody TEmptyThis) _ = return ()
 
 -- | TUndefined <- TEmptyThis
-unify' _ a (TBody TUndefined) (TBody TEmptyThis) = return ()
+unify' _ _ (TBody TUndefined) (TBody TEmptyThis) = return ()
 
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
@@ -300,7 +299,7 @@ unify' r a t1@(TBody{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TRow{})  t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
 --unify' r a t1@(TFunc{}) t2@(TRow{}) = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TFunc{}) t2@(TRow  _ rl) =
-    case (Map.lookup TPropFun . fst $ flattenRow rl) of
+    case Map.lookup TPropFun . fst $ flattenRow rl of
         Nothing -> unificationError a t1 t2
         Just ts -> do t2' <- instantiate ts
                       r a (Fix t1) $ qualType t2'
@@ -466,7 +465,7 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                    do traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
                       recVar <- Flex <$> fresh
                       let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
-                          recT = applySubst (singletonSubst n $ withRecVar) rowT
+                          recT = applySubst (singletonSubst n withRecVar) rowT
                       namedType <- getNamedType a recVar recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
@@ -489,7 +488,7 @@ unifyPredsL :: Source -> [TPred Type] -> Infer [TPred Type]
 unifyPredsL a ps = Set.toList . Set.fromList . catMaybes <$>
     do  forM ps $ \p@(TPredIsIn className t) ->
                   do  entry <- ((a,t,) . (className,) . Set.fromList . classInstances) <$> lookupClass className
-                               `failWithM` (throwError a $ text "Unknown class: " <+> pretty className <+> text "in pred list:" <+> pretty ps)
+                               `failWithM` throwError a (text "Unknown class: " <+> pretty className <+> text "in pred list:" <+> pretty ps)
                       remainingAmbiguities <- unifyAmbiguousEntry entry
                       case remainingAmbiguities of
                           Nothing -> return Nothing

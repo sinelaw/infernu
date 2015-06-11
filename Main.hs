@@ -5,7 +5,7 @@ import qualified Options.Applicative as OptParse
 import           System.Exit         (exitFailure)
 import qualified Text.Parsec.Pos     as Pos
 
-import           Infernu.Infer       (pretty)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..))
 import           Infernu.Options     (Options (..), opts)
 import           Infernu.Types       (QualType, Source (..))
 import           Infernu.Util

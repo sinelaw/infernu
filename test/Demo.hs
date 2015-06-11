@@ -2,7 +2,7 @@ module Demo where
 
 import           Data.List          (intercalate)
 
-import           Infernu.Infer      (pretty)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..))
 import           Infernu.Util       (checkFiles)
 import           Infernu.Options    (defaultOptions)
 import           Infernu.Prelude

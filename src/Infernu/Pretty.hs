@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Infernu.Pretty where
 
 
@@ -53,6 +54,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 instance Pretty Pos.SourcePos where
     pretty p = string (Pos.sourceName p) <> string ":" <> (string . show $ Pos.sourceLine p) <> string ":" <> (string . show $ Pos.sourceColumn p)
 
+ifStr :: Bool -> String -> Doc
 ifStr b s = if b then string s else empty
 
 instance Pretty Source where
@@ -94,8 +96,8 @@ instance Pretty (Exp a) where
                                                       , pretty e2]
     pretty (EArray _ es) = encloseSep lbracket rbracket comma $ map pretty es
     pretty (ETuple _ es) = pretty es
-    pretty (ERow _ isOpen props) = encloseSep lbrace rbrace comma
-                                   $ map (\(n,v) -> fill 6 (pretty n) <> string ":" <> space <> pretty v) props
+    pretty (ERow _ _ props) = encloseSep lbrace rbrace comma
+                              $ map (\(n,v) -> fill 6 (pretty n) <> string ":" <> space <> pretty v) props
 --                                   <> ifStr isOpen " | ? "
     pretty (ECase _ ep es) = hang 4 $
                              string "case" <+> pretty ep <+> string "of" <+> vsep (map formatBranch' es)
@@ -113,6 +115,7 @@ toChr n = chr (ord 'a' + (n - 1))
 ptv :: Int -> String
 ptv x = foldr ((++) . (:[]) . toChr)  [] (Digits.digits 26 (x + 1))
 
+colorFuncs :: [Doc -> Doc]
 colorFuncs = [ red
              , green
              , yellow
@@ -122,6 +125,7 @@ colorFuncs = [ red
              , white
              ]
 
+colorBy :: Int -> Doc -> Doc
 colorBy n = colorFuncs!!(n `mod` length colorFuncs)
 
 -- |
@@ -180,7 +184,7 @@ prettyType (TCons TTuple ts) = pretty ts
 prettyType (TCons (TName name) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
 prettyType (TCons TStringMap [t]) = text "StringMap " <+> pretty t
 prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
-prettyType (TRow label list) =
+prettyType (TRow label rl) =
     hsep [ case label of
                  Just l' -> string l' <> string "="
                  Nothing -> empty
@@ -190,7 +194,7 @@ prettyType (TRow label list) =
                     FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TCons (TName tid) ts)) -- TODO
              <> rbrace
            ]
-  where (props, r) = flattenRow list
+  where (props, r) = flattenRow rl
         printProp' (n,v) = pretty n <> string ":" <+> align (pretty v)
         body' = map printProp' $ Map.toList props
 
@@ -219,10 +223,10 @@ instance (Ord t, VarNames t, Pretty t) => Pretty (TScheme t) where
 --     prettyTab n (Right x) = prettyTab n x
 
 instance (Pretty k, Pretty v) => Pretty (Map.Map k v) where
-    pretty s = string "Map" <+> (encloseSep lbrace rbrace comma $ map (\(k,v) -> pretty k <+> pretty "=>" <+> pretty v) $ Map.toList s)
+    pretty s = string "Map" <+> encloseSep lbrace rbrace comma (map (\(k,v) -> pretty k <+> pretty "=>" <+> pretty v) $ Map.toList s)
 
 instance (Pretty k) => Pretty (Set.Set k) where
-    pretty s = string "Set" <+> (encloseSep lbrace rbrace comma $ map pretty $ Set.toList s)
+    pretty s = string "Set" <+> encloseSep lbrace rbrace comma (map pretty $ Set.toList s)
 
 -- instance Pretty GenInfo where
 --     prettyTab _ g = show g

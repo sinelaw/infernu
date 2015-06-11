@@ -5,8 +5,6 @@
 module Infernu.Infer
     ( runTypeInference
     , test
-    , Pretty(..)
-    , pretty
     , getAnnotations
     , minifyVars
     , TypeError
@@ -14,7 +12,7 @@ module Infernu.Infer
     where
 
 
-import           Control.Monad      (foldM, forM, when)
+import           Control.Monad      (foldM, forM)
 import qualified Data.Graph.Inductive as Graph
 import           Data.Map.Lazy      (Map)
 import qualified Data.Map.Lazy      as Map
@@ -23,15 +21,14 @@ import           Data.Set           (Set)
 import qualified Data.Set           as Set
 import           Data.Char          (isUpper)
 
-import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, string, parens, squotes)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, squotes)
 
 import           Infernu.Prelude
 import qualified Infernu.Builtins.Operators   as Operators
 import           Infernu.InferState
 import           Infernu.Lib        (safeLookup)
-import           Infernu.Decycle    (decycle2)
 import           Infernu.Log
-import           Infernu.Pretty
+import           Infernu.Pretty()
 import           Infernu.Types
 import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyl, tryMakeRow)
 
