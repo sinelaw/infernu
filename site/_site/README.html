@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <title>infernu - static type inference for JavaScript</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- <link rel="stylesheet" href="styles/main.less.css"/> -->
+    <link href="./css/fonts/dosis.css" rel="stylesheet" type="text/css" />
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="./css/main.css" />
+  </head>
+  <body>
+
+    <nav class="navbar navbar-default">
+      <div class="container">
+        <!-- Brand and toggle get grouped for better mobile display -->
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">infernu</a>
+        </div>
+
+        <!-- Collect the nav links, forms, and other content for toggling -->
+        <div class="collapse navbar-collapse">
+          <ul class="nav navbar-nav">
+            <li><a href="./">Home</a></li>
+            <li><a href="./archive.html">Archive</a></li>
+          </ul>
+        </div><!-- /.navbar-collapse -->
+      </div><!-- /.container-fluid -->
+    </nav>
+
+
+    <div class="container" id="content">
+      <!-- <h1>README</h1> -->
+
+      <h1 id="infernu">Infernu</h1>
+<p>Static type inference for JavaScript. (In early development.)</p>
+<p>See the <a href="https://noamlewis.wordpress.com/2015/01/20/introducing-sjs-a-type-inferer-and-checker-for-javascript/">intro blog post</a> for a short discussion comparing infernu to <strong>other type checkers</strong>.</p>
+<p><em>(Formerly known as Inferno / Safe JS / SJS)</em></p>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Full type inference: no type annotations necessary.</li>
+<li>Parametric polymorphism (aka “generics”), based on Hindley-Milner type inference.</li>
+<li>Row-type polymorphism, otherwise known as “static duck typing”.</li>
+<li>Simple type classes (which allow for example correct support of JS <code>+</code> and <code>[]</code> operators).</li>
+<li>Recursive types for true representation of object-oriented methods.</li>
+<li>Correct handling of JS’s <code>this</code> dynamic scoping rules.</li>
+</ul>
+<p>For more information see <a href="docs/type-system.md">Infernu’s Type System</a>.</p>
+<h2 id="installation">Installation</h2>
+<h3 id="quick-and-dirty">Quick and Dirty</h3>
+<pre><code>git clone git@github.com:sinelaw/infernu.git
+cd infernu/
+cabal install</code></pre>
+<p>Usage: see <code>infernu --help</code></p>
+<p>Quick example usage:</p>
+<pre><code>echo 'function getLength(x) { return x.length; }' &gt; getLength.js
+
+infernu getLength.js</code></pre>
+<p>Output:</p>
+<div class="sourceCode"><pre class="sourceCode javascript"><code class="sourceCode javascript">    <span class="co">//       getLength : a.({length: b, ..c} -&gt; b)</span>
+    <span class="kw">function</span> <span class="at">getLength</span>(x) <span class="op">{</span> <span class="cf">return</span> <span class="va">x</span>.<span class="at">length</span><span class="op">;</span> <span class="op">}</span></code></pre></div>
+<h3 id="a-bit-more-detailed-instructions">A bit more detailed instructions</h3>
+<ol style="list-style-type: decimal">
+<li>Install Haskell’s <strong>cabal</strong> package manager. See <a href="https://www.haskell.org/downloads">Haskell.org</a> for some installation options. On ubuntu, I recommend using <a href="https://launchpad.net/~hvr/+archive/ubuntu/ghc">Herbert V. Riedel’s ppa</a>.</li>
+<li>Clone this repository.</li>
+</ol>
+<p>Then run:</p>
+<pre><code>cabal update
+cd infernu
+cabal install</code></pre>
+<p>The <code>infernu</code> executable will be installed to your <code>~/.cabal/bin</code>. You may want to add it to your <code>PATH</code>.</p>
+<p>If you have trouble in the last command due to package incompatibilities, use a <strong>cabal sandbox</strong>:</p>
+<pre><code>cd infernu
+cabal sandbox init
+cabal install</code></pre>
+<p>The <code>infernu</code> executable will be placed in <code>infernu/.cabal-sandbox/bin</code></p>
+<h2 id="examples">Examples</h2>
+<h3 id="basic">Basic</h3>
+<p>JavaScript:</p>
+<pre><code>var num = 2;
+var arrNums = [num, num];</code></pre>
+<p>Infernu infers:</p>
+<pre><code>//  num : Number
+//  arrNums : [Number]</code></pre>
+<p>That is, an array of numbers.</p>
+<p>Objects:</p>
+<pre><code>var obj = { something: 'hi', value: num };</code></pre>
+<p>Inferred type:</p>
+<pre><code>//  obj : {something: String,
+           value: Number}</code></pre>
+<p>That is, an object with two properties: ‘something’, of type string, and ‘value’ of type number.</p>
+<h3 id="functions-and-this">Functions and <code>this</code></h3>
+<p>In JS, <code>this</code> is one truly awful part. <code>this</code> is a dynamically scoped variable that takes on values depending on how the current function was invoked. Infernu knows about this (pun intended) and infers types for functions indicating what <code>this</code> must be.</p>
+<p>For example:</p>
+<pre><code>function useThisData() {
+	return this.data + 3;
+}</code></pre>
+<p>Infernu infers:</p>
+<pre><code>//       useThisData : {data: Number, ..a}.(() -&gt; Number)</code></pre>
+<p>In words: a function which expects <code>this</code> to be an object with at least one property, “data” of type <code>Number</code>. It takes no arguments (hence the empty <code>()</code>). It returns a <code>Number</code>.</p>
+<p>If we call a function that needs <code>this</code> incorrectly, Infernu will be angry:</p>
+<pre><code>Error: Could not unify:
+    {data: Number, ..a}
+  With:
+    Undefined</code></pre>
+<p>Because we called <code>useThisData</code> without a preceding object property access (e.g. <code>obj.useThisData</code>), it will get <code>undefined</code> for <code>this</code>. Infernu is telling us that our expected type for <code>this</code> is not unifiable with the type <code>undefined</code>.</p>
+<h3 id="polymorphism">Polymorphism</h3>
+<p>Given the following function:</p>
+<pre><code>function makeData(x) {
+    return {data: x};
+}</code></pre>
+<p>Infernu infers the following type:</p>
+<pre><code>a.(b -&gt; {data: b})</code></pre>
+<p>In words: A function that takes anything for its <code>this</code>, and an argument of any type <code>b</code>. It returns an object containing a single field, <code>data</code> of the same type <code>b</code> as the argument.</p>
+<h3 id="row-type-polymorphism-static-duck-typing">Row-type polymorphism (static duck typing)</h3>
+<p>Given the following function:</p>
+<pre><code>function getData(obj) {
+	return obj.data;
+}</code></pre>
+<p>Infernu infers:</p>
+<pre><code>h.({data: i, ..j} -&gt; i)</code></pre>
+<p>In words: a function taking any type <code>h</code> for <code>this</code>, and a parameter that contains <strong>at least one property</strong>, named “data” that has some type <code>i</code> (could be any type). The function returns the same type <code>i</code> as the data property.</p>
+<h3 id="type-classes">Type Classes</h3>
+<p>See <a href="docs/type-system.md#type-classes">here</a> for more about Infernu’s type classes.</p>
+<p>The basic example is for the <code>+</code> operator:</p>
+<pre><code>function add(x,y) { return x + y; }</code></pre>
+<p>The type for <code>add</code> is inferred to be:</p>
+<pre><code>//       add : Plus b =&gt; a.((b, b) -&gt; b)</code></pre>
+<p>Meaning: given any type <code>a</code> that is an instance of the <code>Plus</code> type class, the function takes two <code>a</code>s and returns an <code>a</code>.</p>
+<p>The two instances of <code>Plus</code> currently defined are the types <code>Number</code> and <code>String</code>.</p>
+<hr />
+<h2 id="pending-discussion">Pending discussion</h2>
+<p>Things that maybe need to be done, but have major drawbacks:</p>
+<ul>
+<li>[ ] consider adding sum types with guards as pattern matchers. required because some functions, like array index access, can return ‘undefined’ (e.g. if index is out of range) - breaks parametricity and complicates the inference greatly.</li>
+<li>[ ] allow empty var decls (use first assignment as starting point for types) - how to prevent uninitialized variable issues?</li>
+<li>[ ] allow defining constructor-object properties using the notation <code>obj.prototype.something = ...</code> - requires non-local context to deteremine the type of a constructor function.</li>
+<li>[ ] find a reasonable solution for optional parameters - perhaps using an implicit “Maybe”-like type or implicit type unions, and require guards?</li>
+<li>[ ] when concluding that two recursive types are equivalent, use that information to simplify the resulting types (perhaps using the simpler of the two everywhere)</li>
+<li>[ ] support <code>arguments</code> (a tuple?) and function <code>bind</code></li>
+<li>[ ] Should we treat functions as objects with properties? the only properties they have are: length (very weird! we might as well leave it out), and call/bind/apply (which need special handling)</li>
+</ul>
+<h3 id="future">Future</h3>
+<ul>
+<li>[ ] type annotations</li>
+<li>[ ] add support for CommonJS modules</li>
+<li>[ ] deal better with inferred polymorphic object properties - requires full rank-n unification</li>
+</ul>
+<!--  LocalWords:  JS polymorphism Hindley Milner JS's Equi num arrNums Number String getData
+ -->
+<!--  LocalWords:  useThisData Undefined unifiable makeData TODO decls paren CommonJS
+ -->
+    </div>
+  </body>
+</html>

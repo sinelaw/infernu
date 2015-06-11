@@ -23,7 +23,7 @@ main = hakyll $ do
                 >>= withItemBody
                   (unixFilter "lessc" ["-"])
 
-    match (fromList ["about.rst"]) $ do -- , "contact.markdown"]) $ do
+    match (fromList ["about.rst", "README.md"]) $ do -- , "contact.markdown"]) $ do
         route   $ setExtension "html"
         compile $ pandocCompiler
             >>= loadAndApplyTemplate "templates/default.html" defaultContext
@@ -49,6 +49,7 @@ main = hakyll $ do
                 >>= loadAndApplyTemplate "templates/archive.html" archiveCtx
                 >>= loadAndApplyTemplate "templates/default.html" archiveCtx
                 >>= relativizeUrls
+
 
 
     match "index.html" $ do
