@@ -72,12 +72,18 @@ fromStatement (ES3.TryStmt z stmt mCatch mFinally) = chainExprs z catchExpr $ pa
                     Nothing -> []
 fromStatement (ES3.ThrowStmt _ _) = id
 fromStatement s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
-fromStatement s@(ES3.ForInStmt z _ _ _) = errorNotSupported "for .. in" z s
+fromStatement s@(ES3.ForInStmt z init' expr body) = case init' of
+                                                       ES3.ForInVar (ES3.Id _ _) -> errorNotSupported "'for..in' with var decl (var hoisting would occur)" z s -- ELet (gen z') name (ELit (gen z') $ LitString "") (foldStmts [body] k)
+                                                       ES3.ForInLVal (ES3.LVar z' name) -> chainExprs z' (assignToVar z' name str') body'
+                                                       ES3.ForInLVal (ES3.LDot z' objExpr name) -> chainExprs z' (assignToProperty z objExpr name str') body'
+                                                       ES3.ForInLVal (ES3.LBracket z' objExpr idxExpr) -> chainExprs z' (assignToIndex z objExpr idxExpr str') body'
+    where str' = ELit (gen z) $ LitString ""
+          body' = fromStatement body
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
-fromStatement (ES3.ForStmt z init' test increment body) = case init' of
-                                                           ES3.NoInit -> forBody
-                                                           ES3.VarInit varDecls -> chainDecls varDecls . forBody
-                                                           ES3.ExprInit expr -> chainExprs z (fromExpression expr) forBody
+fromStatement s@(ES3.ForStmt z init' test increment body) = case init' of
+                                                                ES3.NoInit -> forBody
+                                                                ES3.VarInit varDecls -> errorNotSupported "'for' with var decl (var hoisting would occur)" z s -- chainDecls varDecls . forBody
+                                                                ES3.ExprInit expr -> chainExprs z (fromExpression expr) forBody
     where forBody = chainExprs z test'' rest
           test'' = case test of
                     Nothing -> EVar (gen z) poo

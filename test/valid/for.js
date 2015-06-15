@@ -1,4 +1,5 @@
 var z = 0;
-for (var i = 2; false; i = 3) {
+var i = 0;
+for (i = 2; false; i = 3) {
     z = i;
 }
