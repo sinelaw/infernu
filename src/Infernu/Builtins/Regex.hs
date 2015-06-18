@@ -3,12 +3,12 @@ module Infernu.Builtins.Regex
        (regexRowType)
        where
 
-import           Control.Monad             (foldM, forM)
-import Infernu.Types
-import Infernu.InferState
-import           Infernu.Lib (safeLookup)
-import Infernu.Prelude
-import Infernu.Builtins.Util
+import           Control.Monad         (foldM)
+
+import           Infernu.Builtins.Util
+import           Infernu.InferState    (Infer)
+import           Infernu.Prelude
+import           Infernu.Types
 
 regexMatch :: Type
 regexMatch = Fix . TRow (Just "RegexMatch")
@@ -34,7 +34,3 @@ regexProps =
 -- TODO: this code is actually pure, refactor to pure function and 'return' wrapper.
 regexRowType :: Infer (TRowList Type)
 regexRowType = foldM addProp (TRowEnd Nothing) $ regexProps
-  where addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> ((tvName,) . Flex <$> fresh)
-             let ts' = mapVarNames (safeLookup allocNames) propTS
-             return $ TRowProp (TPropName name) ts' rowlist

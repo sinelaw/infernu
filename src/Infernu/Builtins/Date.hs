@@ -3,12 +3,13 @@ module Infernu.Builtins.Date
        (dateRowType)
        where
 
-import           Control.Monad             (foldM, forM)
-import Infernu.Types
-import Infernu.InferState
-import           Infernu.Lib (safeLookup)
+import           Control.Monad         (foldM, forM)
+
+import           Infernu.Builtins.Util
+import           Infernu.InferState    (Infer)
+import           Infernu.Lib           (safeLookup)
 import           Infernu.Prelude
-import Infernu.Builtins.Util
+import           Infernu.Types
 
 dateFunc :: Type -> Type
 dateFunc = funcN [date]
@@ -85,7 +86,3 @@ dateProps =
 dateRowType :: Infer (TRowList Type)
 dateRowType = namedProps
   where namedProps = foldM addProp (TRowEnd Nothing) dateProps
-        addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> (tvName,) . Flex <$> fresh
-             let ts' = mapVarNames (safeLookup allocNames) propTS
-             return $ TRowProp (TPropName name) ts' rowlist

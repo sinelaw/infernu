@@ -1,8 +1,8 @@
 module Infernu.Builtins.StringMap where
 
-import Infernu.Types
+import           Infernu.Builtins.Util
 import           Infernu.Prelude
-import Infernu.Builtins.Util
+import           Infernu.Types
 
 stringMapRowType :: Monad m => Type -> m (TRowList Type)
 stringMapRowType elemType = return

@@ -1,8 +1,13 @@
+{-# LANGUAGE TupleSections #-}
 module Infernu.Builtins.Util
        where
 
-import Infernu.Types
+import           Control.Monad      (forM)
+
+import           Infernu.InferState (fresh, Infer)
+import           Infernu.Lib        (safeLookup)
 import           Infernu.Prelude
+import           Infernu.Types
 
 func :: Type -> Type -> Type -> Type
 func this x y = Fix $ TFunc [this, x] y
@@ -58,3 +63,8 @@ openRow tv = Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex tv)
 prop :: EPropName -> TScheme t -> TRowList t -> TRowList t
 prop name = TRowProp (TPropName name)
 
+addProp :: VarNames t => TRowList t -> (EPropName, TScheme t) -> Infer (TRowList t)
+addProp rowlist (name, propTS) =
+  do allocNames <- forM (schemeVars propTS) $ \tvName -> (tvName,) . Flex <$> fresh
+     let ts' = mapVarNames (safeLookup allocNames) propTS
+     return $ TRowProp (TPropName name) ts' rowlist

@@ -3,12 +3,13 @@ module Infernu.Builtins.String
        (stringRowType)
        where
 
-import           Control.Monad             (foldM, forM)
-import Infernu.Types
-import Infernu.InferState
-import           Infernu.Lib (safeLookup)
+import           Control.Monad         (foldM, forM)
+
+import           Infernu.Builtins.Util
+import           Infernu.InferState    (Infer)
+import           Infernu.Lib           (safeLookup)
 import           Infernu.Prelude
-import Infernu.Builtins.Util
+import           Infernu.Types
 
 
 stringProps :: [(String, TypeScheme)]
@@ -40,7 +41,3 @@ stringProps =
 stringRowType :: Infer (TRowList Type)
 stringRowType = TRowProp TPropGetIndex (ty $ func string number string) <$> namedProps
   where namedProps = foldM addProp (TRowEnd Nothing) $ stringProps
-        addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> ((tvName,) . Flex <$> fresh)
-             let ts' = mapVarNames (safeLookup allocNames) propTS
-             return $ TRowProp (TPropName name) ts' rowlist

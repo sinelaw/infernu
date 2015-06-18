@@ -2,7 +2,6 @@ module Infernu.Builtins.TypeClasses
        (typeClasses)
        where
 
-import           Infernu.Builtins.Util
 import           Infernu.Prelude
 import           Infernu.Types
 
@@ -18,8 +17,8 @@ typeClasses =
                                          , schemeEmpty $ Fix $ TBody TString
                                          ]})
     , (ClassName "StringKeys", Class { classInstances =
-                                               [ ts [0] $ openRow 0
-                                               , ts [0] $ array (tvar 0)
-                                               , ts [0] $ stringMap (tvar 0)
+                                               [ TScheme [Flex 0] $ qualEmpty $ Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex 0)
+                                               , TScheme [Flex 0] $ qualEmpty $ Fix $ TCons TArray [Fix . TBody . TVar $ Flex 0]
+                                               , TScheme [Flex 0] $ qualEmpty $ Fix $ TCons TStringMap [Fix . TBody . TVar $ Flex 0]
                                                ]})
     ]

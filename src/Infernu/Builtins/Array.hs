@@ -3,12 +3,12 @@ module Infernu.Builtins.Array
        (arrayRowType)
        where
 
-import           Control.Monad             (foldM, forM)
-import Infernu.Types
-import Infernu.InferState
-import           Infernu.Lib (safeLookup)
+import           Control.Monad         (foldM)
+
+import           Infernu.Builtins.Util
+import           Infernu.InferState    (Infer)
 import           Infernu.Prelude
-import Infernu.Builtins.Util
+import           Infernu.Types
 
 arrayProps :: Type -> [(String, TypeScheme)]
 arrayProps elemType = let aType = array elemType in
@@ -41,7 +41,3 @@ arrayRowType elemType = TRowProp TPropSetIndex (ty $ funcN [aType, number, elemT
                         . TRowProp TPropGetIndex (ty $ func aType number elemType)
                         <$> foldM addProp (TRowEnd Nothing) (arrayProps elemType)
   where aType = array elemType
-        addProp rowlist (name, propTS) =
-          do allocNames <- forM (schemeVars propTS) $ \tvName -> (tvName,) . Flex <$> fresh
-             let ts' = mapVarNames (safeLookup allocNames) propTS
-             return $ TRowProp (TPropName name) ts' rowlist
