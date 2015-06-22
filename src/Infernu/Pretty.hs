@@ -78,6 +78,12 @@ nakedSingleOrTuple [] = string "()"
 nakedSingleOrTuple [x] = pretty x
 nakedSingleOrTuple xs = tupled $ map pretty xs
 
+instance Pretty EPropName where
+    pretty (EPropName x) = string x
+    pretty EPropGetIndex = string "get[]"
+    pretty EPropSetIndex = string "set[]"
+    pretty EPropFun = string "call()"
+
 instance Pretty (Exp a) where
     pretty (EVar _ n) = string n
     pretty (EApp _ e1 args) = parens $ pretty e1 <> nakedSingleOrTuple args
@@ -199,10 +205,8 @@ prettyType (TRow label rl) =
         body' = map printProp' $ Map.toList props
 
 instance Pretty TProp where
-    pretty (TPropName n) = pretty n
-    pretty TPropGetIndex = text "get[]"
-    pretty TPropSetIndex = text "set[]"
-    pretty TPropFun      = text "func()"
+    pretty (TPropSetName n) = text ">" <> pretty n
+    pretty (TPropGetName n) = text "<" <> pretty n
 
 instance Pretty ClassName where
     pretty (ClassName c) = text c

@@ -60,11 +60,11 @@ withTypeClass n t t' = TQual { qualPred = [TPredIsIn { predClass = ClassName n, 
 openRow :: Int -> Type
 openRow tv = Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex tv)
 
-prop :: EPropName -> TScheme t -> TRowList t -> TRowList t
-prop name = TRowProp (TPropName name)
+prop :: String -> TScheme t -> TRowList t -> TRowList t
+prop name = TRowProp (TPropGetName $ EPropName name)
 
-addProp :: VarNames t => TRowList t -> (EPropName, TScheme t) -> Infer (TRowList t)
+addProp :: VarNames t => TRowList t -> (String, TScheme t) -> Infer (TRowList t)
 addProp rowlist (name, propTS) =
   do allocNames <- forM (schemeVars propTS) $ \tvName -> (tvName,) . Flex <$> fresh
      let ts' = mapVarNames (safeLookup allocNames) propTS
-     return $ TRowProp (TPropName name) ts' rowlist
+     return $ TRowProp (TPropGetName $ EPropName name) ts' rowlist

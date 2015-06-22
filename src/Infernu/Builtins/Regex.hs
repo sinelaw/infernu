@@ -13,9 +13,9 @@ import           Infernu.Types
 regexMatch :: Type
 regexMatch = Fix . TRow (Just "RegexMatch")
              -- TODO: instead of quantifying 'this', it should be a recursive type (regexMatch itself)
-             . TRowProp (TPropGetIndex) (ts [] $ func (tvar 0) number string)
-             . TRowProp (TPropName "index") (ty number)
-             . TRowProp (TPropName "input") (ty string)
+             . TRowProp (TPropGetName EPropGetIndex) (ts [] $ func (tvar 0) number string)
+             . TRowProp (TPropGetName $ EPropName "index") (ty number)
+             . TRowProp (TPropGetName $ EPropName "input") (ty string)
              $ TRowEnd Nothing
 
 regexProps :: [(String, TypeScheme)]

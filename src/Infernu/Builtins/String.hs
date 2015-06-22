@@ -39,5 +39,5 @@ stringProps =
 -- TODO: when inserting builtin types, do fresh renaming of scheme qvars
 -- TODO: this code is actually pure, refactor to pure function and 'return' wrapper.
 stringRowType :: Infer (TRowList Type)
-stringRowType = TRowProp TPropGetIndex (ty $ func string number string) <$> namedProps
+stringRowType = TRowProp (TPropGetName EPropGetIndex) (ty $ func string number string) <$> namedProps
   where namedProps = foldM addProp (TRowEnd Nothing) $ stringProps

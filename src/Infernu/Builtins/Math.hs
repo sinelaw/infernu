@@ -6,14 +6,14 @@ import           Infernu.Builtins.Util
 import           Infernu.Prelude
 import           Infernu.Types
 
-numProp :: EPropName -> TRowList Type -> TRowList Type
-numProp name = TRowProp (TPropName name) $ ts [] number
+numProp :: String -> TRowList Type -> TRowList Type
+numProp name = TRowProp (TPropGetName $ EPropName name) $ ts [] number
 
-numFuncProp :: EPropName -> TRowList (Fix FType) -> TRowList (Fix FType)
-numFuncProp name = TRowProp (TPropName name) $ ts [0] $ Fix $ TFunc [tvar 0, number] number
+numFuncProp :: String -> TRowList (Fix FType) -> TRowList (Fix FType)
+numFuncProp name = TRowProp (TPropGetName $ EPropName name) $ ts [0] $ Fix $ TFunc [tvar 0, number] number
 
-numFuncProp2 :: EPropName -> TRowList (Fix FType) -> TRowList (Fix FType)
-numFuncProp2 name = TRowProp (TPropName name) $ ts [0] $ Fix $ TFunc [tvar 0, number, number] number
+numFuncProp2 :: String -> TRowList (Fix FType) -> TRowList (Fix FType)
+numFuncProp2 name = TRowProp (TPropGetName $ EPropName name) $ ts [0] $ Fix $ TFunc [tvar 0, number, number] number
 
 math :: TScheme (Fix FType)
 math = ts [] $ Fix $ TRow (Just "Math")
@@ -52,7 +52,7 @@ math = ts [] $ Fix $ TRow (Just "Math")
                    --   $ numFuncProp "max"
                    --   $ numFuncProp "min"
                    $ numFuncProp2 "pow"
-                   $ TRowProp (TPropName "random") (ts [] $ Fix $ TFunc [tvar 0] number)
+                   $ TRowProp (TPropGetName $ EPropName "random") (ts [] $ Fix $ TFunc [tvar 0] number)
                    $ numFuncProp "round"
                    $ numFuncProp "sign"
                    $ numFuncProp "sin"

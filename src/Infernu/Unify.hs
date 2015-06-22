@@ -41,7 +41,7 @@ tryMakeRow (TBody TString) = Just <$> stringRowType
 tryMakeRow (TBody TDate) = Just <$> dateRowType
 tryMakeRow (TRow _ rl) = Just <$> return rl
 tryMakeRow (TFunc targs tres) = Just <$> (return
-                                          . TRowProp TPropFun (schemeEmpty $ Fix $ TFunc targs tres)
+                                          . TRowProp (TPropGetName EPropFun) (schemeEmpty $ Fix $ TFunc targs tres)
                                           $ TRowEnd Nothing)
 
 tryMakeRow _ = return Nothing
@@ -299,7 +299,7 @@ unify' r a t1@(TBody{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TRow{})  t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
 --unify' r a t1@(TFunc{}) t2@(TRow{}) = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TFunc{}) t2@(TRow  _ rl) =
-    case Map.lookup TPropFun . fst $ flattenRow rl of
+    case Map.lookup (TPropGetName EPropFun) . fst $ flattenRow rl of
         Nothing -> unificationError a t1 t2
         Just ts -> do t2' <- instantiate ts
                       r a (Fix t1) $ qualType t2'
@@ -312,18 +312,20 @@ unify' r a t1@(TFunc{}) t2@(TRow  _ rl) =
 unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
   unlessEq t1 t2 $ do
      let (m2, r2) = flattenRow row2
-         names2 = Set.fromList $ Map.keys m2
+         names2List = Map.keys m2
+         names2 = Set.fromList names2List
          (m1, r1) = flattenRow row1
-         names1 = Set.fromList $ Map.keys m1
-         commonNames = Set.toList $ names1 `Set.intersection` names2
+         names1List = Map.keys m1
+         names1 = Set.fromList names1List
+         commonNames = [(x,y) | x <- names1List, y <- names2List, tpropName x == tpropName y]
 
          --namesToTypes :: Map EPropName (TScheme t) -> [EPropName] -> [t]
          -- TODO: This ignores quantified variables in the schemes.
          -- It should be AT LEAST alpha-equivalence below (in the unifyl)
          namesToTypes m = mapMaybe $ flip Map.lookup m
-
          --commonTypes :: [(Type, Type)]
-         commonTypes = zip (namesToTypes m1 commonNames) (namesToTypes m2 commonNames)
+         commonTypes = zip (namesToTypes m1 $ map fst commonNames) (namesToTypes m2 $ map snd commonNames)
+
 
      traceLog $ text "row1: " <+> pretty m1 <+> text ", " <+> pretty r1
      traceLog $ text "row2: " <+> pretty m2 <+> text ", " <+> pretty r2

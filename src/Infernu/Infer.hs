@@ -207,7 +207,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      -- polymorphic. In the future, type annotations could be used to make the prop assignment
      -- polymorphic.
      let rvalueSchemeFloated = TScheme [] TQual { qualPred = [], qualType = qualType rvalueT }
-         rvalueRowType = Fix . TRow Nothing $ TRowProp prop rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
+         rvalueRowType = Fix . TRow Nothing $ TRowProp (TPropSetName prop) rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
      unify a (qualType objT) rvalueRowType >> getState
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
      preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
@@ -241,7 +241,7 @@ inferType' env (ERow a isOpen propExprs) =
          accumRowProp' (row, floatedPs') ((propName, propExpr), propType) =
            do (ts, floatedPs) <- generalize propExpr env propType
               -- TODO use unfloated predicates
-              return (TRowProp (TPropName propName) ts row, floatedPs' ++ floatedPs)
+              return (TRowProp (TPropGetName propName) ts $ TRowProp (TPropSetName propName) ts $ row, floatedPs' ++ floatedPs)
      (rowType', floatedPreds) <- foldM  accumRowProp' (rowEnd', []) propNamesTypes
      let rowType = TQual { qualPred = floatedPreds, qualType = Fix . TRow Nothing $ rowType' }
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
@@ -265,11 +265,11 @@ inferType' env (EProp a eObj propName) =
              do traceLog $ text "Failed to find prop: " <+> pretty propName <+> text " in type: " <+> pretty tObj
                 rowTail <- TRowEnd . Just . RowTVar <$> freshFlex
                 propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> freshFlex
-                unify a (Fix . TRow Nothing $ TRowProp propName propTypeScheme rowTail) (qualType tObj)
+                unify a (Fix . TRow Nothing $ TRowProp (TPropGetName propName) propTypeScheme rowTail) (qualType tObj)
                 instantiate propTypeScheme
 
          propTypefromTRow tRowList =
-             case Map.lookup propName . fst $ flattenRow tRowList of
+             case Map.lookup (TPropGetName propName) . fst $ flattenRow tRowList of
                  Just knownPropTypeScheme -> instantiate knownPropTypeScheme
                  Nothing -> propTypeIfMono
 

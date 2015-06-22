@@ -32,6 +32,7 @@ module Infernu.Types
        , liftRowTVar
        , FlatRowEnd(..)
        , TProp(..)
+       , tpropName
        , TRowList(..)
        , ClassName(..)
        , Class(..)
@@ -55,7 +56,7 @@ module Infernu.Types
        , NameSource(..)
        , addEquivalence
        , VarNames(freeTypeVars, mapVarNames)
-       , EPropName
+       , EPropName(..)
        , mapTopAnnotation
 #ifdef QUICKCHECK
        , runAllTests
@@ -86,7 +87,11 @@ data GenInfo = GenInfo { isGen :: Bool, declName :: Maybe String }
              deriving (Show, Eq, Ord)
 
 type EVarName = String
-type EPropName = String
+data EPropName = EPropName String
+               | EPropGetIndex
+               | EPropSetIndex
+               | EPropFun
+               deriving (Show, Eq, Ord)
 
 data LitVal = LitNumber !Double
             | LitBoolean !Bool
@@ -103,8 +108,8 @@ data Exp a = EVar !a !EVarName
            | EAbs !a ![EVarName] !(Exp a)
            | ELet !a !EVarName !(Exp a) !(Exp a)
            | ECase !a !(Exp a) ![(LitVal, Exp a)]
-           | EProp !a !(Exp a) !TProp
-           | EPropAssign !a !(Exp a) !TProp !(Exp a) !(Exp a)
+           | EProp !a !(Exp a) !EPropName
+           | EPropAssign !a !(Exp a) !EPropName !(Exp a) !(Exp a)
              -- TODO consider better options for causing rows to become closed outside the 'new' call
            | ENew !a !(Exp a) ![Exp a]
              -- Various literal expressions
@@ -149,8 +154,13 @@ liftRowTVar :: (TVarName -> TVarName) -> RowTVar -> RowTVar
 liftRowTVar f (RowTVar x) = RowTVar (f x)
 
 -- | Row type.
-data TProp = TPropName !EPropName | TPropGetIndex | TPropSetIndex | TPropFun
+data TProp = TPropSetName !EPropName
+           | TPropGetName !EPropName
            deriving (Show, Eq, Ord)
+
+tpropName :: TProp -> EPropName
+tpropName (TPropSetName x) = x
+tpropName (TPropGetName x) = x
 
 data TRowList t = TRowProp !TProp !(TScheme t) !(TRowList t)
                 | TRowEnd !(Maybe RowTVar)
