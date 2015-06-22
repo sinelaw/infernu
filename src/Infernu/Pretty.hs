@@ -9,7 +9,7 @@ import           Infernu.Prelude
 
 import           Data.Char       (chr, ord)
 import qualified Data.Digits     as Digits
--- import           Data.List       (intercalate)
+import qualified Data.List     as List
 import qualified Data.Map   as Map
 import qualified Data.Graph.Inductive      as Graph
 
@@ -201,12 +201,26 @@ prettyType (TRow label rl) =
              <> rbrace
            ]
   where (props, r) = flattenRow rl
-        printProp' (n,v) = pretty n <> string ":" <+> align (pretty v)
-        body' = map printProp' $ Map.toList props
+        isGet (TPropGetName _) = True
+        isGet _ = False
+        isSet (TPropSetName _) = True
+        isSet _ = False
+
+        propKeysByName = map (\ps -> let name = tpropName . fst $ head ps
+                                         keys = map fst ps
+                                     in (name, snd $ head ps, (any isGet keys, any isSet keys)))
+                         $ List.groupBy (\(x,xv) (y,yv) -> tpropName x == tpropName y && xv == yv) $ Map.toList props
+        printProp' (n,v,getSet) = pn <> string ":" <+> align (pretty v)
+            where pn = case getSet of
+                          (True, True) -> pretty n
+                          (True, False) -> string "get" <+> pretty n
+                          (False, True) -> string "set" <+> pretty n
+                          _ -> error "Expected at least one of get or set"
+        body' = map printProp' propKeysByName
 
 instance Pretty TProp where
-    pretty (TPropSetName n) = text ">" <> pretty n
-    pretty (TPropGetName n) = text "<" <> pretty n
+    pretty (TPropSetName n) = text "set" <+> pretty n
+    pretty (TPropGetName n) = text "get" <+> pretty n
 
 instance Pretty ClassName where
     pretty (ClassName c) = text c
