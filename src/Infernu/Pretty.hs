@@ -65,9 +65,9 @@ instance Pretty Source where
 
 
 instance Pretty LitVal where
-    pretty (LitNumber x) = string $ show x
-    pretty (LitBoolean x) = string $ show x
-    pretty (LitString x) = string $ show x
+    pretty (LitNumber x) = pretty x
+    pretty (LitBoolean x) = pretty x
+    pretty (LitString x) = pretty x
     pretty (LitRegex x g i) = enclose (string "/") (string "/") (string x) <> (ifStr g "g") <> (ifStr i "i")
     pretty LitUndefined = string "undefined"
     pretty LitNull = string "null"
