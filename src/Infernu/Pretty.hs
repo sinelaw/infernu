@@ -80,8 +80,8 @@ nakedSingleOrTuple xs = tupled $ map pretty xs
 
 instance Pretty EPropName where
     pretty (EPropName x) = string x
-    pretty EPropGetIndex = string "get[]"
-    pretty EPropSetIndex = string "set[]"
+    pretty EPropGetIndex = string "=[]"
+    pretty EPropSetIndex = string "[]="
     pretty EPropFun = string "call()"
 
 instance Pretty (Exp a) where
