@@ -50,7 +50,7 @@ import qualified Data.Graph.Inductive         as Graph
 
 import           Data.Functor.Identity        (Identity (..), runIdentity)
 import qualified Data.List                    as List
-import qualified Data.Map.Strict              as Map
+import qualified Data.HashMap.Strict              as Map
 import           Data.Maybe                   (fromMaybe)
 import           Data.Set                     (Set)
 import qualified Data.Set                     as Set

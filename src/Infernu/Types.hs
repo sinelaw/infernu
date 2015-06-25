@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                  #-}
 {-# LANGUAGE DeriveFoldable       #-}
+{-# LANGUAGE DeriveGeneric        #-}
 {-# LANGUAGE DeriveFunctor        #-}
 {-# LANGUAGE DeriveTraversable    #-}
 {-# LANGUAGE FlexibleContexts     #-}
@@ -63,12 +64,15 @@ module Infernu.Types
 #endif
        ) where
 
-import qualified Data.Map.Strict             as Map
+import qualified Data.HashMap.Strict             as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
 import qualified Data.Graph.Inductive      as Graph
 import qualified Text.Parsec.Pos           as Pos
 import Text.PrettyPrint.ANSI.Leijen (Doc)
+import Data.Hashable (Hashable(..))
+
+import GHC.Generics (Generic)
 
 import           Infernu.Fix               (Fix (..), replaceFix)
 import           Infernu.Prelude
@@ -76,8 +80,8 @@ import Prelude ()
 
 #ifdef QUICKCHECK
 import           Data.DeriveTH
-import           Data.Map.Strict             (Map)
-import qualified Data.Map.Strict             as Map
+import           Data.HashMap.Strict             (Map)
+import qualified Data.HashMap.Strict             as Map
 import           Test.QuickCheck           (choose, resize)
 import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary (Arbitrary (..))
@@ -91,7 +95,9 @@ data EPropName = EPropName String
                | EPropGetIndex
                | EPropSetIndex
                | EPropFun
-               deriving (Show, Eq, Ord)
+               deriving (Show, Eq, Ord, Generic)
+
+instance Hashable EPropName where
 
 data LitVal = LitNumber !Double
             | LitBoolean !Bool
@@ -124,7 +130,9 @@ data Exp a = EVar !a !EVarName
 
 data TVarName = Flex !Int
               | Skolem !Int
-              deriving (Show, Eq, Ord)
+              deriving (Show, Eq, Ord, Generic)
+
+instance Hashable TVarName
 
 unTVarName :: TVarName -> Int
 unTVarName (Flex x) = x
@@ -139,7 +147,8 @@ data TBody = TVar !TVarName
              deriving (Show, Eq, Ord)
 
 newtype TypeId = TypeId Int
-                deriving (Show, Eq, Ord)
+                deriving (Show, Eq, Ord, Generic)
+instance Hashable TypeId where
 
 data TConsName = TArray | TTuple | TName !TypeId | TStringMap
                  deriving (Show, Eq, Ord)
@@ -156,7 +165,9 @@ liftRowTVar f (RowTVar x) = RowTVar (f x)
 -- | Row type.
 data TProp = TPropSetName !EPropName
            | TPropGetName !EPropName
-           deriving (Show, Eq, Ord)
+           deriving (Show, Eq, Ord, Generic)
+
+instance Hashable TProp where
 
 tpropName :: TProp -> EPropName
 tpropName (TPropSetName x) = x
@@ -212,7 +223,7 @@ instance VarNames (TBody) where
   freeTypeVars (TVar n) = Set.singleton n
   freeTypeVars _ = Set.empty
 
-instance VarNames t => VarNames (Map.Map a t) where
+instance VarNames t => VarNames (Map.HashMap a t) where
   freeTypeVars = freeTypeVars'
   mapVarNames = mapVarNames'
 instance VarNames t => VarNames [t] where
@@ -283,7 +294,7 @@ instance VarNames (FType (Fix FType)) where
 
 ----------------------------------------------------------------------
 
-type TSubst = Map.Map TVarName Type
+type TSubst = Map.HashMap TVarName Type
 
 nullSubst :: TSubst
 nullSubst = Map.empty
@@ -324,7 +335,7 @@ instance Substable a => Substable (Maybe a) where
   applySubst = applySubst'
 instance Substable a => Substable [a] where
   applySubst = applySubst'
-instance Substable a => Substable (Map.Map b a) where
+instance Substable a => Substable (Map.HashMap b a) where
   applySubst = applySubst'
 instance Substable b => Substable (a, b) where
   applySubst = applySubst'
@@ -369,14 +380,14 @@ sortRow row = row -- TODO implement
 data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) | FlatRowEndRec TypeId [t]
                   deriving (Eq, Show)
 
-flattenRow :: TRowList t -> (Map.Map TProp (TScheme t), FlatRowEnd t)
+flattenRow :: TRowList t -> (Map.HashMap TProp (TScheme t), FlatRowEnd t)
 flattenRow = flattenRow' (Map.empty, FlatRowEndTVar Nothing)
-    where flattenRow' :: (Map.Map TProp (TScheme t), FlatRowEnd t) -> TRowList t -> (Map.Map TProp (TScheme t), FlatRowEnd t)
+    where flattenRow' :: (Map.HashMap TProp (TScheme t), FlatRowEnd t) -> TRowList t -> (Map.HashMap TProp (TScheme t), FlatRowEnd t)
           flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
           flattenRow' (m,_) (TRowEnd r') = (m, FlatRowEndTVar r')
           flattenRow' (m,_) (TRowRec tid ts) = (m, FlatRowEndRec tid ts)
 
-unflattenRow :: Map.Map TProp (TScheme t) -> FlatRowEnd t -> (TProp -> Bool) -> TRowList t
+unflattenRow :: Map.HashMap TProp (TScheme t) -> FlatRowEnd t -> (TProp -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) rend m
   where rend = case r of
           FlatRowEndTVar r' -> TRowEnd r'
@@ -396,7 +407,8 @@ instance Substable (TRowList Type) where
 
 ----------------------------------------------------------------------
 newtype ClassName = ClassName String
-                  deriving (Show, Eq, Ord)
+                  deriving (Show, Eq, Ord, Generic)
+instance Hashable ClassName where
 
 data Class t = Class { --classSupers :: [ClassName],
                        classInstances :: [TScheme t] }
@@ -490,12 +502,14 @@ schemeForceApplySubst s (TScheme qvars t) = TScheme qvars' t'
 
 
 newtype VarId = VarId Int
-                deriving (Show, Eq, Ord)
+                deriving (Show, Eq, Ord, Generic)
+
+instance Hashable VarId where
 
 -- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
 --
 -- Note: instance of Substable
-type TypeEnv = Map.Map EVarName VarId
+type TypeEnv = Map.HashMap EVarName VarId
 
 -- Used internally to generate fresh type variable names
 data NameSource = NameSource { lastName :: Int }
@@ -505,10 +519,10 @@ data NameSource = NameSource { lastName :: Int }
 data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
-                             , varSchemes   :: Map.Map VarId TypeScheme
+                             , varSchemes   :: Map.HashMap VarId TypeScheme
                              , varInstances :: Graph.Gr QualType ()
-                             , namedTypes   :: Map.Map TypeId (Type, TypeScheme)
-                             , classes      :: Map.Map ClassName (Class Type)
+                             , namedTypes   :: Map.HashMap TypeId (Type, TypeScheme)
+                             , classes      :: Map.HashMap ClassName (Class Type)
                              , pendingUni   :: Set.Set (Source, Type, (ClassName, Set.Set TypeScheme))
                              }
                    deriving (Show, Eq)

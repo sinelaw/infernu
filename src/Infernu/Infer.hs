@@ -14,8 +14,8 @@ module Infernu.Infer
 
 import           Control.Monad      (foldM, forM)
 import qualified Data.Graph.Inductive as Graph
-import           Data.Map.Strict      (Map)
-import qualified Data.Map.Strict      as Map
+import           Data.HashMap.Strict      (HashMap)
+import qualified Data.HashMap.Strict      as HashMap
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as Set

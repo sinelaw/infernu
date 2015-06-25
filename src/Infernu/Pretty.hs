@@ -10,7 +10,7 @@ import           Infernu.Prelude
 import           Data.Char       (chr, ord)
 import qualified Data.Digits     as Digits
 import qualified Data.List     as List
-import qualified Data.Map   as Map
+import qualified Data.HashMap.Strict   as Map
 import qualified Data.Graph.Inductive      as Graph
 
 import qualified Data.Set        as Set
@@ -240,7 +240,7 @@ instance (Ord t, VarNames t, Pretty t) => Pretty (TScheme t) where
 --     prettyTab n (Left x) = "Error: " ++ prettyTab n x
 --     prettyTab n (Right x) = prettyTab n x
 
-instance (Pretty k, Pretty v) => Pretty (Map.Map k v) where
+instance (Pretty k, Pretty v) => Pretty (Map.HashMap k v) where
     pretty s = string "Map" <+> encloseSep lbrace rbrace comma (map (\(k,v) -> pretty k <+> pretty "=>" <+> pretty v) $ Map.toList s)
 
 instance (Pretty k) => Pretty (Set.Set k) where

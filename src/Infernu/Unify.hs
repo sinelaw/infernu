@@ -9,8 +9,8 @@ module Infernu.Unify
 import           Control.Monad        (forM, forM_, when, unless)
 
 import           Data.Either          (rights)
-import           Data.Map.Strict        (Map)
-import qualified Data.Map.Strict        as Map
+import           Data.HashMap.Strict        (HashMap)
+import qualified Data.HashMap.Strict        as Map
 import           Data.Maybe           (catMaybes, mapMaybe)
 
 import           Data.Set             (Set)
@@ -405,7 +405,7 @@ unifyTypeSchemes' recurse a scheme1s scheme2s =
       return ()
 
 unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
-               -> (x, Set TProp, Map TProp TypeScheme)
+               -> (x, Set TProp, HashMap TProp TypeScheme)
                -> (x, Set TProp, FlatRowEnd Type)
                -> Infer ()
 unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
