@@ -6,6 +6,7 @@ import           Infernu.Builtins.Util
 import           Infernu.Prelude
 import           Infernu.Types
 
+keyObj :: Int -> Type -> TQual Type
 keyObj tv = withTypeClass "StringKeys" (tvar tv)
 
 object :: TScheme (Fix FType)

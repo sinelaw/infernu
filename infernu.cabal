@@ -81,6 +81,7 @@ library
   default-language:    Haskell2010
   default-extensions: NoImplicitPrelude
   ghc-options: -Wall -O2 -rtsopts -threaded
+  ghc-prof-options:  -threaded -auto-all -caf-all -O2 -rtsopts
   if flag(debug)
     ghc-options: -g
   if flag(trace)
@@ -96,6 +97,7 @@ executable infernu
   default-language:    Haskell2010
   default-extensions: NoImplicitPrelude
   ghc-options:  -Wall -O2 -rtsopts -threaded
+  ghc-prof-options:  -threaded -auto-all -caf-all -O2 -rtsopts
   if flag(debug)
     ghc-options: -g
   if flag(trace)

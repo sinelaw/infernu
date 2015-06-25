@@ -7,8 +7,7 @@ module Infernu.Log
        where
 
 import           Infernu.Prelude
-import           Infernu.Pretty
-import Text.PrettyPrint.ANSI.Leijen (Pretty(..), text, (<+>), Doc)
+import Text.PrettyPrint.ANSI.Leijen (Pretty(..), (<+>), Doc)
 
 #if TRACE
 import           Debug.Trace                (trace)
@@ -25,4 +24,3 @@ traceLogVal !s !r = pure $! trace s r `seq` r
 
 traceLog :: Applicative f => Doc -> f ()
 traceLog !s = pure $! trace (show s) () `seq` ()
-

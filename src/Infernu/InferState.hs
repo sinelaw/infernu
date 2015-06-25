@@ -50,18 +50,18 @@ import qualified Data.Graph.Inductive         as Graph
 
 import           Data.Functor.Identity        (Identity (..), runIdentity)
 import qualified Data.List                    as List
-import qualified Data.Map.Lazy                as Map
+import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (fromMaybe)
 import           Data.Set                     (Set)
 import qualified Data.Set                     as Set
 
-import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), Doc, squotes)
+import           Text.PrettyPrint.ANSI.Leijen (Doc, Pretty (..), align, squotes, text, (<+>))
 
 import qualified Infernu.Builtins.TypeClasses
 import           Infernu.Lib
 import           Infernu.Log
 import           Infernu.Prelude
-import           Infernu.Pretty
+import           Infernu.Pretty               ()
 import           Infernu.Types
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
@@ -279,7 +279,7 @@ allocNamedType a n t =
       [] -> do traceLog $ text "===> Didn't find existing rec type, adding new: " <+> pretty namedType <+> text "=" <+> align (pretty scheme)
                addNamedType typeId (Fix namedType) scheme
                return $ Fix namedType
-      (otherTID, (otherNT, otherScheme)):_ ->
+      (otherTID, (otherNT, _)):_ ->
           do traceLog $ text "===> Found existing rec type:" <+> pretty otherNT
              -- TODO: don't ignore the preds!
              qualType <$> unrollName a otherTID namedTypeParams
@@ -446,9 +446,10 @@ unsafeGeneralize tenv t = do
         ftvs = freeTypeVars t'
     unboundVars <- Set.difference ftvs <$> getFreeTVars tenv
     traceLog $ text "Generalization result: unbound vars =" <+> pretty unboundVars <+> text ", type =" <+> pretty t'
-    let t'' = TQual { qualPred = qvarPreds, qualType = qualType t' }
-        (qvarPreds, floatedPreds) = List.partition (\p -> Set.null $ freeTypeVars p `Set.intersection` unboundVars) $ qualPred t'
-    return (TScheme (Set.toList unboundVars) t', floatedPreds)
+    let (qvarPreds, floatedPreds) = List.partition (\p -> Set.null $ freeTypeVars p `Set.intersection` unboundVars) $ qualPred t'
+        t'' = TQual { qualPred = floatedPreds, qualType = qualType t' }
+
+    return (TScheme (Set.toList unboundVars) t'', floatedPreds)
 
 isExpansive :: Exp a -> Bool
 isExpansive (EVar{})    = False

@@ -3,13 +3,13 @@ module Infernu.Parse
        where
 
 import           Control.Arrow                    ((***))
-import           Data.Maybe                       (mapMaybe, catMaybes)
+import           Data.Maybe                       (catMaybes, mapMaybe)
+import qualified Infernu.Log                      as Log
+import           Infernu.Prelude
+import           Infernu.Types
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
-import           Infernu.Types
 import qualified Text.Parsec.Pos                  as Pos
-import qualified Infernu.Log as Log
-import           Infernu.Prelude
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
@@ -82,7 +82,7 @@ fromStatement s@(ES3.ForInStmt z init' expr body) = case init' of
 fromStatement (ES3.LabelledStmt _ _ s) = fromStatement s
 fromStatement s@(ES3.ForStmt z init' test increment body) = case init' of
                                                                 ES3.NoInit -> forBody
-                                                                ES3.VarInit varDecls -> errorNotSupported "'for' with var decl (var hoisting would occur)" z s -- chainDecls varDecls . forBody
+                                                                ES3.VarInit _ -> errorNotSupported "'for' with var decl (var hoisting would occur)" z s -- chainDecls varDecls . forBody
                                                                 ES3.ExprInit expr -> chainExprs z (fromExpression expr) forBody
     where forBody = chainExprs z test'' rest
           test'' = case test of

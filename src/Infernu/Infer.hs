@@ -14,8 +14,8 @@ module Infernu.Infer
 
 import           Control.Monad      (foldM, forM)
 import qualified Data.Graph.Inductive as Graph
-import           Data.Map.Lazy      (Map)
-import qualified Data.Map.Lazy      as Map
+import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as Map
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as Set
@@ -208,7 +208,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      -- polymorphic.
      let rvalueSchemeFloated = TScheme [] TQual { qualPred = [], qualType = qualType rvalueT }
          rvalueRowType = Fix . TRow Nothing $ TRowProp (TPropSetName prop) rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
-     unify a (qualType objT) rvalueRowType >> getState
+     unify a (qualType objT) rvalueRowType
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
      preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
      let tRes = TQual preds $ qualType expr2T

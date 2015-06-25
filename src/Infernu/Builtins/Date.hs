@@ -3,19 +3,20 @@ module Infernu.Builtins.Date
        (dateRowType)
        where
 
-import           Control.Monad         (foldM, forM)
+import           Control.Monad         (foldM)
 
 import           Infernu.Builtins.Util
 import           Infernu.InferState    (Infer)
-import           Infernu.Lib           (safeLookup)
 import           Infernu.Prelude
 import           Infernu.Types
 
 dateFunc :: Type -> Type
 dateFunc = funcN [date]
 
+getNumFromDate :: TScheme Type
 getNumFromDate = ty $ dateFunc number
 
+getNumFuncs :: [String]
 getNumFuncs = [ "getDate"
               , "getDay"
               , "getFullYear"
@@ -37,10 +38,12 @@ getNumFuncs = [ "getDate"
               , "valueOf"
               ]
 
+setNumOnDate :: TScheme Type
 setNumOnDate = ty $ funcN [date, number] number
 
 -- Note: many of these functions accept multiple optional parameters, but there are other ways to
 -- achieve the same result. Leaving these optional parameters out.
+setNumFuncs :: [String]
 setNumFuncs =
     [ "setDate"
     , "setFullYear"
@@ -60,8 +63,10 @@ setNumFuncs =
       --               , "setYear"
     ]
 
+getStringFuncType :: TScheme (Fix FType)
 getStringFuncType = ty $ funcN [date] string
 
+getStringFuncs :: [String]
 getStringFuncs =
     [ "toDateString"
 --    , "toGMTString"

@@ -3,11 +3,10 @@ module Infernu.Builtins.String
        (stringRowType)
        where
 
-import           Control.Monad         (foldM, forM)
+import           Control.Monad         (foldM)
 
 import           Infernu.Builtins.Util
 import           Infernu.InferState    (Infer)
-import           Infernu.Lib           (safeLookup)
 import           Infernu.Prelude
 import           Infernu.Types
 

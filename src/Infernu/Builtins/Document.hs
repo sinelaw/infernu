@@ -2,10 +2,7 @@
 module Infernu.Builtins.Document
        where
 
-import           Control.Monad         (foldM)
-
 import           Infernu.Builtins.Util
-import           Infernu.InferState    (Infer)
 import           Infernu.Prelude
 import           Infernu.Types
 

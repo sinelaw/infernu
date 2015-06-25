@@ -9,8 +9,8 @@ module Infernu.Unify
 import           Control.Monad        (forM, forM_, when, unless)
 
 import           Data.Either          (rights)
-import           Data.Map.Lazy        (Map)
-import qualified Data.Map.Lazy        as Map
+import           Data.Map.Strict        (Map)
+import qualified Data.Map.Strict        as Map
 import           Data.Maybe           (catMaybes, mapMaybe)
 
 import           Data.Set             (Set)

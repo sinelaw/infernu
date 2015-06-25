@@ -25,4 +25,3 @@ var nkTest = memoize(
 
 
 nkTest({ n: 30, k: 30 });
-

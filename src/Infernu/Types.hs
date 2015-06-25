@@ -63,7 +63,7 @@ module Infernu.Types
 #endif
        ) where
 
-import qualified Data.Map.Lazy             as Map
+import qualified Data.Map.Strict             as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
 import qualified Data.Graph.Inductive      as Graph
@@ -76,8 +76,8 @@ import Prelude ()
 
 #ifdef QUICKCHECK
 import           Data.DeriveTH
-import           Data.Map.Lazy             (Map)
-import qualified Data.Map.Lazy             as Map
+import           Data.Map.Strict             (Map)
+import qualified Data.Map.Strict             as Map
 import           Test.QuickCheck           (choose, resize)
 import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary (Arbitrary (..))
@@ -317,7 +317,7 @@ class Substable a where
   applySubst :: TSubst -> a -> a
 
   applySubst' :: (Functor f, Substable a) => TSubst -> f a -> f a
-  applySubst' s = fmap $ applySubst s
+  applySubst' s = let r = fmap $ applySubst s in r `seq` r
 
 -- for convenience only:
 instance Substable a => Substable (Maybe a) where
@@ -345,14 +345,14 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = TQual {qualPred = [], qualType = Fix (TBody TString)}}) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
-  applySubst s ft@(Fix t) =
-    case t of
-     TBody (TVar n) -> substT' n t
-     TRow l r -> Fix $ TRow l $ applySubst s r
-     _ -> if ft `elem` Map.elems s
-          then ft
-          else Fix $ fmap (applySubst s) t
-     where substT' n defaultT = fromMaybe (Fix defaultT) $ Map.lookup n s
+  applySubst s ft@(Fix t) = r `seq` r
+    where r = case t of
+                TBody (TVar n) -> substT' n t
+                TRow l r' -> Fix $ TRow l $ applySubst s r'
+                _ -> if ft `elem` Map.elems s
+                    then ft
+                    else Fix $ fmap (applySubst s) t
+                where substT' n defaultT = fromMaybe (Fix defaultT) $ Map.lookup n s
     --traverse (fmap f) t
     --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
      --     f t = t
