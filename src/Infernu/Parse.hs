@@ -3,7 +3,7 @@ module Infernu.Parse
        where
 
 import           Control.Arrow                    ((***))
-import           Data.Maybe                       (catMaybes, mapMaybe)
+import           Data.Maybe                       (catMaybes, mapMaybe, fromMaybe)
 import qualified Infernu.Log                      as Log
 import           Infernu.Prelude
 import           Infernu.Types

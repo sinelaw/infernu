@@ -76,9 +76,19 @@ accumInfer env =
              do (t, e) <- inferType env expr
                 return ((t,e):types)
 
+-- wrapInferError :: Exp Source -> Infer a -> Infer a
+-- wrapInferError exp act = wrapError format' s act
+--     where format' te = vsep [text "During type inference for:"
+--                             , indent 4 $ pretty exp
+--                             , text "Failed with:"
+--                             , indent 4 $ pretty te
+--                             ]
+--           s = head $ getAnnotations exp
+
 inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
   traceLog $ text ">> " <+> pretty expr <+> text " -- env: " <+> pretty env
+--  (t, e) <- wrapInferError expr $ inferType' env expr
   (t, e) <- inferType' env expr
   unifyPending
   s <- getMainSubst

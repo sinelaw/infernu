@@ -195,11 +195,8 @@ mkTypeErrorMessage msg mte =
                Just te -> vsep [text "Because:", message te]
          ]
 
-wrapError :: Pretty b => Source -> b -> b -> Infer a -> Infer a
-wrapError s ta tb = mapError
-                    $ \te -> TypeError { source = s,
-                                         message = wrapWithUnifyError ta tb (Just te)
-                                       }
+wrapError' :: Pretty b => Source -> b -> b -> Infer a -> Infer a
+wrapError' s ta tb = wrapError (wrapWithUnifyError ta tb . Just) s
 
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ text "breaking infinite recursion cycle, when unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
@@ -209,7 +206,7 @@ unify'' (Just recurse) a t1 t2 =
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
      traceLog $ text "unifying (substed): " <+> pretty t1 <+> text " ~ " <+> pretty t2
-     wrapError a t1 t2 $ unify' recurse a t1' t2'
+     wrapError' a t1 t2 $ unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ wrapWithUnifyError a b Nothing
@@ -331,7 +328,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
      traceLog $ text "row1: " <+> pretty m1 <+> text ", " <+> pretty r1
      traceLog $ text "row2: " <+> pretty m2 <+> text ", " <+> pretty r2
      traceLog $ text "Common row properties: " <+> pretty commonNames
-     forM_ commonTypes $ \(ts1, ts2) -> wrapError a ts1 ts2 $ unifyTypeSchemes' recurse a ts1 ts2
+     forM_ commonTypes $ \(ts1, ts2) -> wrapError' a ts1 ts2 $ unifyTypeSchemes' recurse a ts1 ts2
 
      let allAreCommon = Set.null $ (names1 `Set.difference` names2) `Set.union` (names2 `Set.difference` names1)
          unifyDifferences =

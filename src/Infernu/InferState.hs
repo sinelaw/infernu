@@ -37,6 +37,7 @@ module Infernu.InferState
        , skolemiseScheme
        , throwError
        , unrollName
+       , wrapError
 --             , getVarScheme
          )
        where
@@ -125,6 +126,13 @@ failWithM action err = do
 
 mapError :: (TypeError -> TypeError) -> Infer a -> Infer a
 mapError f = mapStateT (bimapEitherT f id)
+
+wrapError :: (TypeError -> Doc) -> Source -> Infer a -> Infer a
+wrapError f s = mapError
+                $ \te -> TypeError { source = s,
+                                     message = f te
+                                   }
+
 
 getVarSchemeByVarId :: VarId -> Infer (Maybe TypeScheme)
 getVarSchemeByVarId varId = Map.lookup varId . varSchemes <$> get
