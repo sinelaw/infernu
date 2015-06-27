@@ -14,8 +14,8 @@ module Infernu.Infer
 
 import           Control.Monad      (foldM, forM)
 import qualified Data.Graph.Inductive as Graph
-import           Data.HashMap.Strict      (HashMap)
-import qualified Data.HashMap.Strict      as Map
+import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as Map
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as Set
@@ -298,19 +298,19 @@ unifyAllInstances a tvs = do
   pred' <- concat <$> mapM unifyAll' equivalenceSets
   unifyPredsL a pred'
 
-createEnv :: HashMap EVarName TypeScheme -> Infer (HashMap EVarName VarId)
+createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
     where allTVars :: TypeScheme -> Set TVarName
           allTVars (TScheme qvars t) = freeTypeVars t `Set.union` Set.fromList qvars
 
-          addVarScheme' :: HashMap EVarName VarId -> (EVarName, TypeScheme) -> Infer (HashMap EVarName VarId)
+          addVarScheme' :: Map EVarName VarId -> (EVarName, TypeScheme) -> Infer (Map EVarName VarId)
           addVarScheme' m (name, tscheme) =
             do allocNames <- forM (Set.toList $ allTVars tscheme)
                              $ \tvName -> (tvName,) <$> freshFlex
                addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 
-typeInference :: HashMap EVarName TypeScheme -> Exp Source -> Infer (Exp (Source, QualType))
+typeInference :: Map EVarName TypeScheme -> Exp Source -> Infer (Exp (Source, QualType))
 typeInference builtins e =
   do env <- createEnv builtins
      (_t, e') <- inferType env e

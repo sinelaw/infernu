@@ -64,7 +64,10 @@ module Infernu.Types
 #endif
        ) where
 
-import qualified Data.HashMap.Strict             as Map
+import qualified Data.IntMap.Strict             as IntMap
+import Data.IntMap.Strict             (IntMap)
+import qualified Data.Map.Strict             as Map
+import Data.Map.Strict             (Map)
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
 import qualified Data.Graph.Inductive      as Graph
@@ -80,8 +83,8 @@ import Prelude ()
 
 #ifdef QUICKCHECK
 import           Data.DeriveTH
-import           Data.HashMap.Strict             (Map)
-import qualified Data.HashMap.Strict             as Map
+import           Data.Map.Strict             (Map)
+import qualified Data.Map.Strict             as Map
 import           Test.QuickCheck           (choose, resize)
 import           Test.QuickCheck.All
 import           Test.QuickCheck.Arbitrary (Arbitrary (..))
@@ -223,7 +226,7 @@ instance VarNames (TBody) where
   freeTypeVars (TVar n) = Set.singleton n
   freeTypeVars _ = Set.empty
 
-instance VarNames t => VarNames (Map.HashMap a t) where
+instance VarNames t => VarNames (Map a t) where
   freeTypeVars = freeTypeVars'
   mapVarNames = mapVarNames'
 instance VarNames t => VarNames [t] where
@@ -294,7 +297,7 @@ instance VarNames (FType (Fix FType)) where
 
 ----------------------------------------------------------------------
 
-type TSubst = Map.HashMap TVarName Type
+type TSubst = Map TVarName Type
 
 nullSubst :: TSubst
 nullSubst = Map.empty
@@ -328,20 +331,21 @@ class Substable a where
   applySubst :: TSubst -> a -> a
 
   applySubst' :: (Functor f, Substable a) => TSubst -> f a -> f a
-  applySubst' s = let r = fmap $ applySubst s in r `seq` r
+  {-# INLINE applySubst' #-}
+  applySubst' = fmap . applySubst
 
 -- for convenience only:
 instance Substable a => Substable (Maybe a) where
-  applySubst = applySubst'
+  applySubst = {-# SCC "applySubst_Maybe" #-} applySubst'
 instance Substable a => Substable [a] where
-  applySubst = applySubst'
-instance Substable a => Substable (Map.HashMap b a) where
-  applySubst = applySubst'
+  applySubst = {-# SCC "applySubst_[]" #-} applySubst'
+instance Substable a => Substable (Map b a) where
+  applySubst s m = {-# SCC "applySubst_Map" #-} Map.map (applySubst s) m
 instance Substable b => Substable (a, b) where
-  applySubst = applySubst'
+  applySubst = {-# SCC "applySubst(,)" #-} applySubst'
 
 instance (Ord a, Substable a) => Substable (Set.Set a) where
-  applySubst s = Set.map (applySubst s)
+  applySubst s = {-# SCC "applySubst_Set" #-} Set.map (applySubst s)
 
 ----------------------------------------------------------------------
 
@@ -380,14 +384,14 @@ sortRow row = row -- TODO implement
 data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) | FlatRowEndRec TypeId [t]
                   deriving (Eq, Show)
 
-flattenRow :: TRowList t -> (Map.HashMap TProp (TScheme t), FlatRowEnd t)
+flattenRow :: TRowList t -> (Map TProp (TScheme t), FlatRowEnd t)
 flattenRow = flattenRow' (Map.empty, FlatRowEndTVar Nothing)
-    where flattenRow' :: (Map.HashMap TProp (TScheme t), FlatRowEnd t) -> TRowList t -> (Map.HashMap TProp (TScheme t), FlatRowEnd t)
+    where flattenRow' :: (Map TProp (TScheme t), FlatRowEnd t) -> TRowList t -> (Map TProp (TScheme t), FlatRowEnd t)
           flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
           flattenRow' (m,_) (TRowEnd r') = (m, FlatRowEndTVar r')
           flattenRow' (m,_) (TRowRec tid ts) = (m, FlatRowEndRec tid ts)
 
-unflattenRow :: Map.HashMap TProp (TScheme t) -> FlatRowEnd t -> (TProp -> Bool) -> TRowList t
+unflattenRow :: Map TProp (TScheme t) -> FlatRowEnd t -> (TProp -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) rend m
   where rend = case r of
           FlatRowEndTVar r' -> TRowEnd r'
@@ -509,7 +513,7 @@ instance Hashable VarId where
 -- | Type environment: maps AST variables (not type variables!) to quantified type schemes.
 --
 -- Note: instance of Substable
-type TypeEnv = Map.HashMap EVarName VarId
+type TypeEnv = Map EVarName VarId
 
 -- Used internally to generate fresh type variable names
 data NameSource = NameSource { lastName :: Int }
@@ -519,10 +523,10 @@ data NameSource = NameSource { lastName :: Int }
 data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
-                             , varSchemes   :: Map.HashMap VarId TypeScheme
+                             , varSchemes   :: Map VarId TypeScheme
                              , varInstances :: Graph.Gr QualType ()
-                             , namedTypes   :: Map.HashMap TypeId (Type, TypeScheme)
-                             , classes      :: Map.HashMap ClassName (Class Type)
+                             , namedTypes   :: Map TypeId (Type, TypeScheme)
+                             , classes      :: Map ClassName (Class Type)
                              , pendingUni   :: Set.Set (Source, Type, (ClassName, Set.Set TypeScheme))
                              }
                    deriving (Show, Eq)

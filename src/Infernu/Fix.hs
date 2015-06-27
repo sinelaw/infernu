@@ -1,5 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Infernu.Fix
        ( Fix(..)
        , fmapReplace
@@ -14,10 +15,8 @@ newtype Fix f = Fix { unFix :: f (Fix f) }
 
 instance Show (f (Fix f)) => Show (Fix f) where
   show (Fix x) = "Fix (" ++ (show x) ++ ")"
-instance Eq (f (Fix f)) => Eq (Fix f) where
-  a == b = unFix a == unFix b
-instance Ord (f (Fix f)) => Ord (Fix f) where
-  (Fix x) `compare` (Fix y) = x `compare` y
+deriving instance Eq (f (Fix f)) => Eq (Fix f)
+deriving instance Ord (f (Fix f)) => Ord (Fix f)
 
 fmapReplace :: (Functor f, Eq (f a)) => (f a -> f b -> a -> b) -> f a -> f b -> f a -> f b
 fmapReplace recurse tsource tdest t =

@@ -4,19 +4,20 @@ module Infernu.Pretty where
 
 
 
-import           Infernu.Types
 import           Infernu.Prelude
+import           Infernu.Types
 
-import           Data.Char       (chr, ord)
-import qualified Data.Digits     as Digits
-import qualified Data.List     as List
-import qualified Data.HashMap.Strict   as Map
-import qualified Data.Graph.Inductive      as Graph
+import           Data.Char                    (chr, ord)
+import qualified Data.Digits                  as Digits
+import qualified Data.Graph.Inductive         as Graph
+import qualified Data.List                    as List
+import           Data.Map.Strict              (Map)
+import qualified Data.Map.Strict              as Map
 
-import qualified Data.Set        as Set
-import qualified Text.Parsec.Pos as Pos
+import qualified Data.Set                     as Set
+import qualified Text.Parsec.Pos              as Pos
 
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 -- tab :: Int -> String
 -- tab t = replicate (t*4) ' '
@@ -240,7 +241,7 @@ instance (Ord t, VarNames t, Pretty t) => Pretty (TScheme t) where
 --     prettyTab n (Left x) = "Error: " ++ prettyTab n x
 --     prettyTab n (Right x) = prettyTab n x
 
-instance (Pretty k, Pretty v) => Pretty (Map.HashMap k v) where
+instance (Pretty k, Pretty v) => Pretty (Map k v) where
     pretty s = string "Map" <+> encloseSep lbrace rbrace comma (map (\(k,v) -> pretty k <+> pretty "=>" <+> pretty v) $ Map.toList s)
 
 instance (Pretty k) => Pretty (Set.Set k) where
@@ -265,13 +266,14 @@ instance (Show a, Show b) => Pretty (Graph.Gr a b) where
     pretty = text . Graph.prettify
 
 instance Pretty InferState where
-    pretty (InferState ns sub vs vi tn cs pu) = text "InferState"
-                                                <+> (align . encloseSep lbrace rbrace comma
-                                                     $ [ fill 10 (string "nameSource: ") <+> pretty ns
-                                                       , fill 10 (string "subst: ") <+> pretty sub
-                                                       , fill 10 (string "varSchemes: ") <+> pretty vs
-                                                       , fill 10 (string "varInstances: ") <+> pretty vi
-                                                       , fill 10 (string "namedTypes: ") <+> pretty tn
-                                                       , fill 10 (string "pendingUni: ") <+> pretty pu
-                                                       , fill 10 (string "classes: ") <+> pretty cs
-                                                       ])
+    pretty (InferState ns sub vs vi tn cs pu) =
+        text "InferState"
+          <+> (align . encloseSep lbrace rbrace comma
+               $ [ fill 10 (string "nameSource: ") <+> pretty ns
+                 , fill 10 (string "subst: ") <+> pretty sub
+                 , fill 10 (string "varSchemes: ") <+> pretty vs
+                 , fill 10 (string "varInstances: ") <+> pretty vi
+                 , fill 10 (string "namedTypes: ") <+> pretty tn
+                 , fill 10 (string "pendingUni: ") <+> pretty pu
+                 , fill 10 (string "classes: ") <+> pretty cs
+                 ])

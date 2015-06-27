@@ -5,8 +5,8 @@ module Infernu.Builtins.Operators
 import           Infernu.Prelude
 import           Infernu.Types
 
-import           Data.HashMap.Strict         (HashMap)
-import qualified Data.HashMap.Strict         as Map
+import           Data.Map.Strict         (Map)
+import qualified Data.Map.Strict         as Map
 
 import           Infernu.Builtins.Math (math)
 import           Infernu.Builtins.Object (object)
@@ -31,7 +31,7 @@ numOp :: TypeScheme
 numOp = binaryFuncS number number number
 
 
-builtins :: HashMap EVarName TypeScheme
+builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
     ("!",            unaryFunc boolean boolean),
     ("~",            unaryFunc number  number),
