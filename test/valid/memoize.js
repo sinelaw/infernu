@@ -10,7 +10,14 @@ function memoize(toKeyString, f) {
     };
 }
 
-var facTest = memoize(String, function fac(memed, x) { if (x < 2) { return 1; } return x * memed(x - 1); });
+function recFac(memed, x) {
+    if (x < 2) {
+        return 1;
+    }
+    return x * memed(x - 1);
+};
+
+var facTest = memoize(String, recFac);
 
 // The number of n-dimensional vectors whose scalar's sums to k
 // Hat-tip to https://stackoverflow.com/questions/3242597/what-is-memoization-good-for-and-is-it-really-all-that-helpful

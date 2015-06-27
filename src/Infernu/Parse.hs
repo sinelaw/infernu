@@ -53,6 +53,7 @@ litBool z b = ELit (gen z) (LitBoolean b)
 fromStatement :: Show a => ES3.Statement a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 fromStatement (ES3.BlockStmt _ stmts) = foldStmts stmts
 fromStatement (ES3.EmptyStmt _) = id
+fromStatement (ES3.ExprStmt z (ES3.AssignExpr z' op target expr)) = \k -> toAssignExpr z op target expr $ Just k
 fromStatement (ES3.ExprStmt z e) = singleStmt (gen z) $ fromExpression e
 fromStatement (ES3.IfStmt z pred' thenS elseS) = mkIf z pred' thenS elseS
 fromStatement (ES3.IfSingleStmt z pred' thenS) = mkIf z pred' thenS (ES3.EmptyStmt z)
@@ -74,8 +75,8 @@ fromStatement (ES3.ThrowStmt _ _) = id
 fromStatement s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
 fromStatement s@(ES3.ForInStmt z init' expr body) = case init' of
                                                        ES3.ForInVar (ES3.Id _ _) -> errorNotSupported "'for..in' with var decl (var hoisting would occur)" z s -- ELet (gen z') name (ELit (gen z') $ LitString "") (foldStmts [body] k)
-                                                       ES3.ForInLVal (ES3.LVar z' name) -> chainExprs z' (assignToVar z' name str') body'
-                                                       ES3.ForInLVal (ES3.LDot z' objExpr name) -> chainExprs z' (assignToProperty z objExpr (EPropName name) str') body'
+                                                       ES3.ForInLVal (ES3.LVar z' name) -> chainExprs z' (assignToVar z' name str' Nothing) body'
+                                                       ES3.ForInLVal (ES3.LDot z' objExpr name) -> chainExprs z' (assignToProperty z objExpr (EPropName name) str' Nothing) body'
                                                        ES3.ForInLVal (ES3.LBracket z' objExpr idxExpr) -> chainExprs z' (assignToIndex z objExpr idxExpr str') body'
     where str' = ELit (gen z) $ LitString ""
           body' = fromStatement body
@@ -206,26 +207,7 @@ fromExpression (ES3.CallExpr z expr argExprs) =
   where appExpr (Just "call") _ obj = (EApp (src z) obj (map fromExpression argExprs)) -- TODO: may be wrong if object expression is not a function!
         appExpr _ funcExpr thisExpr = (EApp (src z) funcExpr (thisExpr : map fromExpression argExprs))
   --error $ "Assetion failed: expecting at least 'this'"
-fromExpression (ES3.AssignExpr z op target expr) = assignExpr
-  where sz = src z
-        (assignExpr, oldValue) = case target of
-          ES3.LVar _ name -> (assignToVar z name value, EVar sz name)
-          ES3.LDot _ objExpr name -> (assignToProperty z objExpr (EPropName name) value, EProp sz (fromExpression objExpr) (EPropName name))
-          ES3.LBracket _ objExpr idxExpr -> (assignToIndex z objExpr idxExpr value, getIndex z objExpr idxExpr)
-        expr' = fromExpression expr
-        value = case op of
-          ES3.OpAssign -> expr'
-          ES3.OpAssignAdd -> applyOpFunc z ES3.OpAdd [oldValue, expr']
-          ES3.OpAssignSub -> applyOpFunc z ES3.OpSub [oldValue, expr']
-          ES3.OpAssignMul -> applyOpFunc z ES3.OpMul [oldValue, expr']
-          ES3.OpAssignDiv -> applyOpFunc z ES3.OpDiv [oldValue, expr']
-          ES3.OpAssignMod -> applyOpFunc z ES3.OpMod [oldValue, expr']
-          ES3.OpAssignLShift   -> applyOpFunc z ES3.OpLShift   [oldValue, expr']
-          ES3.OpAssignSpRShift -> applyOpFunc z ES3.OpSpRShift [oldValue, expr']
-          ES3.OpAssignZfRShift -> applyOpFunc z ES3.OpZfRShift [oldValue, expr']
-          ES3.OpAssignBAnd     -> applyOpFunc z ES3.OpBAnd     [oldValue, expr']
-          ES3.OpAssignBXor     -> applyOpFunc z ES3.OpBXor     [oldValue, expr']
-          ES3.OpAssignBOr      -> applyOpFunc z ES3.OpBOr      [oldValue, expr']
+fromExpression (ES3.AssignExpr z op target expr) = toAssignExpr z op target expr Nothing
 
 fromExpression (ES3.FuncExpr z Nothing     argNames stmts) = toAbs z argNames stmts
 fromExpression (ES3.FuncExpr z (Just name) argNames stmts) = toNamedAbs z argNames stmts name (EVar (gen z) $ ES3.unId name)
@@ -252,10 +234,35 @@ fromExpression e@(ES3.PrefixExpr z op expr) =
     -- all the rest are expected to exist as unary builtin functions
     _ -> EApp (src z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression expr]
 fromExpression (ES3.InfixExpr z op e1 e2) = EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression e1, fromExpression e2]
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name $ addConstant z op (EVar (src z) name)
-fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr (EPropName name) $ addConstant z op (EProp (src z) objExpr' (EPropName name))
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name (addConstant z op (EVar (src z) name)) Nothing
+fromExpression (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty z objExpr (EPropName name) (addConstant z op (EProp (src z) objExpr' (EPropName name))) Nothing
   where objExpr' = fromExpression objExpr
 fromExpression (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex z objExpr idxExpr $ addConstant z op (getIndex z objExpr idxExpr)
+
+toAssignExpr z op target expr cont = assignExpr
+  where sz = src z
+        (assignExpr, oldValue) = case target of
+          ES3.LVar _ name -> (assignToVar z name value cont, EVar sz name)
+          ES3.LDot _ objExpr name -> (assignToProperty z objExpr (EPropName name) value cont, EProp sz (fromExpression objExpr) (EPropName name))
+          ES3.LBracket _ objExpr idxExpr -> (singleStmt (gen z) (assignToIndex z objExpr idxExpr value) (fromMaybe atIndex' cont), atIndex')
+              where atIndex' = getIndex z objExpr idxExpr
+        expr' = fromExpression expr
+        value = case op of
+          ES3.OpAssign -> expr'
+          ES3.OpAssignAdd -> applyOpFunc z ES3.OpAdd [oldValue, expr']
+          ES3.OpAssignSub -> applyOpFunc z ES3.OpSub [oldValue, expr']
+          ES3.OpAssignMul -> applyOpFunc z ES3.OpMul [oldValue, expr']
+          ES3.OpAssignDiv -> applyOpFunc z ES3.OpDiv [oldValue, expr']
+          ES3.OpAssignMod -> applyOpFunc z ES3.OpMod [oldValue, expr']
+          ES3.OpAssignLShift   -> applyOpFunc z ES3.OpLShift   [oldValue, expr']
+          ES3.OpAssignSpRShift -> applyOpFunc z ES3.OpSpRShift [oldValue, expr']
+          ES3.OpAssignZfRShift -> applyOpFunc z ES3.OpZfRShift [oldValue, expr']
+          ES3.OpAssignBAnd     -> applyOpFunc z ES3.OpBAnd     [oldValue, expr']
+          ES3.OpAssignBXor     -> applyOpFunc z ES3.OpBXor     [oldValue, expr']
+          ES3.OpAssignBOr      -> applyOpFunc z ES3.OpBOr      [oldValue, expr']
+
+
+
 
 opFunc :: a -> ES3.InfixOp -> Exp (GenInfo, a)
 opFunc z op = EVar (gen z) $ show . ES3PP.prettyPrint $ op
@@ -272,11 +279,11 @@ addConstant z op expr = EApp (gen z) (opFunc z ES3.OpAdd) [makeThis (gen z), exp
              ES3.PostfixInc -> 1
              ES3.PostfixDec -> -1
 
-assignToVar :: Show a => a -> EVarName -> Exp (GenInfo, a) -> Exp (GenInfo, a)
-assignToVar z name expr = EAssign (src z) name expr (EVar (src z) name)
+assignToVar :: Show a => a -> EVarName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
+assignToVar z name expr cont = EAssign (src z) name expr $ fromMaybe (EVar (src z) name) cont
 
-assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp (GenInfo, a) -> Exp (GenInfo, a)
-assignToProperty  z objExpr name expr = EPropAssign (src z) objExpr' name expr $ EProp (src z) objExpr' name
+assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
+assignToProperty  z objExpr name expr cont = EPropAssign (src z) objExpr' name expr $ fromMaybe (EProp (src z) objExpr' name) cont
   where objExpr' = fromExpression objExpr
 
 applyPropFunc :: a -> EPropName -> Exp (GenInfo, a) -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)
