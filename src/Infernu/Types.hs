@@ -178,14 +178,14 @@ tpropName (TPropGetName x) = x
 
 data TRowList t = TRowProp !TProp !(TScheme t) !(TRowList t)
                 | TRowEnd !(Maybe RowTVar)
-                | TRowRec !TypeId [t]
+                | TRowRec !TypeId ![t]
                   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 data FType t = TBody !TBody
-             | TCons !TConsName [t]
+             | TCons !TConsName ![t]
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
-             | TFunc [t] t
+             | TFunc ![t] !t
                -- | Row types have an optional label, so that structural (non-nominal) types can
                -- have a name. The label has no effect on type checking.
              | TRow !(Maybe String) !(TRowList t)
