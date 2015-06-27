@@ -360,21 +360,11 @@ instance (Ord a, Substable a) => Substable (Set.Set a) where
 -- Fix (TRow (TRowProp "bla" (TScheme {schemeVars = [], schemeType = TQual {qualPred = [], qualType = Fix (TBody TString)}}) (TRowEnd Nothing)))
 instance Substable Type where
   applySubst :: TSubst -> Type -> Type
-  applySubst s ft@(Fix t) = r `seq` r
-    where r = case t of
-                TBody (TVar n) -> substT' n t
-                TRow l r' -> Fix $ TRow l $ applySubst s r'
-                _ -> if ft `elem` Map.elems s
-                    then ft
-                    else Fix $ fmap (applySubst s) t
-                where substT' n defaultT = fromMaybe (Fix defaultT) $ Map.lookup n s
-    --traverse (fmap f) t
-    --where f t@(TBody (TVar n)) = t --fromMaybe t $ Map.lookup n s
-     --     f t = t
-  -- applySubst s t@(TBody (TVar n)) = fromMaybe t $ Map.lookup n s
-  -- applySubst _ t@(TBody _) = t
-  -- applySubst s (TCons n ts) = TCons n (applySubst s ts)
-  -- applySubst s (TRow r) = TRow $ applySubst s r
+  applySubst s ft@(Fix t) =
+      case t of
+          TBody (TVar n) -> fromMaybe ft $ Map.lookup n s
+          TRow l r' -> Fix $ TRow l $ applySubst s r'
+          _ -> Fix $ fmap (applySubst s) t
 
 ----------------------------------------------------------------------
 
