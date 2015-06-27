@@ -207,7 +207,10 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      -- polymorphic. In the future, type annotations could be used to make the prop assignment
      -- polymorphic.
      let rvalueSchemeFloated = TScheme [] TQual { qualPred = [], qualType = qualType rvalueT }
-         rvalueRowType = Fix . TRow Nothing $ TRowProp (TPropSetName prop) rvalueSchemeFloated $ TRowEnd (Just rowTailVar)
+         rvalueRowType = Fix . TRow Nothing
+                         . TRowProp (TPropGetName prop) rvalueSchemeFloated
+                         . TRowProp (TPropSetName prop) rvalueSchemeFloated
+                         $ TRowEnd (Just rowTailVar)
      unify a (qualType objT) rvalueRowType
      (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
      preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
