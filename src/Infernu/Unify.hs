@@ -457,10 +457,12 @@ getSingleton s = case foldr (:) [] s of
 varBind :: Source -> TVarName -> Type -> Infer ()
 varBind a n t =
   do s <- varBind' a n t
-     applySubstInfer s
+     case s of
+         Nothing -> return ()
+         Just s' -> applySubstInfer s'
 
-varBind' :: Source -> TVarName -> Type -> Infer TSubst
-varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
+varBind' :: Source -> TVarName -> Type -> Infer (Maybe TSubst)
+varBind' a n t | t == Fix (TBody (TVar n)) = return Nothing
                | Just rowT <- getSingleton $ isInsideRowType n t =
                    do traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
                       recVar <- Flex <$> fresh
@@ -470,12 +472,12 @@ varBind' a n t | t == Fix (TBody (TVar n)) = return nullSubst
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
                       traceLog $ text "===> Resulting mu type: " <+> pretty n <+> text " = " <+> pretty withRecVar
-                      return $ singletonSubst recVar namedType `composeSubst` singletonSubst n withRecVar
+                      return . Just $ singletonSubst recVar namedType `composeSubst` singletonSubst n withRecVar
                | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t
                                                  in throwError a
                                                     $ text "Occurs check failed: "
                                                     <+> pretty (f n) <+> text " in " <+> align (pretty (mapVarNames f t))
-               | otherwise = return $ singletonSubst n t
+               | otherwise = return . Just $ singletonSubst n t
 
 unifyAll :: Source -> [Type] -> Infer ()
 unifyAll a ts = unifyl decycledUnify a $ zip ts (drop 1 ts)
