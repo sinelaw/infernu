@@ -14,6 +14,7 @@ import qualified Text.Parsec.Pos                  as Pos
 -- import  Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import  Data.Set (Set)
+import Infernu.Builtins.Operators (refOp, derefOp, refAssignOp)
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
@@ -143,6 +144,7 @@ collectVars (ES3.BlockStmt _ stmts) = \s -> foldr collectVars s stmts
 collectVars (ES3.EmptyStmt _) = id
 collectVars (ES3.ExprStmt _ (ES3.AssignExpr _ _ (ES3.LVar a name) _)) = \s -> s { mutableVars = Set.insert name (mutableVars s) }
 collectVars (ES3.ExprStmt _ (ES3.UnaryAssignExpr _ _ (ES3.LVar a name))) = \s -> s { mutableVars = Set.insert name (mutableVars s) }
+collectVars (ES3.ExprStmt _ _) = id
 collectVars (ES3.IfStmt _ _ thenS elseS) = collectVars elseS . collectVars thenS
 collectVars (ES3.IfSingleStmt _ _ thenS) = collectVars thenS
 collectVars (ES3.WhileStmt _ _ loopS) = collectVars loopS
@@ -213,11 +215,11 @@ chainDecls :: Show a => FuncScope -> [ES3.VarDecl a] -> Exp (GenInfo, a) -> Exp 
 chainDecls f [] k = k
 chainDecls f (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet (gen z') name (ref' (ELit (gen z') LitUndefined)) (chainDecls f xs k)
     where ref' = if Set.member name (mutableVars f)
-                 then \x -> EApp (gen z') (EVar (gen z') "`:") [x]
+                 then \x -> EApp (gen z') (EVar (gen z') refOp) [x]
                  else id
 chainDecls f (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet (gen z') name (ref' (addDecl z' name $ fromExpression f v)) (chainDecls f xs k)
     where ref' = if Set.member name (mutableVars f)
-                 then \x -> EApp (gen z') (EVar (gen z') "`:") [x]
+                 then \x -> EApp (gen z') (EVar (gen z') refOp) [x]
                  else id
 
 makeThis :: Show a => a -> Exp a
@@ -236,7 +238,10 @@ fromExpression f (ES3.ObjectLit z props) = let stringProps = map (fromPropString
                                               then EStringMap (src z) $ zip (catMaybes stringProps) (map ((fromExpression f) . snd) props)
                                               else ERow (src z) False $ map (fromProp *** (fromExpression f)) props
 fromExpression f (ES3.BracketRef z arrExpr indexExpr) = getIndex f z arrExpr indexExpr
-fromExpression f (ES3.VarRef z name) = EVar (src z) $ ES3.unId name
+fromExpression f (ES3.VarRef z (ES3.Id _ name)) = deref' $ EVar (src z) name
+    where deref' = if Set.member name (mutableVars f)
+                   then \x -> EApp (gen z) (EVar (gen z) derefOp) [x]
+                   else id
 fromExpression f (ES3.CondExpr z ePred eThen eElse) = ECase (src z) (fromExpression f ePred) [(LitBoolean True, fromExpression f eThen), (LitBoolean False, fromExpression f eElse)]
 fromExpression f (ES3.CallExpr z expr argExprs) =
   -- Instead of simply translating, here we also do some specific simplification by defining
@@ -329,7 +334,7 @@ addConstant z op expr = EApp (gen z) (opFunc z ES3.OpAdd) [makeThis (gen z), exp
 
 assignToVar :: Show a => a -> EVarName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
 assignToVar z name expr cont = ELet (gen z) poo assignApp' $ fromMaybe (EVar (src z) name) cont
-    where assignApp' = EApp (src z) (EVar (gen z) "`=") [EVar (gen z) name, expr]
+    where assignApp' = EApp (src z) (EVar (gen z) refAssignOp) [EVar (gen z) name, expr]
 
 assignToProperty :: Show a => FuncScope -> a -> ES3.Expression a -> EPropName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
 assignToProperty f z objExpr name expr cont = EPropAssign (src z) objExpr' name expr $ fromMaybe (EProp (src z) objExpr' name) cont

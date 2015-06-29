@@ -277,21 +277,6 @@ inferType' env (EProp a eObj propName) =
 
      return (propType, EProp (a,propType) eObj' propName)
 
-unifyAllInstances :: Source -> [TVarName] -> Infer [TPred Type]
-unifyAllInstances a tvs = do
-  m <- getVarInstances
-
-  traceLog $ text "unifyAllInstances: " <+> pretty a <+> text " Unifying all instances of tvars: " <+> pretty tvs
-  let equivalenceSets = map Set.fromList $ filter (not . null) $ map (mapMaybe (Graph.lab m) . flip Graph.bfs m . unTVarName) tvs
-      unifyAll' equivs =
-          do  let equivsL = Set.toList equivs
-                  qequivsL = map qualType equivsL
-              traceLog $ text "unifyAllInstances - equivalence:" <+> pretty qequivsL
-              unifyAll a qequivsL
-              return $ concatMap qualPred equivsL
-  pred' <- concat <$> mapM unifyAll' equivalenceSets
-  unifyPredsL a pred'
-
 createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
     where allTVars :: TypeScheme -> Set TVarName

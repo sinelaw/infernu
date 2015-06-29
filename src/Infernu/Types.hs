@@ -64,8 +64,7 @@ module Infernu.Types
 #endif
        ) where
 
-import qualified Data.IntMap.Strict             as IntMap
-import Data.IntMap.Strict             (IntMap)
+
 import qualified Data.Map.Strict             as Map
 import Data.Map.Strict             (Map)
 import           Data.Maybe                (fromMaybe)
@@ -513,7 +512,6 @@ data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map VarId TypeScheme
-                             , varInstances :: Graph.Gr QualType ()
                              , namedTypes   :: Map TypeId (Type, TypeScheme)
                              , classes      :: Map ClassName (Class Type)
                              , pendingUni   :: Set.Set (Source, Type, (ClassName, Set.Set TypeScheme))
@@ -535,13 +533,11 @@ data InferState = InferState { nameSource   :: NameSource
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is
-                        , varInstances = Graph.nmap (mapVarNames f) $ varInstances is
                         }
 
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
                        , mainSubst = s `composeSubst` mainSubst is
-                       , varInstances = Graph.nmap (applySubst s)  $ varInstances is
                        }
 
 -- | Adds a pair of equivalent items to an equivalence map.

@@ -1,5 +1,5 @@
 module Infernu.Builtins.Operators
-       (builtins)
+       (builtins, refOp, derefOp, refAssignOp)
        where
 
 import           Infernu.Prelude
@@ -30,13 +30,16 @@ numRelation = binaryFuncS number number boolean
 numOp :: TypeScheme
 numOp = binaryFuncS number number number
 
+refOp = "`ref"
+derefOp = "`deref"
+refAssignOp = "`:="
 
 builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
 
-    ("`:",           ts [1] $ Fix $ TFunc [tvar 1] (Fix $ TCons TRef [tvar 1])),
-    ("`=",           ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1], tvar 1] (tvar 1)),
-    ("`!",           ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1]] (tvar 1)),
+    (refOp,          ts [1] $ Fix $ TFunc [tvar 1] (Fix $ TCons TRef [tvar 1])),
+    (refAssignOp,    ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1], tvar 1] (tvar 1)),
+    (derefOp,        ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1]] (tvar 1)),
 
     ("!",            unaryFunc boolean boolean),
     ("~",            unaryFunc number  number),

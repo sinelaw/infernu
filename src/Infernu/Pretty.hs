@@ -265,13 +265,12 @@ instance (Show a, Show b) => Pretty (Graph.Gr a b) where
     pretty = text . Graph.prettify
 
 instance Pretty InferState where
-    pretty (InferState ns sub vs vi tn cs pu) =
+    pretty (InferState ns sub vs tn cs pu) =
         text "InferState"
           <+> (align . encloseSep lbrace rbrace comma
                $ [ fill 10 (string "nameSource: ") <+> pretty ns
                  , fill 10 (string "subst: ") <+> pretty sub
                  , fill 10 (string "varSchemes: ") <+> pretty vs
-                 , fill 10 (string "varInstances: ") <+> pretty vi
                  , fill 10 (string "namedTypes: ") <+> pretty tn
                  , fill 10 (string "pendingUni: ") <+> pretty pu
                  , fill 10 (string "classes: ") <+> pretty cs
