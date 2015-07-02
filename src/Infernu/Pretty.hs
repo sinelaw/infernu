@@ -87,7 +87,7 @@ instance Pretty EPropName where
 
 instance Pretty (Exp a) where
     pretty (EVar _ n) = string n
-    pretty (EApp _ e1 args) = parens $ pretty e1 <> nakedSingleOrTuple args
+    pretty (EApp _ e1 args) = parens $ pretty e1 <> (tupled $ map pretty args)
     pretty (EAbs _ args e) = parens $ string "\\" <> nakedSingleOrTuple args <+> string "->" <+> pretty e
     pretty (ELet _ n e1 e2) = string "let" <+> align (vsep $ letLine n e1 e2)
         where letLine n' e' eBody = curLine n' e' : rest eBody

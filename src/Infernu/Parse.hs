@@ -15,6 +15,7 @@ import qualified Text.Parsec.Pos                  as Pos
 import qualified Data.Set as Set
 import  Data.Set (Set)
 import Infernu.Builtins.Operators (refOp, derefOp, refAssignOp)
+import           Text.PrettyPrint.ANSI.Leijen (text)
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
@@ -108,10 +109,10 @@ fromStatement f (ES3.SwitchStmt z switch cases) = chainExprs z (EArray (gen z) t
 
 fromStatement f (ES3.VarDeclStmt _ decls) = chainDecls f decls
 fromStatement f (ES3.FunctionStmt z name args stmts) = toNamedAbs f z args stmts name
-fromStatement f (ES3.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return") (EPropName "value")
-                                     $ case x of
-                                        Nothing -> ELit (gen z) LitUndefined
-                                        Just x' -> fromExpression f x'
+fromStatement f (ES3.ReturnStmt z x) = \k -> assignToVar z "return" (EArray (gen z) [returnExpr]) $ Just k
+  where returnExpr = case x of
+                      Nothing -> ELit (gen z) LitUndefined
+                      Just x' -> fromExpression f x'
 
 -- TODO: Extremely inefficient, the continuation is duplicated between the case branches.
 --
@@ -131,47 +132,58 @@ toAbs f' z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'
   -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
   where f = foldr collectVars f' stmts
         body' = case any hasReturn stmts of
-                 True -> ELet (gen z) "return" (ERow (gen z) True []) $ foldStmts f stmts $ (EProp (gen z) (EVar (gen z) "return") (EPropName "value"))
-                 False -> ELet (gen z) "return" (empty z) $ foldStmts f stmts $ (ELit (gen z) LitUndefined)
+                 True -> returnBody []
+                 False -> returnBody [ELit (gen z) LitUndefined]
+        returnBody v' = ELet (gen z) "return"
+                        (makeRef z $ EArray (gen z) v')
+                        $ foldStmts f stmts
+                        $ applyPropFunc z EPropGetIndex (applyDeref z (EVar (gen z) "return")) [ELit (gen z) $ LitNumber 0]
 
 data Mutability = Mutable | Immutable
 
 data FuncScope = FuncScope { declVars :: Set String, mutableVars :: Set String }
                deriving (Show, Eq, Ord)
 
+
+insertDeclName name s = s { declVars = Set.insert name $ declVars s }
+insertMutName name s = s { mutableVars = Set.insert name $ mutableVars s }
+
 collectVars :: ES3.Statement a -> FuncScope -> FuncScope
 collectVars (ES3.BlockStmt _ stmts) = \s -> foldr collectVars s stmts
 collectVars (ES3.EmptyStmt _) = id
-collectVars (ES3.ExprStmt _ (ES3.AssignExpr _ _ (ES3.LVar a name) _)) = \s -> s { mutableVars = Set.insert name (mutableVars s) }
-collectVars (ES3.ExprStmt _ (ES3.UnaryAssignExpr _ _ (ES3.LVar a name))) = \s -> s { mutableVars = Set.insert name (mutableVars s) }
+collectVars (ES3.ExprStmt _ e) = collectVarsE e
 collectVars (ES3.ExprStmt _ _) = id
-collectVars (ES3.IfStmt _ _ thenS elseS) = collectVars elseS . collectVars thenS
-collectVars (ES3.IfSingleStmt _ _ thenS) = collectVars thenS
-collectVars (ES3.WhileStmt _ _ loopS) = collectVars loopS
-collectVars (ES3.DoWhileStmt _ loopS _) = collectVars loopS
+collectVars (ES3.IfStmt _ e thenS elseS) = collectVarsE e . collectVars elseS . collectVars thenS
+collectVars (ES3.IfSingleStmt _ e thenS) = collectVarsE e . collectVars thenS
+collectVars (ES3.WhileStmt _ e loopS) = collectVarsE e . collectVars loopS
+collectVars (ES3.DoWhileStmt _ loopS e) = collectVarsE e . collectVars loopS
 collectVars (ES3.BreakStmt _ _) = id
 collectVars (ES3.ContinueStmt _ _) = id
 collectVars (ES3.TryStmt _ stmt mCatch mFinally) = \s -> foldr collectVars s (stmt : finallyS ++ catchS)
   where catchS = case mCatch of
-                  Just (ES3.CatchClause _ _ s') -> [s']
+                  Just (ES3.CatchClause _ (ES3.Id _ catchVar) s') -> [s']
                   Nothing -> []
         finallyS = case mFinally of
                     Just f -> [f]
                     Nothing -> []
 collectVars (ES3.ThrowStmt _ _) = id
-collectVars (ES3.WithStmt _ _ stmt) = collectVars stmt
+collectVars (ES3.WithStmt _ _ stmt) = error "Not supported: with" -- collectVars stmt
 collectVars (ES3.ForInStmt _ _ _ stmt) = collectVars stmt
 collectVars (ES3.LabelledStmt _ _ stmt) = collectVars stmt
 collectVars (ES3.ForStmt _ _ _ _ body) = collectVars body -- TODO
-collectVars (ES3.SwitchStmt _ _ cases) = \s -> foldr collectVars s $ concatMap fromCase cases
+collectVars (ES3.SwitchStmt _ e cases) = \s -> collectVarsE e . foldr collectVars s $ concatMap fromCase cases
   where fromCase (ES3.CaseClause _ _ stmts) = stmts
         fromCase (ES3.CaseDefault _ stmts) = stmts
 collectVars (ES3.VarDeclStmt _ vs) = \s -> foldr fromVarDecl s vs
-    where fromVarDecl (ES3.VarDecl a (ES3.Id _ name) _) s' = s' { declVars = Set.insert name (declVars s') }
+    where fromVarDecl (ES3.VarDecl a (ES3.Id _ name) _) s' = insertDeclName name s'
 collectVars (ES3.FunctionStmt _ _ _ stmts) = \s -> s { mutableVars = mvs }
     where innerScope = foldr collectVars (FuncScope Set.empty Set.empty) stmts
           mvs = (mutableVars innerScope) `Set.difference` (declVars innerScope)
 collectVars (ES3.ReturnStmt _ _) = id
+
+collectVarsE (ES3.UnaryAssignExpr _ _ (ES3.LVar _ name)) = insertMutName name
+collectVarsE (ES3.AssignExpr _ _ (ES3.LVar _ name) _) = insertMutName name
+collectVarsE _ = id
 
 hasReturn :: ES3.Statement a -> Bool
 hasReturn (ES3.BlockStmt _ stmts) = any hasReturn stmts
@@ -211,16 +223,18 @@ toNamedAbs :: Show a => FuncScope -> a -> [ES3.Id c] -> [ES3.Statement a] -> ES3
 toNamedAbs f z args stmts (ES3.Id zn name) letBody = let abs' = addDecl zn name $ toAbs f z args stmts
                                                      in ELet (gen z) name abs' letBody
 
+makeRef z' x = EApp (gen z') (EVar (gen z') refOp) [x]
+applyDeref z x = EApp (gen z) (EVar (gen z) derefOp) [x]
+
 chainDecls :: Show a => FuncScope -> [ES3.VarDecl a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 chainDecls f [] k = k
-chainDecls f (ES3.VarDecl z' (ES3.Id _ name) Nothing:xs) k = ELet (gen z') name (ref' (ELit (gen z') LitUndefined)) (chainDecls f xs k)
+chainDecls f (ES3.VarDecl z' (ES3.Id _ name) v:xs) k = ELet (gen z') name (ref' v') (chainDecls f xs k)
     where ref' = if Set.member name (mutableVars f)
-                 then \x -> EApp (gen z') (EVar (gen z') refOp) [x]
+                 then makeRef z'
                  else id
-chainDecls f (ES3.VarDecl z' (ES3.Id _ name) (Just v):xs) k = ELet (gen z') name (ref' (addDecl z' name $ fromExpression f v)) (chainDecls f xs k)
-    where ref' = if Set.member name (mutableVars f)
-                 then \x -> EApp (gen z') (EVar (gen z') refOp) [x]
-                 else id
+          v' = case v of
+                 Just v'' -> addDecl z' name $ fromExpression f v''
+                 Nothing -> (ELit (gen z') LitUndefined)
 
 makeThis :: Show a => a -> Exp a
 makeThis z = ELit z $ LitEmptyThis
@@ -238,10 +252,10 @@ fromExpression f (ES3.ObjectLit z props) = let stringProps = map (fromPropString
                                               then EStringMap (src z) $ zip (catMaybes stringProps) (map ((fromExpression f) . snd) props)
                                               else ERow (src z) False $ map (fromProp *** (fromExpression f)) props
 fromExpression f (ES3.BracketRef z arrExpr indexExpr) = getIndex f z arrExpr indexExpr
-fromExpression f (ES3.VarRef z (ES3.Id _ name)) = deref' $ EVar (src z) name
+fromExpression f (ES3.VarRef z (ES3.Id _ name)) = deref' z $ EVar (src z) name
     where deref' = if Set.member name (mutableVars f)
-                   then \x -> EApp (gen z) (EVar (gen z) derefOp) [x]
-                   else id
+                   then applyDeref
+                   else const id
 fromExpression f (ES3.CondExpr z ePred eThen eElse) = ECase (src z) (fromExpression f ePred) [(LitBoolean True, fromExpression f eThen), (LitBoolean False, fromExpression f eElse)]
 fromExpression f (ES3.CallExpr z expr argExprs) =
   -- Instead of simply translating, here we also do some specific simplification by defining
@@ -368,5 +382,7 @@ fromPropString _ = Nothing
 -- -- ------------------------------------------------------------------------
 
 translate :: [ES3.Statement Pos.SourcePos] -> Exp (GenInfo, Pos.SourcePos)
-translate js = ELet (gen pos) poo (empty pos) $ foldStmts (FuncScope Set.empty Set.empty) js $ EVar (gen pos) poo
+translate js = ELet (gen pos) poo (empty pos) $ fromStatement (Log.trace (show blockScope) blockScope) globalBlock $ EVar (gen pos) poo
   where pos = Pos.initialPos "<global>"
+        globalBlock = ES3.BlockStmt pos js
+        blockScope = collectVars globalBlock $ FuncScope Set.empty Set.empty
