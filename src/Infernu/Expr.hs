@@ -40,7 +40,6 @@ data Exp a = EVar !a !EVarName
            | ELet !a !EVarName !(Exp a) !(Exp a)
            | ECase !a !(Exp a) ![(LitVal, Exp a)]
            | EProp !a !(Exp a) !EPropName
-           | EPropAssign !a !(Exp a) !EPropName !(Exp a) !(Exp a)
              -- TODO consider better options for causing rows to become closed outside the 'new' call
            | ENew !a !(Exp a) ![Exp a]
              -- Various literal expressions
@@ -62,7 +61,6 @@ mapTopAnnotation f expr =
         (EAbs a x y) -> EAbs (f a) x y
         (ELet a x y z) -> ELet (f a) x y z
         (ELit a x) -> ELit (f a) x
-        (EPropAssign a x y z v) -> EPropAssign (f a) x y z v
         (EArray a x) -> EArray (f a) x
         (ETuple a x) -> ETuple (f a) x
         (ERow a x y) -> ERow (f a) x y
