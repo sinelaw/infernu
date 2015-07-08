@@ -17,7 +17,8 @@ import           Infernu.Prelude
 
 
 type EVarName = String
-data EPropName = EPropName String
+data EPropName = EPropGetName String
+               | EPropSetName String
                | EPropGetIndex
                | EPropSetIndex
                | EPropFun
