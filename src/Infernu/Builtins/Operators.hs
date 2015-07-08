@@ -33,6 +33,11 @@ numOp = binaryFuncS number number number
 
 builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
+
+    ("`:",           ts [1] $ Fix $ TFunc [tvar 1] (Fix $ TCons TRef [tvar 1])),
+    ("`=",           ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1], tvar 1] (tvar 1)),
+    ("`!",           ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1]] (tvar 1)),
+
     ("!",            unaryFunc boolean boolean),
     ("~",            unaryFunc number  number),
     ("typeof",       ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0] string),

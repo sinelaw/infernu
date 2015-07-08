@@ -112,7 +112,6 @@ data LitVal = LitNumber !Double
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar !a !EVarName
-           | EAssign !a !EVarName !(Exp a) !(Exp a)
            | EApp !a !(Exp a) ![Exp a]
            | EAbs !a ![EVarName] !(Exp a)
            | ELet !a !EVarName !(Exp a) !(Exp a)
@@ -153,7 +152,7 @@ newtype TypeId = TypeId Int
                 deriving (Show, Eq, Ord, Generic)
 instance Hashable TypeId where
 
-data TConsName = TArray | TTuple | TName !TypeId | TStringMap
+data TConsName = TArray | TTuple | TName !TypeId | TStringMap | TRef
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -575,7 +574,6 @@ mapTopAnnotation f expr =
         (EAbs a x y) -> EAbs (f a) x y
         (ELet a x y z) -> ELet (f a) x y z
         (ELit a x) -> ELit (f a) x
-        (EAssign a x y z) -> EAssign (f a) x y z
         (EPropAssign a x y z v) -> EPropAssign (f a) x y z v
         (EArray a x) -> EArray (f a) x
         (ETuple a x) -> ETuple (f a) x

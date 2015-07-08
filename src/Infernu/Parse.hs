@@ -10,6 +10,10 @@ import           Infernu.Types
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3
 import qualified Text.Parsec.Pos                  as Pos
+-- import qualified Data.Map.Strict as Map
+-- import  Data.Map.Strict (Map)
+import qualified Data.Set as Set
+import  Data.Set (Set)
 
 -- | A 'magic' impossible variable name that can never occur in valid JS syntax.
 poo :: EVarName
@@ -128,6 +132,43 @@ toAbs z args stmts = EAbs (src z) ("this" : map ES3.unId args) body'
                  True -> ELet (gen z) "return" (ERow (gen z) True []) $ foldStmts stmts $ (EProp (gen z) (EVar (gen z) "return") (EPropName "value"))
                  False -> ELet (gen z) "return" (empty z) $ foldStmts stmts $ (ELit (gen z) LitUndefined)
 
+data Mutability = Mutable | Immutable
+
+data FuncScope = FuncScope { declVars :: Set String, mutableVars :: Set String }
+               deriving (Show, Eq, Ord)
+
+collectVars :: ES3.Statement a -> FuncScope -> FuncScope
+collectVars (ES3.BlockStmt _ stmts) = \s -> foldr collectVars s stmts
+collectVars (ES3.EmptyStmt _) = id
+collectVars (ES3.ExprStmt _ (ES3.AssignExpr _ _ (ES3.LVar a name) _)) = \s -> s { mutableVars = Set.insert name (mutableVars s) }
+collectVars (ES3.ExprStmt _ (ES3.UnaryAssignExpr _ _ (ES3.LVar a name))) = \s -> s { mutableVars = Set.insert name (mutableVars s) }
+collectVars (ES3.IfStmt _ _ thenS elseS) = collectVars elseS . collectVars thenS
+collectVars (ES3.IfSingleStmt _ _ thenS) = collectVars thenS
+collectVars (ES3.WhileStmt _ _ loopS) = collectVars loopS
+collectVars (ES3.DoWhileStmt _ loopS _) = collectVars loopS
+collectVars (ES3.BreakStmt _ _) = id
+collectVars (ES3.ContinueStmt _ _) = id
+collectVars (ES3.TryStmt _ stmt mCatch mFinally) = \s -> foldr collectVars s (stmt : finallyS ++ catchS)
+  where catchS = case mCatch of
+                  Just (ES3.CatchClause _ _ s') -> [s']
+                  Nothing -> []
+        finallyS = case mFinally of
+                    Just f -> [f]
+                    Nothing -> []
+collectVars (ES3.ThrowStmt _ _) = id
+collectVars (ES3.WithStmt _ _ stmt) = collectVars stmt
+collectVars (ES3.ForInStmt _ _ _ stmt) = collectVars stmt
+collectVars (ES3.LabelledStmt _ _ stmt) = collectVars stmt
+collectVars (ES3.ForStmt _ _ _ _ body) = collectVars body
+collectVars (ES3.SwitchStmt _ _ cases) = \s -> foldr collectVars s $ concatMap fromCase cases
+  where fromCase (ES3.CaseClause _ _ stmts) = stmts
+        fromCase (ES3.CaseDefault _ stmts) = stmts
+collectVars (ES3.VarDeclStmt _ vs) = \s -> foldr fromVarDecl s vs
+    where fromVarDecl (ES3.VarDecl a (ES3.Id _ name) _) s' = s' { declVars = Set.insert name (declVars s') }
+collectVars (ES3.FunctionStmt _ _ _ stmts) = \s -> s { mutableVars = mvs }
+    where innerScope = foldr collectVars (FuncScope Set.empty Set.empty) stmts
+          mvs = (mutableVars innerScope) `Set.difference` (declVars innerScope)
+collectVars (ES3.ReturnStmt _ _) = id
 
 hasReturn :: ES3.Statement a -> Bool
 hasReturn (ES3.BlockStmt _ stmts) = any hasReturn stmts
@@ -280,7 +321,8 @@ addConstant z op expr = EApp (gen z) (opFunc z ES3.OpAdd) [makeThis (gen z), exp
              ES3.PostfixDec -> -1
 
 assignToVar :: Show a => a -> EVarName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
-assignToVar z name expr cont = EAssign (src z) name expr $ fromMaybe (EVar (src z) name) cont
+assignToVar z name expr cont = ELet (gen z) poo assignApp' $ fromMaybe (EVar (src z) name) cont
+    where assignApp' = EApp (src z) (EVar (gen z) "`=") [EVar (gen z) name, expr]
 
 assignToProperty :: Show a => a -> ES3.Expression a -> EPropName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
 assignToProperty  z objExpr name expr cont = EPropAssign (src z) objExpr' name expr $ fromMaybe (EProp (src z) objExpr' name) cont

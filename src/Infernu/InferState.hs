@@ -467,7 +467,6 @@ isExpansive (ELit{})    = False
 isExpansive (ECase _ ep es) = any isExpansive (ep:map snd es)
 isExpansive (EProp _ e _)   = isExpansive e
 isExpansive (EApp{})    = True
-isExpansive (EAssign{}) = True
 isExpansive (EPropAssign{}) = True
 isExpansive (ELet{})    = True
 isExpansive (EArray{})  = True

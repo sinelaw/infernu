@@ -189,25 +189,6 @@ inferType' env (ELet a n e1 e2) =
      return (resT, ELet (a, resT) n e1' e2')
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
-inferType' env expr@(EAssign a n expr1 expr2) =
-  do traceLog $ text "EAssign: " <+> pretty expr
-     lvalueScheme <- getVarScheme a n env `failWithM` (throwError a $ text "Unbound variable: " <+> pretty n <+> text "in assignment" <+> align (pretty expr1))
-     traceLog $ text "EAssign lvalueScheme: " <+> pretty lvalueScheme
-     lvalueT <- instantiate lvalueScheme
-     (rvalueT, expr1') <- inferType env expr1
-     unify a (qualType lvalueT) (qualType rvalueT)
-     (tRest, expr2') <- inferType env expr2
-     traceLog $ text "EAssign lvalueT: " <+> pretty lvalueT
-     traceLog $ text "EAssign Invoking unifyAllInstances on scheme: " <+> pretty lvalueScheme
-     instancePreds <- unifyAllInstances a $ getQuantificands lvalueScheme
-     -- update the variable scheme, removing perhaps some quantified tvars
-     varId <- getVarId n env `failWith` throwError a (text "Unbound variable:" <+> squotes (pretty n))
-     (updatedScheme, floatedPreds) <- generalize expr1 env (schemeType lvalueScheme)
-     _ <- setVarScheme env n updatedScheme varId
-     --
-     preds <- unifyPredsL a $ floatedPreds ++ (concat $ (instancePreds:) $ map qualPred [lvalueT, rvalueT, tRest]) -- TODO should update variable scheme
-     let tRest' = TQual preds $ qualType tRest
-     return (tRest', EAssign (a, tRest') n expr1' expr2')
 inferType' env (EPropAssign a objExpr prop expr1 expr2) =
   do (objT, objExpr') <- inferType env objExpr
      (rvalueT, expr1') <- inferType env expr1

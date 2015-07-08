@@ -97,8 +97,6 @@ instance Pretty (Exp a) where
                                _ -> [string "in" <+> align (pretty eBody)]
 
     pretty (ELit _ l) = pretty l
-    pretty (EAssign _ n e1 e2) = align $ vsep [ pretty n <+> string ":=" <+> pretty e1 <> string ";"
-                                              , pretty e2]
     pretty (EPropAssign _ obj n e1 e2) = align $ vsep [ pretty obj <> dot <> pretty n <+> string ":=" <+> pretty e1 <> string ";"
                                                       , pretty e2]
     pretty (EArray _ es) = encloseSep lbracket rbracket comma $ map pretty es
@@ -190,6 +188,7 @@ prettyType (TCons TArray [t]) = brackets $ pretty t
 prettyType (TCons TTuple ts) = pretty ts
 prettyType (TCons (TName name) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
 prettyType (TCons TStringMap [t]) = text "StringMap " <+> pretty t
+prettyType (TCons TRef [t]) = text "Ref " <+> pretty t
 prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
 prettyType (TRow label rl) =
     hsep [ case label of
