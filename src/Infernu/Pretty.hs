@@ -97,8 +97,6 @@ instance Pretty (Exp a) where
                                _ -> [string "in" <+> align (pretty eBody)]
 
     pretty (ELit _ l) = pretty l
-    pretty (EPropAssign _ obj n e1 e2) = align $ vsep [ pretty obj <> dot <> pretty n <+> string ":=" <+> pretty e1 <> string ";"
-                                                      , pretty e2]
     pretty (EArray _ es) = encloseSep lbracket rbracket comma $ map pretty es
     pretty (ETuple _ es) = pretty es
     pretty (ERow _ _ props) = encloseSep lbrace rbrace comma

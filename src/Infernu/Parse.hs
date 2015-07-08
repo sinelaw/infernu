@@ -302,15 +302,15 @@ fromExpression f e@(ES3.PrefixExpr z op expr) =
     _ -> EApp (src z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression f expr]
 fromExpression f (ES3.InfixExpr z op e1 e2) = EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression f e1, fromExpression f e2]
 fromExpression f (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name (addConstant z op (EVar (src z) name)) Nothing
-fromExpression f (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty f z objExpr (EPropName name) (addConstant z op (EProp (src z) objExpr' (EPropName name))) Nothing
-  where objExpr' = fromExpression f objExpr
+-- fromExpression f (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty f z objExpr (EPropName name) (addConstant z op (EProp (src z) objExpr' (EPropName name))) Nothing
+--   where objExpr' = fromExpression f objExpr
 fromExpression f (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex f z objExpr idxExpr $ addConstant z op (getIndex f z objExpr idxExpr)
 
 toAssignExpr f z op target expr cont = assignExpr
   where sz = src z
         (assignExpr, oldValue) = case target of
           ES3.LVar _ name -> (assignToVar z name value cont, EVar sz name)
-          ES3.LDot _ objExpr name -> (assignToProperty f z objExpr (EPropName name) value cont, EProp sz (fromExpression f objExpr) (EPropName name))
+          -- ES3.LDot _ objExpr name -> (assignToProperty f z objExpr (EPropName name) value cont, EProp sz (fromExpression f objExpr) (EPropName name))
           ES3.LBracket _ objExpr idxExpr -> (singleStmt (gen z) (assignToIndex f z objExpr idxExpr value) (fromMaybe atIndex' cont), atIndex')
               where atIndex' = getIndex f z objExpr idxExpr
         expr' = fromExpression f expr
@@ -350,9 +350,9 @@ assignToVar :: Show a => a -> EVarName -> Exp (GenInfo, a) -> Maybe (Exp (GenInf
 assignToVar z name expr cont = ELet (gen z) poo assignApp' $ fromMaybe (EVar (src z) name) cont
     where assignApp' = EApp (src z) (EVar (gen z) refAssignOp) [EVar (gen z) name, expr]
 
-assignToProperty :: Show a => FuncScope -> a -> ES3.Expression a -> EPropName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
-assignToProperty f z objExpr name expr cont = EPropAssign (src z) objExpr' name expr $ fromMaybe (EProp (src z) objExpr' name) cont
-  where objExpr' = fromExpression f objExpr
+-- assignToProperty :: Show a => FuncScope -> a -> ES3.Expression a -> EPropName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
+-- assignToProperty f z objExpr name expr cont = EPropAssign (src z) objExpr' name expr $ fromMaybe (EProp (src z) objExpr' name) cont
+--   where objExpr' = fromExpression f objExpr
 
 applyPropFunc :: a -> EPropName -> Exp (GenInfo, a) -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)
 applyPropFunc z prop arrExpr args = ELet (gen z) obj' arrExpr $ applyPropFunc'

@@ -189,24 +189,6 @@ inferType' env (ELet a n e1 e2) =
      return (resT, ELet (a, resT) n e1' e2')
 -- | Handling of mutable variable assignment.
 -- | Prevent mutable variables from being polymorphic.
-inferType' env (EPropAssign a objExpr prop expr1 expr2) =
-  do (objT, objExpr') <- inferType env objExpr
-     (rvalueT, expr1') <- inferType env expr1
-     rowTailVar <- RowTVar <$> freshFlex
-     -- Don't generalize prop assignments, because it causes inference of too-polymorphic types that
-     -- the user may not have meant to use, and later cause errors when another assignment is not as
-     -- polymorphic. In the future, type annotations could be used to make the prop assignment
-     -- polymorphic.
-     let rvalueSchemeFloated = TScheme [] TQual { qualPred = [], qualType = qualType rvalueT }
-         rvalueRowType = Fix . TRow Nothing
-                         . TRowProp (TPropGetName prop) rvalueSchemeFloated
-                         . TRowProp (TPropSetName prop) rvalueSchemeFloated
-                         $ TRowEnd (Just rowTailVar)
-     unify a (qualType objT) rvalueRowType
-     (expr2T, expr2') <- inferType env expr2 -- TODO what about the pred
-     preds <- unifyPredsL a $ concatMap qualPred [objT, rvalueT, expr2T] -- TODO review
-     let tRes = TQual preds $ qualType expr2T
-     return (tRes, EPropAssign (a, tRes) objExpr' prop expr1' expr2')
 inferType' env (EArray a exprs) =
   do tv <- Fix . TBody . TVar <$> freshFlex
      te <- accumInfer env exprs
