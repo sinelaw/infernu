@@ -93,7 +93,8 @@ data GenInfo = GenInfo { isGen :: Bool, declName :: Maybe String }
              deriving (Show, Eq, Ord)
 
 type EVarName = String
-data EPropName = EPropName String
+data EPropName = EPropGetName String
+               | EPropSetName String
                | EPropGetIndex
                | EPropSetIndex
                | EPropFun
