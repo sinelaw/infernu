@@ -202,10 +202,20 @@ collectVarsMaybeExpr (Just expr) s = collectVarsE expr s
 
 collectVarsE :: ES3.Expression a -> FuncScope -> FuncScope
 collectVarsE (ES3.AssignExpr _ _ (ES3.LVar a name) expr) = addMutableVar name . collectVarsE expr
-collectVarsE (ES3.AssignExpr _ _ _ expr) = collectVarsE expr
+collectVarsE (ES3.AssignExpr _ _ _ expr)         = collectVarsE expr
 collectVarsE (ES3.UnaryAssignExpr _ _ (ES3.LVar a name)) = \s -> addMutableVar name s
-collectVarsE (ES3.FuncExpr _ _ argNames stmts) = collectFuncVars argNames stmts
-collectVarsE _ = id
+collectVarsE (ES3.FuncExpr _ _ argNames stmts)   = collectFuncVars argNames stmts
+collectVarsE (ES3.ArrayLit _ exprs)              = \s -> foldr collectVarsE s exprs
+collectVarsE (ES3.ObjectLit _ propExprs)         = \s -> foldr collectVarsE s (map snd propExprs)
+collectVarsE (ES3.DotRef _ expr _)               = collectVarsE expr
+collectVarsE (ES3.BracketRef _ expr1 expr2)      = collectVarsE expr1 . collectVarsE expr2
+collectVarsE (ES3.NewExpr _ expr exprs)          = \s -> foldr collectVarsE (collectVarsE expr s) exprs
+collectVarsE (ES3.PrefixExpr _ _ expr)           = collectVarsE expr
+collectVarsE (ES3.InfixExpr _ _ expr1 expr2 )    = collectVarsE expr1 . collectVarsE expr2
+collectVarsE (ES3.CondExpr _ expr1 expr2 expr3 ) = collectVarsE expr1 . collectVarsE expr2 . collectVarsE expr3
+collectVarsE (ES3.ListExpr _ exprs)              = \s -> foldr collectVarsE s exprs
+collectVarsE (ES3.CallExpr _ expr exprs)         = \s -> foldr collectVarsE (collectVarsE expr s) exprs
+collectVarsE _                                   = id
 
 collectFuncVars :: Foldable t => [ES3.Id b] -> t (ES3.Statement a) -> FuncScope -> FuncScope
 collectFuncVars argNames stmts = \s -> s { mutableVars = mvs `Set.union` mutableVars s }
