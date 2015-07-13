@@ -6,6 +6,7 @@ module Infernu.Pretty where
 
 import           Infernu.Prelude
 import           Infernu.Types
+import qualified Infernu.Builtins.Names as Names
 
 import           Data.Char                    (chr, ord)
 import qualified Data.Digits                  as Digits
@@ -87,7 +88,8 @@ instance Pretty EPropName where
 
 instance Pretty (Exp a) where
     pretty (EVar _ n) = string n
-    pretty (EApp _ e1 args) = parens $ pretty e1 <> (tupled $ map pretty args)
+    pretty (EApp _ (EVar _ n) [arg1,arg2]) | n == Names.refAssignOp = parens $ pretty arg1 <+> string ":=" <+> pretty arg2
+    pretty (EApp _ e1 args) = parens $ pretty e1 <+> nakedSingleOrTuple args
     pretty (EAbs _ args e) = parens $ string "\\" <> nakedSingleOrTuple args <+> string "->" <+> pretty e
     pretty (ELet _ n e1 e2) = string "let" <+> align (vsep $ letLine n e1 e2)
         where letLine n' e' eBody = curLine n' e' : rest eBody
