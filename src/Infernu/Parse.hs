@@ -191,7 +191,7 @@ collectVars (ES3.SwitchStmt _ e cases) = \s -> collectVarsE e . foldr collectVar
         fromCase (ES3.CaseDefault _ stmts) = stmts
 collectVars (ES3.VarDeclStmt _ vs) = \s -> foldr collectVarDecl s vs
 collectVars (ES3.FunctionStmt _ _ argNames stmts) = collectFuncVars argNames stmts
-collectVars (ES3.ReturnStmt _ _) = id
+collectVars (ES3.ReturnStmt _ e) = collectVarsMaybeExpr e
 
 collectVarDecl :: ES3.VarDecl a -> FuncScope -> FuncScope
 collectVarDecl (ES3.VarDecl a (ES3.Id _ name) expr) = addDeclVar name . collectVarsMaybeExpr expr
