@@ -1,6 +1,4 @@
 // FAIL valid/arguably/if-undefined.js:8:3: Error:  |      Failed unif y valid/arguably/if-undefined.js
-// FAIL *valid/complex/sortedUniq.js:15:20: Error:  |      Failed unif y valid/complex/sortedUniq.js
-// FAIL valid/for-in.js:4:6: Error:  |      Failed unifying: |         y valid/for-in.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |      Failed unify y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:8:7: Error:  |      Failed unifying:  y valid/nothis-as-param.js
 // FAIL valid/objlit-func.js:9:1: Error:  |      Failed unifying: |    y valid/objlit-func.js

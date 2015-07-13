@@ -181,7 +181,8 @@ collectVars (ES3.TryStmt _ stmt mCatch mFinally) = \s -> foldr collectVars s (st
                     Nothing -> []
 collectVars (ES3.ThrowStmt _ _) = id
 collectVars (ES3.WithStmt _ _ stmt) = error "Not supported: with" -- collectVars stmt
-collectVars (ES3.ForInStmt _ _ _ stmt) = collectVars stmt
+collectVars (ES3.ForInStmt _ (ES3.ForInVar (ES3.Id _ name)) expr stmt) = addDeclVar name . collectVarsE expr . collectVars stmt
+collectVars (ES3.ForInStmt _ (ES3.ForInLVal lval) expr stmt) = collectVarsLVal lval . collectVarsE expr . collectVars stmt
 collectVars (ES3.LabelledStmt _ _ stmt) = collectVars stmt
 collectVars (ES3.ForStmt _ ES3.NoInit             e1 e2 stmt) = collectVars stmt . collectVarsMaybeExpr e1 . collectVarsMaybeExpr e2
 collectVars (ES3.ForStmt _ (ES3.VarInit varDecls) e1 e2 stmt) = \s -> collectVars stmt $ foldr collectVarDecl (collectVarsMaybeExpr e1 . collectVarsMaybeExpr e2 $ s) varDecls
@@ -196,14 +197,18 @@ collectVars (ES3.ReturnStmt _ e) = collectVarsMaybeExpr e
 collectVarDecl :: ES3.VarDecl a -> FuncScope -> FuncScope
 collectVarDecl (ES3.VarDecl a (ES3.Id _ name) expr) = addDeclVar name . collectVarsMaybeExpr expr
 
+collectVarsLVal :: ES3.LValue a -> FuncScope -> FuncScope
+collectVarsLVal (ES3.LVar _ name) = addMutableVar name
+collectVarsLVal (ES3.LDot _ expr _) = collectVarsE expr
+collectVarsLVal (ES3.LBracket _ e1 e2) = collectVarsE e1 . collectVarsE e2
+
 collectVarsMaybeExpr :: Maybe (ES3.Expression a) -> FuncScope -> FuncScope
 collectVarsMaybeExpr Nothing s = s
 collectVarsMaybeExpr (Just expr) s = collectVarsE expr s
 
 collectVarsE :: ES3.Expression a -> FuncScope -> FuncScope
-collectVarsE (ES3.AssignExpr _ _ (ES3.LVar a name) expr) = addMutableVar name . collectVarsE expr
-collectVarsE (ES3.AssignExpr _ _ _ expr)         = collectVarsE expr
-collectVarsE (ES3.UnaryAssignExpr _ _ (ES3.LVar a name)) = \s -> addMutableVar name s
+collectVarsE (ES3.AssignExpr _ _ lval expr)      = collectVarsLVal lval . collectVarsE expr
+collectVarsE (ES3.UnaryAssignExpr _ _ lval)      = collectVarsLVal lval
 collectVarsE (ES3.FuncExpr _ _ argNames stmts)   = collectFuncVars argNames stmts
 collectVarsE (ES3.ArrayLit _ exprs)              = \s -> foldr collectVarsE s exprs
 collectVarsE (ES3.ObjectLit _ propExprs)         = \s -> foldr collectVarsE s (map snd propExprs)
