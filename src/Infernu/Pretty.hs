@@ -191,7 +191,7 @@ prettyType (TCons TArray [t]) = brackets $ pretty t
 prettyType (TCons TTuple ts) = pretty ts
 prettyType (TCons (TName name) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
 prettyType (TCons TStringMap [t]) = text "StringMap " <+> pretty t
-prettyType (TCons TRef [t]) = text "Ref " <+> pretty t
+prettyType (TCons TRef [t]) = text "Mut" <+> pretty t
 prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
 prettyType (TRow label rl) =
     hsep [ case label of
