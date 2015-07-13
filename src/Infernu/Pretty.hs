@@ -107,7 +107,9 @@ instance Pretty (Exp a) where
                               $ map (\(n,v) -> fill 6 (pretty n) <> string ":" <> space <> pretty v) props
 --                                   <> ifStr isOpen " | ? "
     pretty (ECase _ ep es) = hang 4 $
-                             string "case" <+> pretty ep <+> string "of" <+> vsep (map formatBranch' es)
+                             vsep [ string "case" <+> pretty ep <+> string "of"
+                                  , hang 4 $ align (vsep (map formatBranch' es))
+                                  ]
         where formatBranch' (pat, branch) = fill 6 (pretty pat) <+> string "->" <+> align (pretty branch)
     pretty (EProp _ e n) = pretty e <> dot <> pretty n
     pretty (ENew _ e args) = string "new" <> space <> pretty e <> space <> nakedSingleOrTuple (map pretty args)
