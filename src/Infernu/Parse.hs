@@ -82,7 +82,7 @@ fromStatement f s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
 fromStatement f s@(ES3.ForInStmt z init' expr body) = case init' of
                                                         ES3.ForInVar (ES3.Id _ _) -> errorNotSupported "'for..in' with var decl (var hoisting would occur)" z s -- ELet (gen z') name (ELit (gen z') $ LitString "") (foldStmts [body] k)
                                                         ES3.ForInLVal (ES3.LVar z' name) -> chainExprs z' (assignToVar z' name str' Nothing) body'
-                                                        -- ES3.ForInLVal (ES3.LDot z' objExpr name) -> chainExprs z' (assignToProperty z objExpr (EPropName name) str' Nothing) body'
+                                                        ES3.ForInLVal (ES3.LDot z' objExpr name) -> chainExprs z' (assignToProperty f z objExpr (EPropName name) str' Nothing) body'
                                                         ES3.ForInLVal (ES3.LBracket z' objExpr idxExpr) -> chainExprs z' (assignToIndex f z objExpr idxExpr str') body'
     where str' = ELit (gen z) $ LitString ""
           body' = fromStatement f body
