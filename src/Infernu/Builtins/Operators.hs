@@ -11,6 +11,7 @@ import qualified Data.Map.Strict         as Map
 import           Infernu.Builtins.Math (math)
 import           Infernu.Builtins.Object (object)
 import           Infernu.Builtins.Util
+import qualified Infernu.Builtins.Names as Names
 
 unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = ts [0] $ Fix $ TFunc [tvar 0, t1] t2
@@ -30,9 +31,15 @@ numRelation = binaryFuncS number number boolean
 numOp :: TypeScheme
 numOp = binaryFuncS number number number
 
-
 builtins :: Map EVarName TypeScheme
 builtins = Map.fromList [
+
+    -- TODO: refOp and derefOp should be data constructors of the built-in Ref type (need to add
+    -- support for data constructors)
+    (Names.refOp,          ts [1] $ Fix $ TFunc [tvar 1] (Fix $ TCons TRef [tvar 1])),
+    (Names.refAssignOp,    ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1], tvar 1] (tvar 1)),
+    (Names.derefOp,        ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1]] (tvar 1)),
+
     ("!",            unaryFunc boolean boolean),
     ("~",            unaryFunc number  number),
     ("typeof",       ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0] string),

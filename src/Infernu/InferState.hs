@@ -19,7 +19,6 @@ module Infernu.InferState
        , getPendingUnifications
        , getState
        , getVarId
-       , getVarInstances
        , getVarScheme
        , instantiate
        , instantiateVar
@@ -72,7 +71,6 @@ emptyInferState :: InferState
 emptyInferState = InferState { nameSource = NameSource 2
                              , mainSubst = nullSubst
                              , varSchemes = Map.empty
-                             , varInstances = Graph.empty
                              , namedTypes = Map.empty
                              , pendingUni = Set.empty
                              , classes = Map.fromList Infernu.Builtins.TypeClasses.typeClasses
@@ -173,9 +171,6 @@ setPendingUnifications ts = do
 
 ----------------------------------------------------------------------
 
-
-addVarInstance :: TVarName -> TVarName -> Infer ()
-addVarInstance x y = modify $ \is -> is { varInstances = tracePretty (text "updated equivs") $ addEquivalence x y (varInstances is) }
 
 getFreeTVars :: TypeEnv -> Infer (Set TVarName)
 getFreeTVars env = do
@@ -376,10 +371,9 @@ applySubstInfer s =
 -- :}
 -- Right (TQual {qualPred = [], qualType = Fix (TFunc [Fix (TBody (TVar 4))] Fix (TBody (TVar 1)))})
 --
-instantiateScheme :: Bool -> TypeScheme -> Infer QualType
-instantiateScheme shouldAddVarInstances (TScheme tvarNames t) = do
+instantiateScheme :: TypeScheme -> Infer QualType
+instantiateScheme (TScheme tvarNames t) = do
   allocNames <- allocTVarInstances tvarNames
-  when shouldAddVarInstances $ forM_ allocNames $ uncurry addVarInstance
   let replaceVar n = fromMaybe n $ lookup n allocNames
   return $ mapVarNames replaceVar t
 
@@ -387,7 +381,7 @@ allocTVarInstances :: [TVarName] -> Infer [(TVarName, TVarName)]
 allocTVarInstances tvarNames = forM tvarNames $ \tvName -> (tvName,) . Flex <$> fresh
 
 instantiate :: TypeScheme -> Infer QualType
-instantiate = instantiateScheme True
+instantiate = instantiateScheme
 
 instantiateVar :: Source -> EVarName -> TypeEnv -> Infer QualType
 instantiateVar a n env = do
@@ -467,7 +461,6 @@ isExpansive (ELit{})    = False
 isExpansive (ECase _ ep es) = any isExpansive (ep:map snd es)
 isExpansive (EProp _ e _)   = isExpansive e
 isExpansive (EApp{})    = True
-isExpansive (EAssign{}) = True
 isExpansive (EPropAssign{}) = True
 isExpansive (ELet{})    = True
 isExpansive (EArray{})  = True
@@ -488,10 +481,6 @@ minifyVarsFunc xs n = maybe n (setTVarName n) $ Map.lookup n vars
 
 minifyVars :: (VarNames a) => a -> a
 minifyVars xs = mapVarNames (minifyVarsFunc xs) xs
-
-getVarInstances :: Infer (Graph.Gr QualType ())
-getVarInstances = varInstances <$> get
-
 
 getMainSubst :: Infer TSubst
 getMainSubst = mainSubst <$> get

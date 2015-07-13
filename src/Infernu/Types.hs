@@ -64,8 +64,7 @@ module Infernu.Types
 #endif
        ) where
 
-import qualified Data.IntMap.Strict             as IntMap
-import Data.IntMap.Strict             (IntMap)
+
 import qualified Data.Map.Strict             as Map
 import Data.Map.Strict             (Map)
 import           Data.Maybe                (fromMaybe)
@@ -112,7 +111,6 @@ data LitVal = LitNumber !Double
             deriving (Show, Eq, Ord)
 
 data Exp a = EVar !a !EVarName
-           | EAssign !a !EVarName !(Exp a) !(Exp a)
            | EApp !a !(Exp a) ![Exp a]
            | EAbs !a ![EVarName] !(Exp a)
            | ELet !a !EVarName !(Exp a) !(Exp a)
@@ -153,7 +151,7 @@ newtype TypeId = TypeId Int
                 deriving (Show, Eq, Ord, Generic)
 instance Hashable TypeId where
 
-data TConsName = TArray | TTuple | TName !TypeId | TStringMap
+data TConsName = TArray | TTuple | TName !TypeId | TStringMap | TRef
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -514,7 +512,6 @@ data InferState = InferState { nameSource   :: NameSource
                              , mainSubst    :: TSubst
                              -- must be stateful because we sometimes discover that a variable is mutable.
                              , varSchemes   :: Map VarId TypeScheme
-                             , varInstances :: Graph.Gr QualType ()
                              , namedTypes   :: Map TypeId (Type, TypeScheme)
                              , classes      :: Map ClassName (Class Type)
                              , pendingUni   :: Set.Set (Source, Type, (ClassName, Set.Set TypeScheme))
@@ -536,13 +533,11 @@ data InferState = InferState { nameSource   :: NameSource
 instance VarNames InferState where
   freeTypeVars = freeTypeVars . varSchemes
   mapVarNames f is = is { varSchemes = mapVarNames f $ varSchemes is
-                        , varInstances = Graph.nmap (mapVarNames f) $ varInstances is
                         }
 
 instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
                        , mainSubst = s `composeSubst` mainSubst is
-                       , varInstances = Graph.nmap (applySubst s)  $ varInstances is
                        }
 
 -- | Adds a pair of equivalent items to an equivalence map.
@@ -575,7 +570,6 @@ mapTopAnnotation f expr =
         (EAbs a x y) -> EAbs (f a) x y
         (ELet a x y z) -> ELet (f a) x y z
         (ELit a x) -> ELit (f a) x
-        (EAssign a x y z) -> EAssign (f a) x y z
         (EPropAssign a x y z v) -> EPropAssign (f a) x y z v
         (EArray a x) -> EArray (f a) x
         (ETuple a x) -> ETuple (f a) x

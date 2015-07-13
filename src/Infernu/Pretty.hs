@@ -6,6 +6,7 @@ module Infernu.Pretty where
 
 import           Infernu.Prelude
 import           Infernu.Types
+import qualified Infernu.Builtins.Names as Names
 
 import           Data.Char                    (chr, ord)
 import qualified Data.Digits                  as Digits
@@ -87,7 +88,8 @@ instance Pretty EPropName where
 
 instance Pretty (Exp a) where
     pretty (EVar _ n) = string n
-    pretty (EApp _ e1 args) = parens $ pretty e1 <> nakedSingleOrTuple args
+    pretty (EApp _ (EVar _ n) [arg1,arg2]) | n == Names.refAssignOp = parens $ pretty arg1 <+> string ":=" <+> pretty arg2
+    pretty (EApp _ e1 args) = parens $ pretty e1 <+> nakedSingleOrTuple args
     pretty (EAbs _ args e) = parens $ string "\\" <> nakedSingleOrTuple args <+> string "->" <+> pretty e
     pretty (ELet _ n e1 e2) = string "let" <+> align (vsep $ letLine n e1 e2)
         where letLine n' e' eBody = curLine n' e' : rest eBody
@@ -97,8 +99,6 @@ instance Pretty (Exp a) where
                                _ -> [string "in" <+> align (pretty eBody)]
 
     pretty (ELit _ l) = pretty l
-    pretty (EAssign _ n e1 e2) = align $ vsep [ pretty n <+> string ":=" <+> pretty e1 <> string ";"
-                                              , pretty e2]
     pretty (EPropAssign _ obj n e1 e2) = align $ vsep [ pretty obj <> dot <> pretty n <+> string ":=" <+> pretty e1 <> string ";"
                                                       , pretty e2]
     pretty (EArray _ es) = encloseSep lbracket rbracket comma $ map pretty es
@@ -107,7 +107,9 @@ instance Pretty (Exp a) where
                               $ map (\(n,v) -> fill 6 (pretty n) <> string ":" <> space <> pretty v) props
 --                                   <> ifStr isOpen " | ? "
     pretty (ECase _ ep es) = hang 4 $
-                             string "case" <+> pretty ep <+> string "of" <+> vsep (map formatBranch' es)
+                             vsep [ string "case" <+> pretty ep <+> string "of"
+                                  , hang 4 $ align (vsep (map formatBranch' es))
+                                  ]
         where formatBranch' (pat, branch) = fill 6 (pretty pat) <+> string "->" <+> align (pretty branch)
     pretty (EProp _ e n) = pretty e <> dot <> pretty n
     pretty (ENew _ e args) = string "new" <> space <> pretty e <> space <> nakedSingleOrTuple (map pretty args)
@@ -190,6 +192,7 @@ prettyType (TCons TArray [t]) = brackets $ pretty t
 prettyType (TCons TTuple ts) = pretty ts
 prettyType (TCons (TName name) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
 prettyType (TCons TStringMap [t]) = text "StringMap " <+> pretty t
+prettyType (TCons TRef [t]) = text "Ref " <+> pretty t
 prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
 prettyType (TRow label rl) =
     hsep [ case label of
@@ -266,13 +269,12 @@ instance (Show a, Show b) => Pretty (Graph.Gr a b) where
     pretty = text . Graph.prettify
 
 instance Pretty InferState where
-    pretty (InferState ns sub vs vi tn cs pu) =
+    pretty (InferState ns sub vs tn cs pu) =
         text "InferState"
           <+> (align . encloseSep lbrace rbrace comma
                $ [ fill 10 (string "nameSource: ") <+> pretty ns
                  , fill 10 (string "subst: ") <+> pretty sub
                  , fill 10 (string "varSchemes: ") <+> pretty vs
-                 , fill 10 (string "varInstances: ") <+> pretty vi
                  , fill 10 (string "namedTypes: ") <+> pretty tn
                  , fill 10 (string "pendingUni: ") <+> pretty pu
                  , fill 10 (string "classes: ") <+> pretty cs

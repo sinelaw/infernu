@@ -522,7 +522,7 @@ catLefts (Right _:xs) = catLefts xs
 unifyAmbiguousEntry :: (Source, Type, (ClassName, Set TypeScheme)) -> Infer (Maybe (Source, Type, (ClassName, Set TypeScheme)))
 unifyAmbiguousEntry (a, t, (ClassName className, tss)) =
     do  let unifAction ts =
-                do inst <- instantiateScheme False ts >>= assertNoPred
+                do inst <- instantiateScheme ts >>= assertNoPred
                    unify a inst t
         unifyResults <- forM (Set.toList tss) $ \instScheme -> (instScheme, ) <$> runSubInfer (unifAction instScheme >> getState)
         let survivors = filter (isRight . snd) unifyResults
