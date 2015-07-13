@@ -13,15 +13,13 @@ module Infernu.Infer
 
 
 import           Control.Monad      (foldM, forM)
-import qualified Data.Graph.Inductive as Graph
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
-import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as Set
 import           Data.Char          (isUpper)
 
-import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, squotes)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent)
 
 import           Infernu.Prelude
 import qualified Infernu.Builtins.Operators   as Operators
@@ -33,9 +31,6 @@ import           Infernu.Types
 import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyl, tryMakeRow)
 
 
-
-getQuantificands :: TypeScheme -> [TVarName]
-getQuantificands (TScheme tvars _) = tvars
 
 getAnnotations :: Exp a -> [a]
 getAnnotations = foldr (:) []

@@ -55,7 +55,6 @@ module Infernu.Types
        , singletonSubst
        , VarId(..)
        , NameSource(..)
-       , addEquivalence
        , VarNames(freeTypeVars, mapVarNames)
        , EPropName(..)
        , mapTopAnnotation
@@ -69,7 +68,6 @@ import qualified Data.Map.Strict             as Map
 import Data.Map.Strict             (Map)
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
-import qualified Data.Graph.Inductive      as Graph
 import qualified Text.Parsec.Pos           as Pos
 import Text.PrettyPrint.ANSI.Leijen (Doc)
 import Data.Hashable (Hashable(..))
@@ -539,25 +537,6 @@ instance Substable InferState where
   applySubst s is = is { varSchemes = applySubst s (varSchemes is)
                        , mainSubst = s `composeSubst` mainSubst is
                        }
-
--- | Adds a pair of equivalent items to an equivalence map.
--- >>> import Infernu.Pretty
--- >>> let m1 = addEquivalence 1 2 Map.empty
--- >>> pretty m1
--- "Map (b => Set {b, c}, c => Set {b, c})"
--- >>> pretty $ addEquivalence 1 3 m1
--- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
--- >>> pretty $ addEquivalence 3 1 m1
--- "Map (b => Set {b, c, d}, c => Set {b, c, d}, d => Set {b, c, d})"
--- >>> pretty $ addEquivalence 4 5 m1
--- "Map (b => Set {b, c}, c => Set {b, c}, e => Set {e, f}, f => Set {e, f})"
--- >>> pretty $ addEquivalence 1 4 $ addEquivalence 4 5 m1
--- "Map (b => Set {b, c, e, f}, c => Set {b, c, e, f}, e => Set {b, c, e, f}, f => Set {b, c, e, f})"
-addEquivalence :: TVarName -> TVarName -> Graph.Gr QualType () -> Graph.Gr QualType ()
-addEquivalence x y gr = Graph.insEdge (unTVarName x, unTVarName y, ()) . insTVar x . insTVar y $ gr
-    where insTVar tv g = if Graph.gelem (unTVarName tv) g
-                         then g
-                         else Graph.insNode (unTVarName tv, qualEmpty $ Fix . TBody $ TVar tv) g
 
 
 ----------------------------------------------------------------------

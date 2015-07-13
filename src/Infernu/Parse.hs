@@ -29,7 +29,7 @@ errorNotSupported :: (Show a, ES3PP.Pretty b) => String -> a -> b -> c
 errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES3PP.prettyPrint expr)
 
 foldStmts :: Show a => FuncScope -> [ES3.Statement a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
-foldStmts f [] expr = expr
+foldStmts _ [] expr = expr
 foldStmts f [x] expr = fromStatement f x expr
 foldStmts f (x:xs) expr = fromStatement f x (foldStmts f xs expr)
 
@@ -58,16 +58,16 @@ litBool z b = ELit (gen z) (LitBoolean b)
 
 fromStatement :: Show a => FuncScope -> ES3.Statement a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 fromStatement f (ES3.BlockStmt _ stmts) = foldStmts f stmts
-fromStatement f (ES3.EmptyStmt _) = id
-fromStatement f (ES3.ExprStmt z (ES3.AssignExpr z' op target expr)) = \k -> toAssignExpr f z op target expr $ Just k
+fromStatement _ (ES3.EmptyStmt _) = id
+fromStatement f (ES3.ExprStmt z (ES3.AssignExpr _ op target expr)) = \k -> toAssignExpr f z op target expr $ Just k
 fromStatement f (ES3.ExprStmt z e) = singleStmt (gen z) $ fromExpression f e
 fromStatement f (ES3.IfStmt z pred' thenS elseS) = mkIf f z pred' thenS elseS
 fromStatement f (ES3.IfSingleStmt z pred' thenS) = mkIf f z pred' thenS (ES3.EmptyStmt z)
 -- TODO: The while/do conversion is hacky
 fromStatement f (ES3.WhileStmt z pred' loopS) = chainExprs z (EArray (gen z) [fromExpression f pred', litBool z False]) $ fromStatement f loopS
 fromStatement f (ES3.DoWhileStmt z loopS pred') = chainExprs z (EArray (gen z) [fromExpression f pred', litBool z False]) $ fromStatement f loopS
-fromStatement f (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
-fromStatement f (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
+fromStatement _ (ES3.BreakStmt _ _) = id -- TODO verify we can ignore this
+fromStatement _ (ES3.ContinueStmt _ _) = id -- TODO verify we can ignore this
 -- try/catch/finally are indepdendent branches that shouldn't be sharing context. catch is a like an
 -- abstraction over the (optional) exception-bound name.
 fromStatement f (ES3.TryStmt z stmt mCatch mFinally) = chainExprs z catchExpr $ parallelStmts f z ([stmt] ++ finallyS)
@@ -77,8 +77,8 @@ fromStatement f (ES3.TryStmt z stmt mCatch mFinally) = chainExprs z catchExpr $ 
         finallyS = case mFinally of
                     Just f' -> [f']
                     Nothing -> []
-fromStatement f (ES3.ThrowStmt _ _) = id
-fromStatement f s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
+fromStatement _ (ES3.ThrowStmt _ _) = id
+fromStatement _ s@(ES3.WithStmt z _ _) = errorNotSupported "with" z s
 fromStatement f s@(ES3.ForInStmt z init' expr body) = case init' of
                                                         ES3.ForInVar (ES3.Id _ _) -> errorNotSupported "'for..in' with var decl (var hoisting would occur)" z s -- ELet (gen z') name (ELit (gen z') $ LitString "") (foldStmts [body] k)
                                                         ES3.ForInLVal (ES3.LVar z' name) -> chainExprs z' (assignToVar z' name str' Nothing) body'
@@ -180,7 +180,7 @@ collectVars (ES3.TryStmt _ stmt mCatch mFinally) = \s -> foldr collectVars s (st
                     Just f -> [f]
                     Nothing -> []
 collectVars (ES3.ThrowStmt _ _) = id
-collectVars (ES3.WithStmt _ _ stmt) = error "Not supported: with" -- collectVars stmt
+collectVars (ES3.WithStmt _ _ _) = error "Not supported: with" -- collectVars stmt
 collectVars (ES3.ForInStmt _ (ES3.ForInVar (ES3.Id _ name)) expr stmt) = addDeclVar name . collectVarsE expr . collectVars stmt
 collectVars (ES3.ForInStmt _ (ES3.ForInLVal lval) expr stmt) = collectVarsLVal lval . collectVarsE expr . collectVars stmt
 collectVars (ES3.LabelledStmt _ _ stmt) = collectVars stmt
@@ -195,7 +195,7 @@ collectVars (ES3.FunctionStmt _ _ argNames stmts) = collectFuncVars argNames stm
 collectVars (ES3.ReturnStmt _ e) = collectVarsMaybeExpr e
 
 collectVarDecl :: ES3.VarDecl a -> FuncScope -> FuncScope
-collectVarDecl (ES3.VarDecl a (ES3.Id _ name) expr) = addDeclVar name . collectVarsMaybeExpr expr
+collectVarDecl (ES3.VarDecl _ (ES3.Id _ name) expr) = addDeclVar name . collectVarsMaybeExpr expr
 
 collectVarsLVal :: ES3.LValue a -> FuncScope -> FuncScope
 collectVarsLVal (ES3.LVar _ name) = addMutableVar name
@@ -266,7 +266,7 @@ toNamedAbs f z args stmts (ES3.Id zn name) letBody = let abs' = addDecl zn name 
                                                      in ELet (gen z) name abs' letBody
 
 chainDecls :: Show a => FuncScope -> [ES3.VarDecl a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
-chainDecls f [] k = k
+chainDecls _ [] k = k
 chainDecls f (ES3.VarDecl z' (ES3.Id _ name) v:xs) k = ELet (gen z') name (ref' v') (chainDecls f xs k)
     where ref' = if Set.member name (mutableVars f)
                  then mkRef z'
@@ -285,12 +285,12 @@ makeThis :: Show a => a -> Exp a
 makeThis z = ELit z $ LitEmptyThis
 
 fromExpression :: Show a => FuncScope -> ES3.Expression a -> Exp (GenInfo, a)
-fromExpression f (ES3.StringLit z s) = ELit (src z) $ LitString s
-fromExpression f (ES3.RegexpLit z s g i) = ELit (src z) $ LitRegex s g i
-fromExpression f (ES3.BoolLit z s) = ELit (src z) $ LitBoolean s
-fromExpression f (ES3.IntLit z s) = ELit (src z) (LitNumber $ fromIntegral s)
-fromExpression f (ES3.NumLit z s) = ELit (src z) $ LitNumber s
-fromExpression f (ES3.NullLit z) = ELit (src z) LitNull
+fromExpression _ (ES3.StringLit z s) = ELit (src z) $ LitString s
+fromExpression _ (ES3.RegexpLit z s g i) = ELit (src z) $ LitRegex s g i
+fromExpression _ (ES3.BoolLit z s) = ELit (src z) $ LitBoolean s
+fromExpression _ (ES3.IntLit z s) = ELit (src z) (LitNumber $ fromIntegral s)
+fromExpression _ (ES3.NumLit z s) = ELit (src z) $ LitNumber s
+fromExpression _ (ES3.NullLit z) = ELit (src z) LitNull
 fromExpression f (ES3.ArrayLit z exprs) = EArray (src z) $ map (fromExpression f) exprs
 fromExpression f (ES3.ObjectLit z props) = let stringProps = map (fromPropString . fst) props
                                            in if all (\x -> x /= Nothing) stringProps
@@ -331,7 +331,7 @@ fromExpression f e@(ES3.ListExpr z exprs) =
       -- Should the let here use an allocated name here?
       xs -> ELet (gen z) poo (ETuple (gen z) (tail exprs')) (head exprs')
           where exprs' = reverse . map (fromExpression f) $ xs
-fromExpression f (ES3.ThisRef z) = EVar (src z) "this"
+fromExpression _ (ES3.ThisRef z) = EVar (src z) "this"
 fromExpression f (ES3.DotRef z expr propId) = EProp (src z) (fromExpression f expr) (EPropName $ ES3.unId propId)
 fromExpression f (ES3.NewExpr z expr argExprs) = ENew (src z) (fromExpression f expr) (map (fromExpression f) argExprs)
 --  ELet z "__this__" (ERow z True []) (ELet z "_bla_" (EApp z (fromExpression f expr) ((EVar z "__this__") : map (fromExpression f) argExprs)) (EVar z "__this__"))
@@ -346,7 +346,7 @@ fromExpression f e@(ES3.PrefixExpr z op expr) =
     -- all the rest are expected to exist as unary builtin functions
     _ -> EApp (src z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression f expr]
 fromExpression f (ES3.InfixExpr z op e1 e2) = EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression f e1, fromExpression f e2]
-fromExpression f (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name (addConstant z op (applyDeref z $ EVar (src z) name)) Nothing
+fromExpression _ (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name (addConstant z op (applyDeref z $ EVar (src z) name)) Nothing
 fromExpression f (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty f z objExpr (EPropName name) (addConstant z op (EProp (src z) objExpr' (EPropName name))) Nothing
   where objExpr' = fromExpression f objExpr
 fromExpression f (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex f z objExpr idxExpr $ addConstant z op (getIndex f z objExpr idxExpr)

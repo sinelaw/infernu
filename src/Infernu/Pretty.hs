@@ -10,7 +10,6 @@ import qualified Infernu.Builtins.Names as Names
 
 import           Data.Char                    (chr, ord)
 import qualified Data.Digits                  as Digits
-import qualified Data.Graph.Inductive         as Graph
 import qualified Data.List                    as List
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
@@ -264,9 +263,6 @@ instance Pretty VarId where
 
 instance (Ord t, VarNames t, Pretty t) => Pretty (Class t) where
     pretty c = braces $ string "instances = " <+> pretty (classInstances c)
-
-instance (Show a, Show b) => Pretty (Graph.Gr a b) where
-    pretty = text . Graph.prettify
 
 instance Pretty InferState where
     pretty (InferState ns sub vs tn cs pu) =

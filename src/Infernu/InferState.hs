@@ -41,12 +41,11 @@ module Infernu.InferState
          )
        where
 
-import           Control.Monad                (foldM, forM, forM_, liftM2, when)
+import           Control.Monad                (foldM, forM, liftM2)
 import           Control.Monad.Trans          (lift)
 import           Control.Monad.Trans.Either   (EitherT (..), bimapEitherT, left, runEitherT)
 import           Control.Monad.Trans.State    (StateT (..), evalStateT, get, mapStateT, modify, put)
 import           Data.Foldable                (msum)
-import qualified Data.Graph.Inductive         as Graph
 
 import           Data.Functor.Identity        (Identity (..), runIdentity)
 import qualified Data.List                    as List
