@@ -267,13 +267,13 @@ toNamedAbs f z args stmts (ES3.Id zn name) letBody = let abs' = addDecl zn name 
 
 chainDecls :: Show a => FuncScope -> [ES3.VarDecl a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 chainDecls _ [] k = k
-chainDecls f (ES3.VarDecl z' (ES3.Id _ name) v:xs) k = ELet (gen z') name (ref' v') (chainDecls f xs k)
+chainDecls f (ES3.VarDecl z' (ES3.Id _ name) v:xs) k = ELet (gen z') name v' (chainDecls f xs k)
     where ref' = if Set.member name (mutableVars f)
                  then mkRef z'
                  else id
           v' = case v of
-                 Just v'' -> addDecl z' name $ fromExpression f v''
-                 Nothing -> (ELit (gen z') LitUndefined)
+                 Just v'' -> addDecl z' name $ ref' $ fromExpression f v''
+                 Nothing -> ref' (ELit (gen z') LitUndefined)
 
 mkRef :: a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
 mkRef z x = EApp (gen z) (EVar (gen z) refOp) [x]
