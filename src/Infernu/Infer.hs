@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections   #-}
 
@@ -22,7 +21,7 @@ import           Data.Char          (isUpper)
 import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent)
 
 import           Infernu.Prelude
-import qualified Infernu.Builtins.Operators   as Operators
+import qualified Infernu.Builtins   as Builtins
 import           Infernu.InferState
 import           Infernu.Lib        (safeLookup)
 import           Infernu.Log
@@ -406,4 +405,4 @@ test e = case runTypeInference e of
 
 
 runTypeInference :: Exp Source -> Either TypeError (Exp (Source, QualType))
-runTypeInference e = runInfer $ typeInference Operators.builtins e
+runTypeInference e = runInfer $ typeInference Builtins.builtins e
