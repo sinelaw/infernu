@@ -17,13 +17,8 @@ import           Data.Set             (Set)
 import qualified Data.Set             as Set
 
 import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), align, text, (<+>), vsep, align, indent, empty, parens, Doc)
-
+import qualified Infernu.Builtins as Builtins
 import           Infernu.Prelude
-import           Infernu.Builtins.Array (arrayRowType)
-import           Infernu.Builtins.Date (dateRowType)
-import           Infernu.Builtins.Regex (regexRowType)
-import           Infernu.Builtins.String (stringRowType)
-import           Infernu.Builtins.StringMap (stringMapRowType)
 import           Infernu.Decycle
 import           Infernu.InferState
 import           Infernu.Lib          (matchZip)
@@ -34,11 +29,11 @@ import           Infernu.Types
 ----------------------------------------------------------------------
 
 tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
-tryMakeRow (TCons TStringMap [t]) = Just <$> stringMapRowType t
-tryMakeRow (TCons TArray [t]) = Just <$> arrayRowType t
-tryMakeRow (TBody TRegex) = Just <$> regexRowType
-tryMakeRow (TBody TString) = Just <$> stringRowType
-tryMakeRow (TBody TDate) = Just <$> dateRowType
+tryMakeRow (TCons TStringMap [t]) = Just <$> Builtins.stringMapRowType t
+tryMakeRow (TCons TArray [t]) = Just <$> Builtins.arrayRowType t
+tryMakeRow (TBody TRegex) = Just <$> Builtins.regexRowType
+tryMakeRow (TBody TString) = Just <$> Builtins.stringRowType
+tryMakeRow (TBody TDate) = Just <$> Builtins.dateRowType
 tryMakeRow (TRow _ rl) = Just <$> return rl
 tryMakeRow (TFunc targs tres) = Just <$> (return
                                           . TRowProp (TPropGetName EPropFun) (schemeEmpty $ Fix $ TFunc targs tres)
