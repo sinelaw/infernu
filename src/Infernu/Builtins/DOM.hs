@@ -34,9 +34,9 @@ eventProps eventTarget =
     , ("eventPhase", R $ ty number)
 
 --   void stopPropagation();
-    , ("stopPropagation", RW $ ts [0] $ funcN [tvar 0])
+    , ("stopPropagation", RW $ ts [0] $ funcN [tvar 0] undef)
 --   void stopImmediatePropagation();
-    , ("stopImmediatePropagation", RW $ ts [0] $ funcN [tvar 0])
+    , ("stopImmediatePropagation", RW $ ts [0] $ funcN [tvar 0] undef)
 
 --   [Pure]
 --   readonly attribute boolean bubbles;

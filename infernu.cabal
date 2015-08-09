@@ -54,8 +54,7 @@ library
   hs-source-dirs:      src
   exposed-modules:   Infernu.Builtins.Array
                    , Infernu.Builtins.Date
-                   -- WIP: Dom
-                   --, Infernu.Builtins.DOM
+                   , Infernu.Builtins.DOM
                    , Infernu.Builtins.Math
                    , Infernu.Builtins.Names
                    , Infernu.Builtins.Object
