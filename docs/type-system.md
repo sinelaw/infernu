@@ -17,7 +17,7 @@ The type system features:
 * Polymorphic "methods" are supported, so rows may have rank-2 types.
 * Mutability is not represented in the types, but affects type inference (polymorphism is restricted for mutable variables).
 
-**Note**: Currently, all types are inferred. Support for type annotations for specifically constraining or for documentation is planned. 
+**Note**: Currently, all types are inferred. Support for type annotations for specifically constraining or for documentation is planned.
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
@@ -75,7 +75,7 @@ Type variables represent a type that is not fully constrained to any particular 
 
 ### Polymorphic vs. Free Type Variables
 
-There are two cases where type variables are needed: 
+There are two cases where type variables are needed:
 
 * A *polymorphic* type variable is **allowed to vary**. For example, a function that can take any type for its argument and returns a String, can be represented as `a -> String` but the type variable `a` must be allowed to vary. Being "allowed to vary" means: if we use this function in a way that forces `a` to be, say, the type `Number`, doesn't mean that now `a` will always be `Number`: other pieces of code can use our function in a different way, having `a` be whatever other type. A polymorphic type variable such as this `a` is known as *universally quantified* (or "foralled"). The type of that function is really `forall a. a -> String`, or "given any type, call it `a`, this function will have the type `a -> String`" (Currently the pretty-printing mechanism of Infernu doesn't print out the "forall" parts).
 * A *free* (or non-polymorphic) type variable is used when a certain type is not known. If we add more code to the program we may end up determining what the type variable should represent, for example some type variable `b` that appears throughout the code before the change, may turn out to be a `String` due to a new line of code that uses it as such.
@@ -102,13 +102,13 @@ In Infernu, the value restriction isn't enough: unlike ML-family languages, Infe
 * `[a]` - Arrays of items of type `a`
 * `Map a` - Maps from `String` to `a`. Maps correspond to plain JS objects that are used via dynamic keys (e.g. `obj[key] = value`). See the section "row types" for another view of JS objects.
 
-In plain JS, arrays are *heterogeneous* and can contain a mix of values: numbers, booleans, objects, functions, etc. For example, `['a', 3, { b: [] } ]` is a valid JS array. In Infernu, arrays are restricted to be *homogeneous*: all items must be of the same type. 
+In plain JS, arrays are *heterogeneous* and can contain a mix of values: numbers, booleans, objects, functions, etc. For example, `['a', 3, { b: [] } ]` is a valid JS array. In Infernu, arrays are restricted to be *homogeneous*: all items must be of the same type.
 
 Arrays, string maps, and plain strings can all be accessed using the bracket notation in JS. Infernu defines instances of all three types for the `Indexable` type class. More on that later.
 
 ## Functions
 
-Functions are similar to other parameterized types, but are represented slightly differently to support `this` and because they can be constructors (when using the `new` keyword). 
+Functions are similar to other parameterized types, but are represented slightly differently to support `this` and because they can be constructors (when using the `new` keyword).
 
 Notation:
 
@@ -207,3 +207,49 @@ TODO
 
 <!--  LocalWords:  Damas Hindley Milner equi foralled forall Indexable
  -->
+
+# Optional Parameters #
+
+A function of (say) four arguments has a type of the (uncurried) form:
+
+    (a1, a2, a3, a4) -> b
+
+Let's assume the last two arguments are optional. In JavaScript optional arguments implicitly take on the value `undefined`. The most natural translation of this to a strong type system is a `Maybe` type that defaults to `Nothing`. So our type is now:
+
+    (a1, a2, Maybe a3, Maybe a4) -> b
+
+Now, a caller is not required to explicitly pass the optional arguments (after all, they're optional). The caller should be able to treat the function type as:
+
+    (a1, a3) -> b
+
+Or, if passing in a value for the first optional parameter, as:
+
+    (a1, a3, Maybe a3) -> b
+
+`Nothing` is a valid value should be represented, so we don't hide the `Maybe`.
+
+The fact that the caller sees a different type than the actual function, brings to mind *row-type polymorphism*. We replace the arguments n-tuple with a row. For now, these records will have anonymous fields:
+
+    { a1, a2, Maybe a3, Maybe a4 } -> b
+
+Now, we can have the caller require the following type:
+
+    { a1, a2 | r } -> b
+
+Which will "work" regardless of the how many extra parameters the callee has.
+
+Unfortunately, this method doesn't enforce optional parameters - it allows callers to omit parameters arbitrarily, even if they aren't optional. The solution is to require the polymorphic "remainder" to consist of parameters that are `Maybe`-types:
+
+    r ~ { Maybe t1, Maybe t2, ... }
+
+The constraint on `r` is that it must correspond to a row of only `Maybe`-typed fields.
+
+(*Alternatively, and arguably simpler for unification, we can also say:*
+
+    r ~ Maybe { t1, t2, ... }
+
+*the equivalence holds because the caller isn't specifying any of the parameters in the remainder record. However, wrapping the entire row remainder in a single `Maybe` is less flexible than wrapping each optional field individually because it won't exactly match the callee's type. *)
+
+
+
+
