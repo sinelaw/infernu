@@ -6,53 +6,62 @@ import           Infernu.Builtins.Util
 import           Infernu.Prelude
 import           Infernu.Types
 
-data PropType t = R t | RW t
+-- DOMHighResTimeStamp
+timestamp = number -- TODO
+
 -- [Constructor(DOMString type, optional EventInit eventInitDict),
 --  Exposed=(Window,Worker,System)]
 -- interface Event {
 eventProps eventTarget =
 --   [Pure]
 --   readonly attribute DOMString type;
-    [ ("type", R $ ty string)
+    [ ("type", ty string)
 --   [Pure]
 --   readonly attribute EventTarget? target;
-    , ("target", R $ ty eventTarget) -- TODO: "nullable"
+    , ("target", ty eventTarget) -- TODO: "nullable"
 --   [Pure]
 --   readonly attribute EventTarget? currentTarget;
-    , ("currentTarget", R $ ty eventTarget)
+    , ("currentTarget", ty eventTarget)
 
 --   const unsigned short NONE = 0;
-    , ("NONE", R $ ty number)
+    , ("NONE", ty number)
 --   const unsigned short CAPTURING_PHASE = 1;
-    , ("CAPTURING_PHASE", R $ ty number)
+    , ("CAPTURING_PHASE", ty number)
 --   const unsigned short AT_TARGET = 2;
-    , ("AT_TARGET", R $ ty number)
+    , ("AT_TARGET", ty number)
 --   const unsigned short BUBBLING_PHASE = 3;
-    , ("BUBBLING_PHASE", R $ ty number)
+    , ("BUBBLING_PHASE", ty number)
 --   [Pure]
 --   readonly attribute unsigned short eventPhase;
-    , ("eventPhase", R $ ty number)
+    , ("eventPhase", ty number)
 
 --   void stopPropagation();
-    , ("stopPropagation", RW $ ts [0] $ funcN [tvar 0] undef)
+    , ("stopPropagation", ts [0] $ funcN [tvar 0] undef)
 --   void stopImmediatePropagation();
-    , ("stopImmediatePropagation", RW $ ts [0] $ funcN [tvar 0] undef)
+    , ("stopImmediatePropagation", ts [0] $ funcN [tvar 0] undef)
 
 --   [Pure]
 --   readonly attribute boolean bubbles;
+    , ("bubbles", ty boolean)
 --   [Pure]
 --   readonly attribute boolean cancelable;
+    , ("cancelable", ty boolean)
 --   void preventDefault();
+    , ("preventDefault", ts [0] $ funcN [tvar 0] undef)
 --   [Pure]
 --   readonly attribute boolean defaultPrevented;
+    , ("defaultPrevented", ty boolean)
 
 --   [Unforgeable, Pure]
 --   readonly attribute boolean isTrusted;
+    , ("isTrusted", ty boolean)
 --   [Pure]
 --   readonly attribute DOMHighResTimeStamp timeStamp;
+    , ("timeStamp", ty timestamp)
 
 --   [Throws]
 --   void initEvent(DOMString type, boolean bubbles, boolean cancelable);
+    , ("initEvent", ts [0] $ funcN [tvar 0, string, boolean, boolean] undef)
     ]
 -- };
 
@@ -69,15 +78,15 @@ eventTargetProps eventListener event =
   --                       EventListener? listener,
   --                       optional boolean capture = false,
   --                       optional boolean? wantsUntrusted = null);
-    [ ("addEventListener", ts [0] $ funcN [tvar 0, string, eventListener]) -- TODO optional: , boolean, boolean
+    [ ("addEventListener", ts [0] $ funcN [tvar 0, string, eventListener] undef) -- TODO optional: , boolean, boolean
   -- [Throws]
   -- void removeEventListener(DOMString type,
   --                          EventListener? listener,
   --                          optional boolean capture = false);
-    , ("removeEventListener", ts [0] $ funcN [tvar 0, string, eventListener]) -- boolean
+    , ("removeEventListener", ts [0] $ funcN [tvar 0, string, eventListener] undef) -- boolean
   -- [Throws]
   -- boolean dispatchEvent(Event event);
-    , ("dispatchEvent", ts [0] $ funcN [tvar 0, event])
+    , ("dispatchEvent", ts [0] $ funcN [tvar 0, event] boolean)
     ]
 -- };
 
