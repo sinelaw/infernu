@@ -208,48 +208,19 @@ TODO
 <!--  LocalWords:  Damas Hindley Milner equi foralled forall Indexable
  -->
 
-# Optional Parameters #
+# Optional Arguments #
 
-A function of (say) four arguments has a type of the (uncurried) form:
+A JavaScript function call such as: `foo(x, y)` is translated into an application of `foo` on an anonymous open row containing `x` and `y` as fields `0` and `1`:
 
-    (a1, a2, a3, a4) -> b
+    { 0 = x, 1 = y }
 
-Let's assume the last two arguments are optional. In JavaScript optional arguments implicitly take on the value `undefined`. The most natural translation of this to a strong type system is a `Maybe` type that defaults to `Nothing`. So our type is now:
+The type of this anonymous row is:
 
-    (a1, a2, Maybe a3, Maybe a4) -> b
+    { 0: a, 1: b | r }
 
-Now, a caller is not required to explicitly pass the optional arguments (after all, they're optional). The caller should be able to treat the function type as:
+where the following presupposition holds:
 
-    (a1, a3) -> b
-
-Or, if passing in a value for the first optional parameter, as:
-
-    (a1, a3, Maybe a3) -> b
-
-`Nothing` is a valid value should be represented, so we don't hide the `Maybe`.
-
-The fact that the caller sees a different type than the actual function, brings to mind *row-type polymorphism*. We replace the arguments n-tuple with a row. For now, these records will have anonymous fields:
-
-    { a1, a2, Maybe a3, Maybe a4 } -> b
-
-Now, we can have the caller require the following type:
-
-    { a1, a2 | r } -> b
-
-Which will "work" regardless of the how many extra parameters the callee has.
-
-Unfortunately, this method doesn't enforce optional parameters - it allows callers to omit parameters arbitrarily, even if they aren't optional. The solution is to require the polymorphic "remainder" to consist of parameters that are `Maybe`-types:
-
-    r ~ { Maybe t1, Maybe t2, ... }
-
-The constraint on `r` is that it must correspond to a row of only `Maybe`-typed fields.
-
-(*Alternatively, and arguably simpler for unification, we can also say:*
-
-    r ~ Maybe { t1, t2, ... }
-
-*the equivalence holds because the caller isn't specifying any of the parameters in the remainder record. However, wrapping the entire row remainder in a single `Maybe` is less flexible than wrapping each optional field individually because it won't exactly match the callee's type. *)
-
+> all fields of r have type b satisfying: exists a. b ~ Maybe a
 
 
 
