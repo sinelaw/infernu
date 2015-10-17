@@ -150,7 +150,8 @@ data TRowList t = TRowProp !TProp !(TScheme t) !(TRowList t)
                   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 data FType t = TBody !TBody
-             | TCons !TConsName ![t]
+             | TCons !TConsName
+             | TAp !t !t
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
              | TFunc ![t] !t
@@ -160,6 +161,15 @@ data FType t = TBody !TBody
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type Type = Fix FType
+
+
+unrollTAp :: Type -> [Type]
+unrollTAp (Fix (TAp t1 t2)) = t1 : unrollTAp t2
+unrollTAp x = [x]
+
+rollTAp :: Type -> [Type] -> Type
+rollTAp t [] = t
+rollTAp t (targ:ts) = Fix $ TAp t (rollTAp targ ts)
 
 ----------------------------------------------------------------------
 
@@ -385,8 +395,12 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow _ tRowList)) -> tRowList
-      Just (Fix (TCons (TName tid) ts)) -> TRowRec tid ts
-      Just (Fix (TBody (TVar n))) -> TRowEnd $ Just $ RowTVar n
+--      Just (Fix (TCons (TName tid) ts)) -> TRowRec tid ts
+      Just tap@(Fix (TAp _ _)) -> case unrollTAp tap of
+          Fix (TCons (TName tid k)) : targs -> TRowRec tid targs
+          -- TODO check k
+          _ -> error $ "Cannot subst row variable because type application isn't on a constructor"
+      Just (Fix (TBody (TVar n))) | kind n == KRow -> TRowEnd $ Just $ RowTVar n
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
   applySubst s (TRowRec tid ts) = TRowRec tid $ applySubst s ts

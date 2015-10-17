@@ -31,8 +31,10 @@ import           Infernu.Expr         (EPropName(..))
 ----------------------------------------------------------------------
 
 tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
-tryMakeRow (TCons TStringMap [t]) = Just <$> Builtins.stringMapRowType t
-tryMakeRow (TCons TArray [t]) = Just <$> Builtins.arrayRowType t
+tryMakeRow tap@(TAp _ _) = case unrollTAp (Fix tap) of
+    (Fix (TCons TStringMap) : [t]) -> Just <$> Builtins.stringMapRowType t
+    (Fix (TCons TArray) : [t]) -> Just <$> Builtins.arrayRowType t
+    _ -> return Nothing
 tryMakeRow (TBody TRegex) = Just <$> Builtins.regexRowType
 tryMakeRow (TBody TString) = Just <$> Builtins.stringRowType
 tryMakeRow (TBody TDate) = Just <$> Builtins.dateRowType
