@@ -61,6 +61,8 @@ import           Infernu.Lib
 import           Infernu.Log
 import           Infernu.Prelude
 import           Infernu.Pretty               ()
+import           Infernu.Expr                 (Exp(..), EVarName)
+import           Infernu.Source               (Source(..), TypeError(..))
 import           Infernu.Types
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.

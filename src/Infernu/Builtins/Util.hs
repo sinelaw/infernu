@@ -7,6 +7,7 @@ import           Control.Monad      (forM)
 import           Infernu.InferState (fresh, Infer)
 import           Infernu.Lib        (safeLookup)
 import           Infernu.Prelude
+import           Infernu.Expr       (EPropName(..))
 import           Infernu.Types
 
 func :: Type -> Type -> Type -> Type

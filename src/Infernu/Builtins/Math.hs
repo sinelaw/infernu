@@ -5,6 +5,7 @@ module Infernu.Builtins.Math
 import           Infernu.Builtins.Util
 import           Infernu.Prelude
 import           Infernu.Types
+import           Infernu.Expr       (EPropName(..))
 
 numProp :: String -> TRowList Type -> TRowList Type
 numProp name = TRowProp (TPropGetName $ EPropName name) $ ts [] number

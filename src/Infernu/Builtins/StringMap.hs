@@ -3,6 +3,7 @@ module Infernu.Builtins.StringMap where
 import           Infernu.Builtins.Util
 import           Infernu.Prelude
 import           Infernu.Types
+import           Infernu.Expr       (EPropName(..))
 
 stringMapRowType :: Monad m => Type -> m (TRowList Type)
 stringMapRowType elemType = return

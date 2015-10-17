@@ -9,6 +9,7 @@ import           Infernu.Builtins.Util
 import           Infernu.InferState    (Infer)
 import           Infernu.Prelude
 import           Infernu.Types
+import           Infernu.Expr       (EPropName(..))
 
 arrayProps :: Type -> [(String, TypeScheme)]
 arrayProps elemType = let aType = array elemType in

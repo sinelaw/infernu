@@ -7,7 +7,8 @@ import qualified Text.Parsec.Pos     as Pos
 
 import           Text.PrettyPrint.ANSI.Leijen (Pretty (..))
 import           Infernu.Options     (Options (..), opts)
-import           Infernu.Types       (QualType, Source (..))
+import           Infernu.Types       (QualType)
+import           Infernu.Source      (Source(..))
 import           Infernu.Util
 import           Infernu.Prelude
 

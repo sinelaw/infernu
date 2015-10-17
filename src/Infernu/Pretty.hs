@@ -5,6 +5,8 @@ module Infernu.Pretty where
 
 
 import           Infernu.Prelude
+import           Infernu.Expr
+import           Infernu.Source
 import           Infernu.Types
 import qualified Infernu.Builtins.Names as Names
 

@@ -16,7 +16,8 @@ import           Infernu.Options             (Options(..))
 import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
-import           Infernu.Types               (GenInfo (..), QualType, Source (..), TypeError (..))
+import           Infernu.Types               (QualType)
+import           Infernu.Source              (GenInfo(..), Source(..), TypeError(..))
 
 zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs

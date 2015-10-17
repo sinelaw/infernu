@@ -6,7 +6,8 @@ import           Control.Arrow                    ((***))
 import           Data.Maybe                       (catMaybes, mapMaybe, fromMaybe)
 import qualified Infernu.Log                      as Log
 import           Infernu.Prelude
-import           Infernu.Types
+import           Infernu.Expr
+import           Infernu.Source                   (GenInfo(..), Source(..))
 
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3

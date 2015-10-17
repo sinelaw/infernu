@@ -12,6 +12,7 @@ import           Infernu.Builtins.Math (math)
 import           Infernu.Builtins.Object (object)
 import           Infernu.Builtins.Util
 import qualified Infernu.Builtins.Names as Names
+import           Infernu.Expr       (EPropName(..), EVarName)
 
 unaryFunc :: Type -> Type -> TypeScheme
 unaryFunc t1 t2 = ts [0] $ Fix $ TFunc [tvar 0, t1] t2
