@@ -1,13 +1,13 @@
 # ![Infernu](docs/infernu.png)
 
-Static type inference for JavaScript. 
+Static type inference for JavaScript.
 
 ## Features
 
 * It's just JavaScript: runs as-is in your browser. No transpilation or compilation required for running.
 * Full type inference: no type annotations necessary.
 * Safety: a strict type system with no workarounds sets a high bar for code correctness. *So you can sleep at night!*
-* **Work in progress**: it can set your computer on fire! 
+* **Work in progress**: it can set your computer on fire!
 
 ### Type System
 
@@ -34,7 +34,7 @@ Currently (hopefully) finalizing the type system, after which the next big tasks
     cabal install
 
 Usage: see `infernu --help`
-    
+
 Quick example usage:
 
     echo 'function getLength(x) { return x.length; }' > getLength.js
@@ -78,7 +78,7 @@ The `infernu` executable will be placed in `infernu/.cabal-sandbox/bin`
     cabal build
     cd test
     ./test.sh
-    
+
 Currently there are still a few failing tests due to unclosed issues in the type system.
 
 The file `test/fail.txt` records the test failures and is kept in git. This makes it easier to track progress on outstanding bugs.
@@ -186,7 +186,7 @@ The two instances of `Plus` currently defined are the types `Number` and `String
 
 ## Author
 
-Noam Lewis.
+Noam Lewis - [@noam_lewis](https://twitter.com/noam_lewis)
 
 ## Road map
 
@@ -197,7 +197,6 @@ The following needs to be done to make infernu reasonably usable:
 - Add ability to declare types for, or wrap external libraries.
 - Add support for some kind of module system.
 - Better error messages.
-
 
 ## Pending discussion
 
