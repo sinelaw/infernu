@@ -4,6 +4,8 @@ module Infernu.Builtins.TypeClasses
 
 import           Infernu.Prelude
 import           Infernu.Types
+import           Infernu.Builtins.Util
+
 
 typeClasses :: [(ClassName, Class (Fix FType))]
 typeClasses =
@@ -17,8 +19,8 @@ typeClasses =
                                          , schemeEmpty $ Fix $ TBody TString
                                          ]})
     , (ClassName "StringKeys", Class { classInstances =
-                                               [ TScheme [Flex 0] $ qualEmpty $ Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex 0)
-                                               , TScheme [Flex 0] $ qualEmpty $ Fix $ TCons TArray [Fix . TBody . TVar $ Flex 0]
-                                               , TScheme [Flex 0] $ qualEmpty $ Fix $ TCons TStringMap [Fix . TBody . TVar $ Flex 0]
+                                               [ TScheme [Flex 0 KStar] $ qualEmpty $ Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex 0 KStar)
+                                               , TScheme [Flex 0 KStar] $ qualEmpty $ Fix $ tcons TArray [Fix . TBody $ TVar (Flex 0 KStar)]
+                                               , TScheme [Flex 0 KStar] $ qualEmpty $ Fix $ tcons TStringMap [Fix . TBody $ TVar (Flex 0 KStar)]
                                                ]})
     ]

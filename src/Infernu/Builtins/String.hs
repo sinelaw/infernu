@@ -32,7 +32,7 @@ stringProps =
 --
 --  , ("match", ty $ func string regex
 
-  , ("replace", TScheme [Flex 0] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)
+  , ("replace", TScheme [Flex 0 KStar] $ withTypeClass "Pattern" (tvar 0) $ funcN [string, tvar 0, string] string)
   , ("split", ty $ func string string (array string) ) -- TODO review
   ]
 
