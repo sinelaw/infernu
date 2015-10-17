@@ -218,13 +218,15 @@ assertNoPred q =
 unify' :: UnifyF -> Source -> FType (Fix FType) -> FType (Fix FType) -> Infer ()
 
 -- | Type variables
-unify' _ a (TBody (TVar (Flex n))) t = varBind a (Flex n) (Fix t)
-unify' _ a t (TBody (TVar (Flex n))) = varBind a (Flex n) (Fix t)
+unify' _ a (TBody (TVar (Flex n k))) t = varBind a (Flex n k) (Fix t)
+unify' _ a t (TBody (TVar (Flex n k))) = varBind a (Flex n k) (Fix t)
 
 -- | Skolem type "variables"
-unify' _ a t1@(TBody (TVar (Skolem n1))) t2@(TBody (TVar (Skolem n2))) = unless (n1 == n2) $ unificationError a t1 t2
-unify' _ a t1 t2@(TBody (TVar (Skolem _))) = unificationError a t1 t2
-unify' _ a t1@(TBody (TVar (Skolem _))) t2 = unificationError a t1 t2
+unify' _ a t1@(TBody (TVar (Skolem n1 k1))) t2@(TBody (TVar (Skolem n2 k2)))
+    | (n1 == n2) && (k1 == k2) = return ()
+    | otherwise =  unificationError a t1 t2
+unify' _ a t1 t2@(TBody (TVar (Skolem _ _))) = unificationError a t1 t2
+unify' _ a t1@(TBody (TVar (Skolem _ _))) t2 = unificationError a t1 t2
 
 -- | TEmptyThis <- something
 unify' _ _ (TBody TEmptyThis) _ = return ()

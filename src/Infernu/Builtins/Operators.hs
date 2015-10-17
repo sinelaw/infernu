@@ -37,16 +37,17 @@ builtins = Map.fromList [
 
     -- TODO: refOp and derefOp should be data constructors of the built-in Ref type (need to add
     -- support for data constructors)
-    (Names.refOp,          ts [1] $ Fix $ TFunc [tvar 1] (Fix $ TCons TRef [tvar 1])),
-    (Names.refAssignOp,    ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1], tvar 1] (tvar 1)),
-    (Names.derefOp,        ts [1] $ Fix $ TFunc [Fix $ TCons TRef [tvar 1]] (tvar 1)),
+    (Names.refOp,          ts [1] $ Fix $ TFunc [tvar 1] (tcons TRef [tvar 1])),
+    (Names.refAssignOp,    ts [1] $ Fix $ TFunc [tcons TRef [tvar 1], tvar 1] (tvar 1)),
+    (Names.derefOp,        ts [1] $ Fix $ TFunc [tcons TRef [tvar 1]] (tvar 1)),
 
     ("!",            unaryFunc boolean boolean),
     ("~",            unaryFunc number  number),
     ("typeof",       ts [0, 1] $ Fix $ TFunc [tvar 1, tvar 0] string),
     ("instanceof",   ts [0, 1, 2] $ Fix $ TFunc [tvar 2, tvar 0, tvar 1] boolean),
-    ("+",            TScheme [Flex 0, Flex 1] TQual { qualPred = [TPredIsIn (ClassName "Plus") (tvar 1)]
-                                                    , qualType = binarySimpleFunc (tvar 0) (tvar 1) }),
+    ("+",            TScheme [(Flex 0 KStar), (Flex 1 KStar)]
+                     TQual { qualPred = [TPredIsIn (ClassName "Plus") (tvar 1)]
+                           , qualType = binarySimpleFunc (tvar 0) (tvar 1) }),
     ("-",            numOp),
     ("*",            numOp),
     ("/",            numOp),

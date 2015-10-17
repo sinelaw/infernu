@@ -138,21 +138,31 @@ colorFuncs = [ red
 colorBy :: Int -> Doc -> Doc
 colorBy n = colorFuncs!!(n `mod` length colorFuncs)
 
+prettyKind :: Kind -> Doc
+prettyKind k = colon <> colon <+> pretty k
+
 -- |
 -- >>> pretty (0 :: TVarName)
 -- "a"
 -- >>> pretty (26 :: TVarName)
 -- "aa"
 instance Pretty TVarName where
-    pretty tvn = bold $ case tvn of
-                            Flex n -> colorBy n $ string $ ptv n
-                            Skolem n -> colorBy n $ string $ '!' : ptv n
+    pretty tvn =
+        bold $
+        case tvn of
+        Flex n k -> (colorBy n $ string $ ptv n) <+> prettyKind k
+        Skolem n k -> (colorBy n $ string $ '!' : ptv n) <+> prettyKind k
 
 -- instance Pretty Bool where
 --   prettyTab _ x = show x
 
 instance Pretty TypeId where
     pretty (TypeId n) = dullred $ text $ 'R' :  ptv n
+
+instance Pretty Kind where
+    pretty KStar = dullred $ text "*"
+    pretty KRow = dullred $ text "{*}"
+    pretty (KArrow k1 k2) = dullred $ pretty k1 <+> text "->" <+> pretty k2
 
 instance Pretty TBody where
   pretty (TVar n) = pretty n

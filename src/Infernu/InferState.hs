@@ -41,18 +41,19 @@ module Infernu.InferState
          )
        where
 
-import           Control.Monad                (foldM, forM, liftM2)
-import           Control.Monad.Trans          (lift)
-import           Control.Monad.Trans.Either   (EitherT (..), bimapEitherT, left, runEitherT)
-import           Control.Monad.Trans.State    (StateT (..), evalStateT, get, mapStateT, modify, put)
-import           Data.Foldable                (msum)
+import           Control.Arrow (first)
+import           Control.Monad (foldM, forM, liftM2)
+import           Control.Monad.Trans (lift)
+import           Control.Monad.Trans.Either (EitherT (..), bimapEitherT, left, runEitherT)
+import           Control.Monad.Trans.State (StateT (..), evalStateT, get, mapStateT, modify, put)
+import           Data.Foldable (msum)
 
-import           Data.Functor.Identity        (Identity (..), runIdentity)
-import qualified Data.List                    as List
-import qualified Data.Map.Strict              as Map
-import           Data.Maybe                   (fromMaybe)
-import           Data.Set                     (Set)
-import qualified Data.Set                     as Set
+import           Data.Functor.Identity (Identity (..), runIdentity)
+import qualified Data.List as List
+import qualified Data.Map.Strict as Map
+import           Data.Maybe (fromMaybe)
+import           Data.Set (Set)
+import qualified Data.Set as Set
 
 import           Text.PrettyPrint.ANSI.Leijen (Doc, Pretty (..), align, squotes, text, (<+>))
 
@@ -60,9 +61,9 @@ import qualified Infernu.Builtins.TypeClasses
 import           Infernu.Lib
 import           Infernu.Log
 import           Infernu.Prelude
-import           Infernu.Pretty               ()
-import           Infernu.Expr                 (Exp(..), EVarName)
-import           Infernu.Source               (Source(..), TypeError(..))
+import           Infernu.Pretty ()
+import           Infernu.Expr (Exp(..), EVarName)
+import           Infernu.Source (Source(..), TypeError(..))
 import           Infernu.Types
 
 -- | Inference monad. Used as a stateful context for generating fresh type variable names.
@@ -104,8 +105,8 @@ fresh = do
   modify $ \is -> is { nameSource = (nameSource is) { lastName = lastName (nameSource is) + 1 } }
   lastName . nameSource <$> get
 
-freshFlex :: Infer TVarName
-freshFlex = Flex <$> fresh
+freshFlex :: Kind -> Infer TVarName
+freshFlex k = flip Flex k <$> fresh
 
 freshVarId :: Infer VarId
 freshVarId = VarId <$> fresh
@@ -379,7 +380,7 @@ instantiateScheme (TScheme tvarNames t) = do
   return $ mapVarNames replaceVar t
 
 allocTVarInstances :: [TVarName] -> Infer [(TVarName, TVarName)]
-allocTVarInstances tvarNames = forM tvarNames $ \tvName -> (tvName,) . Flex <$> fresh
+allocTVarInstances tvarNames = forM tvarNames $ \tvName -> (tvName,) . flip Flex (kind tvName) <$> fresh
 
 instantiate :: TypeScheme -> Infer QualType
 instantiate = instantiateScheme
@@ -395,7 +396,7 @@ instantiateVar a n env = do
 -- Performs deep skolemisation, retuning the skolem constants and the skolemised type
 skolemiseScheme :: TypeScheme -> Infer ([TVarName], QualType)
 skolemiseScheme (TScheme tvs ty)
-  = do sks1 <- forM tvs $ const (Skolem <$> fresh)
+  = do sks1 <- forM tvs $ \tv -> (flip Skolem (kind tv) <$> fresh)
        let subst = Map.fromList $ zip tvs sks1
            lookup' x = fromMaybe x $ Map.lookup x subst
        (sks2, ty') <- skolemiseType (mapVarNames lookup' ty)

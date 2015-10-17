@@ -9,7 +9,8 @@
 {-# LANGUAGE TupleSections        #-}
 
 module Infernu.Types
-       ( TVarName(..)
+       ( Kind(..), kindArgsNum, karrow, HasKind(..)
+       , TVarName(..)
        , unTVarName
        , setTVarName
        , TBody(..)
@@ -48,6 +49,7 @@ module Infernu.Types
        , VarId(..)
        , NameSource(..)
        , VarNames(freeTypeVars, mapVarNames)
+       , unrollTAp, rollTAp
 #ifdef QUICKCHECK
        , runAllTests
 #endif
@@ -79,19 +81,33 @@ import           Test.QuickCheck.Arbitrary (Arbitrary (..))
 
 ----------------------------------------------------------------------
 
-data TVarName = Flex !Int
-              | Skolem !Int
+data Kind = KStar | KArrow Kind Kind | KRow
+          deriving (Show, Eq, Ord, Generic)
+
+kindArgsNum :: Kind -> Int
+kindArgsNum KStar = 0
+kindArgsNum KRow = 0
+kindArgsNum (KArrow _ k) = 1 + kindArgsNum k
+
+karrow :: Kind -> [Kind] -> Kind
+karrow k [] = k
+karrow k (karg:ks) = KArrow karg $ karrow k ks
+
+instance Hashable Kind
+
+data TVarName = Flex !Int Kind
+              | Skolem !Int Kind
               deriving (Show, Eq, Ord, Generic)
 
 instance Hashable TVarName
 
 unTVarName :: TVarName -> Int
-unTVarName (Flex x) = x
-unTVarName (Skolem x) = x
+unTVarName (Flex x _) = x
+unTVarName (Skolem x _) = x
 
 setTVarName :: TVarName -> Int -> TVarName
-setTVarName (Flex _) y = Flex y
-setTVarName (Skolem _) y = Skolem y
+setTVarName (Flex _ k) y = Flex y k
+setTVarName (Skolem _ k) y = Skolem y k
 
 data TBody = TVar !TVarName
            | TNumber | TBoolean | TString | TRegex | TUndefined | TNull | TEmptyThis | TDate
@@ -101,7 +117,11 @@ newtype TypeId = TypeId Int
                 deriving (Show, Eq, Ord, Generic)
 instance Hashable TypeId where
 
-data TConsName = TArray | TTuple | TName !TypeId | TStringMap | TRef
+data TConsName = TArray
+               | TTuple
+               | TName !TypeId Kind
+               | TStringMap
+               | TRef
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -143,6 +163,39 @@ type Type = Fix FType
 
 ----------------------------------------------------------------------
 
+class HasKind t where
+    kind :: t -> Kind
+
+instance HasKind TVarName where
+    kind (Flex _ k) = k
+    kind (Skolem _ k) = k
+
+instance HasKind TBody where
+    kind (TVar v) = kind v
+    kind _ = KStar
+
+instance HasKind RowTVar where
+    kind _ = KRow
+
+instance HasKind (TRowList t) where
+    kind _ = KRow
+
+instance HasKind TConsName where
+    kind TArray = KArrow KStar KStar
+    kind TStringMap = KArrow KStar KStar
+    kind TRef = KArrow KStar KStar
+    kind TTuple = KArrow KStar (KArrow KStar KStar)
+    kind (TName _ k) = k
+
+instance HasKind Type where
+    kind (Fix (TBody b)) = kind b
+    kind (Fix (TCons c)) = kind c
+    kind (Fix (TAp t _)) = case kind t of
+        KArrow _ k -> k
+        _          -> error $ "Kinding error: Type constructor has kind: " ++ (show $ kind t)
+    kind (Fix (TFunc _ _)) = KStar
+    kind (Fix (TRow _ _)) = KRow
+
 class VarNames a where
   freeTypeVars :: a -> Set.Set TVarName
   mapVarNames :: (TVarName -> TVarName) -> a -> a
@@ -159,7 +212,7 @@ instance VarNames (TVarName) where
   mapVarNames f = f
 
 instance VarNames (TBody) where
-  mapVarNames f (TVar x) = TVar $ f x
+  mapVarNames f (TVar x) = TVar (f x)
   mapVarNames _ t = t
 
   freeTypeVars (TVar n) = Set.singleton n
