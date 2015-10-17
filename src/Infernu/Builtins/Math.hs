@@ -49,8 +49,8 @@ math = ts [] $ Fix $ TRow (Just "Math")
                    --   $ numFuncProp "log1p"
                    --   $ numFuncProp "log2"
                    -- Requires support for variable number of arguments
-                   --   $ numFuncProp "max"
-                   --   $ numFuncProp "min"
+                   $ numFuncProp2 "max"
+                   $ numFuncProp2 "min"
                    $ numFuncProp2 "pow"
                    $ TRowProp (TPropGetName $ EPropName "random") (ts [] $ Fix $ TFunc [tvar 0] number)
                    $ numFuncProp "round"

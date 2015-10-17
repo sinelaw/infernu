@@ -64,6 +64,7 @@ library
                    , Infernu.Builtins.String
                    , Infernu.Builtins.StringMap
                    , Infernu.Builtins.TypeClasses
+                   , Infernu.Builtins
                    , Infernu.Decycle
                    , Infernu.Fix
                    , Infernu.Infer
