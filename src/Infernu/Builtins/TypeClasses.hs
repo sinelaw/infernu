@@ -4,8 +4,9 @@ module Infernu.Builtins.TypeClasses
 
 import           Infernu.Prelude
 import           Infernu.Types
-import           Infernu.Builtins.Util
 
+tcons :: TConsName -> [Type] -> FType Type
+tcons n ts = TCons n ts
 
 typeClasses :: [(ClassName, Class (Fix FType))]
 typeClasses =

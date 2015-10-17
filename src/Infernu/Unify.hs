@@ -238,7 +238,8 @@ unify' _ _ (TBody TUndefined) (TBody TEmptyThis) = return ()
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
 -- | Two recursive types
-unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
+unify' recurse a t1@(TCons (TName n1 k1) targs1) t2@(TCons (TName n2 k2) targs2) =
+    -- TODO check kinds
     if n1 == n2
     then case matchZip targs1 targs2 of
              Nothing -> unificationError a t1 t2
@@ -252,11 +253,11 @@ unify' recurse a t1@(TCons (TName n1) targs1) t2@(TCons (TName n2) targs2) =
            recurse a (qualType t1') (qualType t2')
 
 -- | A recursive type and another type
-unify' recurse a (TCons (TName n1) targs1) t2 =
+unify' recurse a (TCons (TName n1 k) targs1) t2 =
     unrollName a n1 targs1
     >>= assertNoPred
     >>= flip (recurse a) (Fix t2)
-unify' recurse a t1 (TCons (TName n2) targs2) =
+unify' recurse a t1 (TCons (TName n2 k) targs2) =
     unrollName a n2 targs2
     >>= assertNoPred
     >>= recurse a (Fix t1)
@@ -331,7 +332,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
 
      let allAreCommon = Set.null $ (names1 `Set.difference` names2) `Set.union` (names2 `Set.difference` names1)
          unifyDifferences =
-             do  r <- RowTVar . Flex <$> fresh
+             do  r <- RowTVar . (flip Flex KRow) <$> fresh
                  let flippedRecurse a' = flip $ recurse a'
                  unifyRows        recurse a r (t1, names1, m1) (t2, names2, r2)
                  unifyRows flippedRecurse a r (t2, names2, m2) (t1, names1, r1)
@@ -374,7 +375,7 @@ unifyTypeSchemes' recurse a scheme1s scheme2s =
       traceLog $ indent 4 $ text "skolems:" <+> pretty skolemVars
 
       recurse a (qualType scheme1T) (qualType scheme2T)
-      let isSkolem (Fix (TBody (TVar (Skolem _)))) = True
+      let isSkolem (Fix (TBody (TVar (Skolem _ _)))) = True
           isSkolem _ = False
           oldSkolems = concatMap (filter isSkolem . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
       ftvs <- mapM (applyMainSubst . map (Fix . TBody . TVar) . Set.toList . freeTypeVars) [scheme1s, scheme2s]
@@ -421,7 +422,7 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
                                                             , indent 4 $ pretty t2
                                                             ]
          FlatRowEndTVar (Just r2') -> recurse a in1NotIn2row (Fix . TBody . TVar $ getRowTVar r2')
-         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TCons (TName tid) ts)
+         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TCons (TName tid (karrow KRow $ map kind ts)) ts)
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Source -> [(Type, Type)] -> Infer ()
@@ -464,10 +465,10 @@ varBind' :: Source -> TVarName -> Type -> Infer (Maybe TSubst)
 varBind' a n t | t == Fix (TBody (TVar n)) = return Nothing
                | Just rowT <- getSingleton $ isInsideRowType n t =
                    do traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
-                      recVar <- Flex <$> fresh
+                      recVar <- flip Flex KRow <$> fresh
                       let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = applySubst (singletonSubst n withRecVar) rowT
-                      namedType <- getNamedType a recVar recT
+                      namedType <- getNamedType a recVar KRow recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
                       traceLog $ text "===> Resulting mu type: " <+> pretty n <+> text " = " <+> pretty withRecVar

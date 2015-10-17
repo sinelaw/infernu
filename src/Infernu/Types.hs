@@ -49,7 +49,6 @@ module Infernu.Types
        , VarId(..)
        , NameSource(..)
        , VarNames(freeTypeVars, mapVarNames)
-       , unrollTAp, rollTAp
 #ifdef QUICKCHECK
        , runAllTests
 #endif
@@ -88,6 +87,13 @@ kindArgsNum :: Kind -> Int
 kindArgsNum KStar = 0
 kindArgsNum KRow = 0
 kindArgsNum (KArrow _ k) = 1 + kindArgsNum k
+
+kApply :: Kind -> [Kind] -> Maybe Kind
+kApply k [] = Just k
+kApply (KArrow karg kres) (karg':kargs)
+    | karg == karg' = kApply kres kargs
+    | otherwise = Nothing
+kApply _ _ = Nothing
 
 karrow :: Kind -> [Kind] -> Kind
 karrow k [] = k
@@ -189,10 +195,9 @@ instance HasKind TConsName where
 
 instance HasKind Type where
     kind (Fix (TBody b)) = kind b
-    kind (Fix (TCons c)) = kind c
-    kind (Fix (TAp t _)) = case kind t of
-        KArrow _ k -> k
-        _          -> error $ "Kinding error: Type constructor has kind: " ++ (show $ kind t)
+    kind (Fix (TCons c ts)) = case kApply (kind c) (map kind ts) of
+        Nothing -> error $ "Can't apply kind: " ++ show (kind c) ++ " on " ++ show ts
+        Just k -> k
     kind (Fix (TFunc _ _)) = KStar
     kind (Fix (TRow _ _)) = KRow
 
@@ -385,7 +390,7 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow _ tRowList)) -> tRowList
-      Just (Fix (TCons (TName tid) ts)) -> TRowRec tid ts
+      Just (Fix (TCons (TName tid k) ts)) -> TRowRec tid ts
       Just (Fix (TBody (TVar n))) -> TRowEnd $ Just $ RowTVar n
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing

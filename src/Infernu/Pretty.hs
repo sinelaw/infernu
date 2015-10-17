@@ -196,13 +196,13 @@ prettyType (TFunc ts tres) = wrapThis this $ parens $ args <+> string "->" <+> p
         wrapThis (Just (Fix (TBody TUndefined))) s = s
         wrapThis (Just (Fix (TBody TEmptyThis))) s = s
         -- if "this" is a recursive type, only show the recursive type name (no params) - this is "lossy"
-        wrapThis (Just (Fix (TCons (TName name) _))) s = pretty name <> dot <> s
+        wrapThis (Just (Fix (TCons (TName name k) _))) s = pretty name <> dot <> s
         wrapThis (Just (Fix (TBody (TVar n)))) s | not (n `Set.member` (freeTypeVars $ drop 1 ts)) = s
         wrapThis (Just t) s = pretty t <> dot <> s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
 prettyType (TCons TArray [t]) = brackets $ pretty t
 prettyType (TCons TTuple ts) = pretty ts
-prettyType (TCons (TName name) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
+prettyType (TCons (TName name k) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
 prettyType (TCons TStringMap [t]) = text "StringMap " <+> pretty t
 prettyType (TCons TRef [t]) = text "Mut" <+> pretty t
 prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
@@ -213,7 +213,7 @@ prettyType (TRow label rl) =
            , encloseSep (string "{ ") space (string ", ") body'
              <> case r of
                     FlatRowEndTVar r' -> maybe empty ((text "|" <+>) . pretty) r'
-                    FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TCons (TName tid) ts)) -- TODO
+                    FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TCons (TName tid KRow) ts)) -- TODO
              <> rbrace
            ]
   where (props, r) = flattenRow rl
