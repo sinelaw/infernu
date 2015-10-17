@@ -199,6 +199,7 @@ unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ text "breaking infinite recursion cycle, when unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
 unify'' (Just recurse) a t1 t2 =
   do traceLog $ text "unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
+     unless (kind t1 == kind t2) $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
      s <- getMainSubst
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
