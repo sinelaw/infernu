@@ -202,7 +202,7 @@ instance HasKind TConsName where
 instance HasKind Type where
     kind (Fix (TBody b)) = kind b
     kind (Fix (TCons c ts)) = case kApply (kind c) (map kind ts) of
-        Nothing -> error $ "Can't apply kind: " ++ show (kind c) ++ " on " ++ show ts
+        Nothing -> error $ "Constructor: " ++ show c ++ " - Can't apply kind: " ++ show (kind c) ++ " on " ++ show ts
         Just k -> k
     kind (Fix (TFunc _ _)) = KStar
     kind (Fix (TRow _ _)) = KRow

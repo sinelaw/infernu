@@ -1,23 +1,8 @@
-ERROR y valid/builtins/regex-exec-2.js
-ERROR y valid/debounce-indexable.js
-ERROR y valid/index-and-plus.js
-ERROR y valid/nothis-as-obj-param.js
-ERROR y valid/nothis-as-param.js
-ERROR y valid/objlit-func.js
-ERROR y valid/passing-obj-with-poly-method.js
-ERROR y valid/point.js
-ERROR y valid/poly-method-rank-3.js
-ERROR y valid/poly-method-recursive-this.js
-ERROR y valid/poly-method-simple.js
 ERROR y valid/promise-simple-api.js
 // FAIL valid/arguably/if-undefined.js:8:3: Error:  |      Failed unif y valid/arguably/if-undefined.js
-// FAIL valid/array-2d-get.js:2:3: Error:  |      Failed unifying: |   y valid/array-2d-get.js
 // FAIL valid/builtins/Date.js:1:5:x:: Error:  |      Failed unifying: y valid/builtins/Date.js
-// FAIL valid/complex/kinda-underscore.js:10:6: Error:  |      Failed  y valid/complex/kinda-underscore.js
-// FAIL valid/map.js:11:5:arnum:: Error:  |      Failed unifying: |    y valid/map.js
-// FAIL *valid/new-recursive.js:1:1: Error:  |      Failed unifying: | y valid/new-recursive.js
-// FAIL valid/object-chaining.js:6:11: Error:  |      Failed unifying: y valid/object-chaining.js
-// FAIL valid/poly-array-assign2.js:6:39: Error:  |      Failed unifyi y valid/poly-array-assign2.js
-// FAIL valid/poly-array-assign.js:4:10: Error:  |      Failed unifyin y valid/poly-array-assign.js
-ERROR n invalid/method-type.js
+// FAIL valid/nothis-as-obj-param.js:10:7: Error:  |      Failed unify y valid/nothis-as-obj-param.js
+// FAIL valid/nothis-as-param.js:8:7: Error:  |      Failed unifying:  y valid/nothis-as-param.js
+// FAIL valid/objlit-func.js:9:1: Error:  |      Failed unifying: |    y valid/objlit-func.js
+// FAIL valid/poly-method-recursive-this.js:18:17: Error:  |      Fail y valid/poly-method-recursive-this.js
 ERROR n invalid/promise-simple-api.js

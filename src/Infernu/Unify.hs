@@ -361,7 +361,8 @@ unifyTryMakeRow r a t1 t2 =
                             TCons cons _ -> Just $ show $ pretty cons
                             TRow l _ -> l
                             _ -> Just $ show $ pretty $ Fix t
-      _ -> unificationError a t1 t2
+      _ -> wrapError' a t1 t2 $ throwError a
+           $ text "Failed tryMakeRow unification:" <+> align (vsep [pretty res1, text "with", pretty res2])
 
 
 unifyTypeSchemes :: Source -> TypeScheme -> TypeScheme -> Infer ()
@@ -445,12 +446,13 @@ unifyl r a = mapM_ $ uncurry $ r a
 -- Nothing
 -- >>> getSingleton $ isInsideRowType 0 (Fix (TFunc [Fix $ TBody $ TVar 1] (Fix $ TRow $ TRowEnd (Just $ RowTVar 0))))
 -- Just Fix (TRow (TRowEnd (Just (RowTVar 0))))
-isInsideRowType :: TVarName -> Type -> Set Type
+isInsideRowType :: TVarName -> Type -> Set (Maybe String, TRowList Type)
 isInsideRowType n (Fix t) =
   case t of
-   TRow _ t' -> if n `Set.member` freeTypeVars t'
-                then Set.singleton $ Fix t
-                else Set.empty
+   TRow name t' ->
+       if n `Set.member` freeTypeVars t'
+       then Set.singleton (name, t')
+       else Set.empty
    _ -> foldr (\x l -> isInsideRowType n x `Set.union` l) Set.empty t
 --   _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
@@ -468,11 +470,12 @@ varBind a n t =
 
 varBind' :: Source -> TVarName -> Type -> Infer (Maybe TSubst)
 varBind' a n t | t == Fix (TBody (TVar n)) = return Nothing
-               | Just rowT <- getSingleton $ isInsideRowType n t =
-                   do traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
-                      recVar <- flip Flex KStar <$> fresh
-                      let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
+               | Just (rowN, rowList) <- getSingleton $ isInsideRowType n t =
+                   do recVar <- flip Flex KStar <$> fresh
+                      let rowT = Fix $ TCons TRecord [Fix $ TRow rowN rowList]
+                          withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = applySubst (singletonSubst n withRecVar) rowT
+                      traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
                       namedType <- getNamedType a recVar KStar recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1

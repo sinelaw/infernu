@@ -209,31 +209,35 @@ prettyType (TCons TRecord [t]) = text "Rec" <+> pretty t
 prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
 prettyType (TRow label rl) =
     hsep [ case label of
-                 Just l' -> string l' <> string "="
-                 Nothing -> empty
-           , encloseSep (string "{ ") space (string ", ") body'
-             <> case r of
-                    FlatRowEndTVar r' -> maybe empty ((text "|" <+>) . pretty) r'
-                    FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TCons (TName tid KRow) ts)) -- TODO
-             <> rbrace
-           ]
-  where (props, r) = flattenRow rl
-        isGet (TPropGetName _) = True
-        isGet _ = False
-        isSet (TPropSetName _) = True
-        isSet _ = False
+               Just l' -> string l' <> string "="
+               Nothing -> empty
+         , pretty rl
+         ]
 
-        propKeysByName = map (\ps -> let name = tpropName . fst $ head ps
-                                         keys = map fst ps
-                                     in (name, snd $ head ps, (any isGet keys, any isSet keys)))
-                         $ List.groupBy (\(x,xv) (y,yv) -> tpropName x == tpropName y && xv == yv) $ Map.toList props
-        printProp' (n,v,getSet) = pn <> string ":" <+> align (pretty v)
-            where pn = case getSet of
-                          (True, True) -> pretty n
-                          (True, False) -> string "get" <+> pretty n
-                          (False, True) -> string "set" <+> pretty n
-                          _ -> error "Expected at least one of get or set"
-        body' = map printProp' propKeysByName
+instance Pretty (TRowList Type) where
+  pretty rl =
+      encloseSep (string "{ ") space (string ", ") body'
+      <> case r of
+      FlatRowEndTVar r' -> maybe empty ((text "|" <+>) . pretty) r'
+      FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TCons (TName tid KRow) ts)) -- TODO
+      <> rbrace
+      where (props, r) = flattenRow rl
+            isGet (TPropGetName _) = True
+            isGet _ = False
+            isSet (TPropSetName _) = True
+            isSet _ = False
+
+            propKeysByName = map (\ps -> let name = tpropName . fst $ head ps
+                                             keys = map fst ps
+                                         in (name, snd $ head ps, (any isGet keys, any isSet keys)))
+                             $ List.groupBy (\(x,xv) (y,yv) -> tpropName x == tpropName y && xv == yv) $ Map.toList props
+            printProp' (n,v,getSet) = pn <> string ":" <+> align (pretty v)
+                where pn = case getSet of
+                              (True, True) -> pretty n
+                              (True, False) -> string "get" <+> pretty n
+                              (False, True) -> string "set" <+> pretty n
+                              _ -> error "Expected at least one of get or set"
+            body' = map printProp' propKeysByName
 
 instance Pretty TProp where
     pretty (TPropSetName n) = text "set" <+> pretty n
