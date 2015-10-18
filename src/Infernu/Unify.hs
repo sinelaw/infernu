@@ -265,11 +265,13 @@ unify' recurse a t1 (TCons (TName n2 k) targs2) =
     >>= recurse a (Fix t1)
 
 -- | Two type constructors
-unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2) =
-  do  when (n1 /= n2) $ unificationError a t1 t2
-      case matchZip ts1 ts2 of
+-- | Any others
+unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2)
+    | (n1 == n2) = case matchZip ts1 ts2 of
         Nothing -> unificationError a t1 t2
         Just ts -> unifyl recurse a ts
+    | (n1 == TRecord) || (n2 == TRecord) = unifyTryMakeRow recurse a t1 t2
+    | otherwise = unificationError a t1 t2
 
 -- | Two functions
 unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
