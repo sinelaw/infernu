@@ -11,7 +11,7 @@ keyObj tv = withTypeClass "StringKeys" (tvar tv)
 
 object :: TScheme (Fix FType)
 object = ts []
-         $ Fix $ TRow (Just "Object")
+         $ record (Just "Object")
          -- assign - ES6
          $ prop "create"              (ts [0, 1] $ funcN [tvar 0, openRow 1] (openRow 1))
          -- can't be supported in a sane way:

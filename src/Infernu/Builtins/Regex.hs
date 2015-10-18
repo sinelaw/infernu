@@ -12,7 +12,7 @@ import           Infernu.Types
 import           Infernu.Expr       (EPropName(..))
 
 regexMatch :: Type
-regexMatch = Fix . TRow (Just "RegexMatch")
+regexMatch = record (Just "RegexMatch")
              -- TODO: instead of quantifying 'this', it should be a recursive type (regexMatch itself)
              . TRowProp (TPropGetName EPropGetIndex) (ts [] $ func (tvar 0) number string)
              . TRowProp (TPropGetName $ EPropName "index") (ty number)

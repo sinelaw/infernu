@@ -84,7 +84,7 @@ builtins = Map.fromList [
     ("decodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] string),
     ("encodeURI",    ts [0] $ Fix $ TFunc [tvar 0, string] string),
     ("encodeURIComponent",    ts [0] $ Fix $ TFunc [tvar 0, string] string),
-    ("Date",         ts [] $ Fix $ TRow (Just "Date[Constructor]")
+    ("Date",         ts [] $ record (Just "Date[Constructor]")
                                  $ TRowProp (TPropGetName EPropFun) (ts [] $ Fix $ TFunc [Fix $ TBody TDate] string)
                                  $ prop "now"   (ts [0] $ Fix $ TFunc [tvar 0] number)
                                  $ prop "parse" (ts [0] $ Fix $ TFunc [tvar 0, string] (Fix $ TBody TDate))
@@ -92,7 +92,7 @@ builtins = Map.fromList [
                                  $ TRowEnd Nothing),
     ("Math",         math),
     ("Object",       object),
-    ("JSON",         ts [] $ Fix $ TRow (Just "JSON")
+    ("JSON",         ts [] $ record (Just "JSON")
                                  $ prop "stringify" (ts [0, 1] $ Fix $ TFunc [tvar 0, tvar 1] string)
                                  -- TODO: should really be "maybe (tvar 1)"
                                  $ prop "parse"     (ts [0, 1] $ Fix $ TFunc [tvar 0, string] (tvar 1))

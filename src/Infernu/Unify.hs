@@ -33,6 +33,7 @@ import           Infernu.Expr         (EPropName(..))
 tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
 tryMakeRow (TCons TStringMap [t]) = Just <$> Builtins.stringMapRowType t
 tryMakeRow (TCons TArray [t]) = Just <$> Builtins.arrayRowType t
+tryMakeRow (TCons TRecord [Fix (TRow _ rl)]) = Just <$> return rl
 tryMakeRow (TBody TRegex) = Just <$> Builtins.regexRowType
 tryMakeRow (TBody TString) = Just <$> Builtins.stringRowType
 tryMakeRow (TBody TDate) = Just <$> Builtins.dateRowType
@@ -199,7 +200,7 @@ unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ text "breaking infinite recursion cycle, when unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
 unify'' (Just recurse) a t1 t2 =
   do traceLog $ text "unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
-     unless (kind t1 == kind t2) $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
+     unless (kind t1 == kind t2) $ wrapError' a t1 t2 $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
      s <- getMainSubst
      let t1' = unFix $ applySubst s t1
          t2' = unFix $ applySubst s t2
@@ -352,8 +353,8 @@ unifyTryMakeRow r a t1 t2 =
      res2 <- tryMakeRow t2
      case (res1, res2) of
       (Just rowType1, Just rowType2) -> r a t1' t2'
-         where t1' = Fix $ TRow (label t1) rowType1
-               t2' = Fix $ TRow (label t2) rowType2
+         where t1' = record (label t1) rowType1
+               t2' = record (label t2) rowType2
                label t = case t of
                             TCons cons _ -> Just $ show $ pretty cons
                             TRow l _ -> l
@@ -414,6 +415,7 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
            in1NotIn2row = Fix . TRow Nothing . unflattenRow m1 rowTail $ flip Set.member in1NotIn2
 
        traceLog $ text "in1NotIn2row" <+> pretty in1NotIn2row
+       traceLog $ text "r2" <+> pretty r2
        case r2 of
          FlatRowEndTVar Nothing -> if Set.null in1NotIn2
                                    then varBind a (getRowTVar r) (Fix $ TRow Nothing $ TRowEnd Nothing)
@@ -423,7 +425,7 @@ unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
                                                             , indent 4 $ pretty t2
                                                             ]
          FlatRowEndTVar (Just r2') -> recurse a in1NotIn2row (Fix . TBody . TVar $ getRowTVar r2')
-         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TCons (TName tid (karrow KRow $ map kind ts)) ts)
+         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TCons (TName tid (karrow KStar $ map kind ts)) ts)
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Source -> [(Type, Type)] -> Infer ()
@@ -466,10 +468,10 @@ varBind' :: Source -> TVarName -> Type -> Infer (Maybe TSubst)
 varBind' a n t | t == Fix (TBody (TVar n)) = return Nothing
                | Just rowT <- getSingleton $ isInsideRowType n t =
                    do traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
-                      recVar <- flip Flex KRow <$> fresh
+                      recVar <- flip Flex KStar <$> fresh
                       let withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = applySubst (singletonSubst n withRecVar) rowT
-                      namedType <- getNamedType a recVar KRow recT
+                      namedType <- getNamedType a recVar KStar recT
                       -- let (TCons (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
                       traceLog $ text "===> Resulting mu type: " <+> pretty n <+> text " = " <+> pretty withRecVar

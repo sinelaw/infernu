@@ -17,7 +17,7 @@ numFuncProp2 :: String -> TRowList (Fix FType) -> TRowList (Fix FType)
 numFuncProp2 name = TRowProp (TPropGetName $ EPropName name) $ ts [0] $ Fix $ TFunc [tvar 0, number, number] number
 
 math :: TScheme (Fix FType)
-math = ts [] $ Fix $ TRow (Just "Math")
+math = ts [] $ record (Just "Math")
                    $ numProp "E"
                    $ numProp "LN10"
                    $ numProp "LN2"

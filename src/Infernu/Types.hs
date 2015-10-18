@@ -21,7 +21,7 @@ module Infernu.Types
        , replaceFix
        , FType(..)
        , InferState(..)
-       , RowTVar(..)
+       , RowTVar(..), record
        , getRowTVar
        , liftRowTVar
        , FlatRowEnd(..)
@@ -128,6 +128,7 @@ data TConsName = TArray
                | TName !TypeId Kind
                | TStringMap
                | TRef
+               | TRecord
                  deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
@@ -167,6 +168,10 @@ data FType t = TBody !TBody
 
 type Type = Fix FType
 
+
+record :: Maybe String -> TRowList (Type) -> Type
+record name row = Fix $ TCons TRecord [Fix $ TRow name row]
+
 ----------------------------------------------------------------------
 
 class HasKind t where
@@ -191,6 +196,7 @@ instance HasKind TConsName where
     kind TStringMap = KArrow KStar KStar
     kind TRef = KArrow KStar KStar
     kind TTuple = KArrow KStar (KArrow KStar KStar)
+    kind TRecord = KArrow KRow KStar
     kind (TName _ k) = k
 
 instance HasKind Type where

@@ -62,7 +62,7 @@ withTypeClass :: String -> a -> a -> TQual a
 withTypeClass n t t' = TQual { qualPred = [TPredIsIn { predClass = ClassName n, predType = t }], qualType = t' }
 
 openRow :: Int -> Type
-openRow tv = Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex tv KRow)
+openRow tv = record Nothing $ TRowEnd $ Just $ RowTVar (Flex tv KRow)
 
 prop :: String -> TScheme t -> TRowList t -> TRowList t
 prop name = TRowProp (TPropGetName $ EPropName name)
@@ -72,3 +72,4 @@ addProp rowlist (name, propTS) =
   do allocNames <- forM (schemeVars propTS) $ \tvName -> (tvName,) . (flip Flex $ kind tvName) <$> fresh
      let ts' = mapVarNames (safeLookup allocNames) propTS
      return $ TRowProp (TPropGetName $ EPropName name) ts' rowlist
+

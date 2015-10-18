@@ -265,7 +265,7 @@ replaceRecType typeId newTypeId indexToDrop t1 =
                                           else t1
             TCons n subTs -> Fix $ TCons n $ mapTs' subTs
             TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
-            TRow l rlist -> Fix $ TRow l $ go rlist
+            TRow l rlist -> record l $ go rlist
              where go rlist' =
                      case rlist' of
                       TRowEnd _ -> rlist'

@@ -58,6 +58,7 @@ closeRowList unrollRec a r@(TRowRec tid ts) =
 -- "{a: {a.a: Number, ..b}, ..c}.(() -> String)"
 closeRow :: Source -> Type -> Infer Type
 closeRow a (Fix (TRow l r)) = Fix . TRow (fmap (++"*") l) <$> closeRowList True a r
+closeRow a (Fix (TCons TRecord [t])) = (\t' -> Fix (TCons TRecord [t'])) <$> closeRow a t
 closeRow _ t = return t
 
 ----------------------------------------------------------------------
@@ -147,7 +148,7 @@ inferType' env (ENew a e1 eArgs) =
      unify a (Fix $ TFunc tArgs resT) (qualType t1)
      -- constrain 'this' to be a row type:
      rowConstraintVar <- RowTVar <$> freshFlex KRow
-     unify a (Fix . TRow Nothing . TRowEnd $ Just rowConstraintVar) thisT
+     unify a (record Nothing . TRowEnd $ Just rowConstraintVar) thisT
      -- close the row type
      resolvedThisT <- applyMainSubst thisT -- otherwise closeRow will not do what we want.
 --     unify a thisT (closeRow resolvedThisT)
@@ -155,7 +156,7 @@ inferType' env (ENew a e1 eArgs) =
      preds' <- unifyPredsL a preds
      let thisT' = TQual preds' thisTLabeled
          thisTLabeled = case resolvedThisT of
-                            Fix (TRow Nothing rl) -> Fix $ TRow (label e1) rl
+                            Fix (TCons TRecord [Fix (TRow Nothing rl)]) -> record (label e1) rl
                             _ -> resolvedThisT
      return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
@@ -194,7 +195,7 @@ inferType' env (EPropAssign a objExpr prop expr1 expr2) =
      -- polymorphic. In the future, type annotations could be used to make the prop assignment
      -- polymorphic.
      let rvalueSchemeFloated = TScheme [] TQual { qualPred = [], qualType = qualType rvalueT }
-         rvalueRowType = Fix . TRow Nothing
+         rvalueRowType = record Nothing
                          . TRowProp (TPropGetName prop) rvalueSchemeFloated
                          . TRowProp (TPropSetName prop) rvalueSchemeFloated
                          $ TRowEnd (Just rowTailVar)
@@ -233,7 +234,7 @@ inferType' env (ERow a isOpen propExprs) =
               -- TODO use unfloated predicates
               return (TRowProp (TPropGetName propName) ts $ TRowProp (TPropSetName propName) ts $ row, floatedPs' ++ floatedPs)
      (rowType', floatedPreds) <- foldM  accumRowProp' (rowEnd', []) propNamesTypes
-     let rowType = TQual { qualPred = floatedPreds, qualType = Fix . TRow Nothing $ rowType' }
+     let rowType = TQual { qualPred = floatedPreds, qualType = record Nothing $ rowType' }
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
 inferType' env (ECase a eTest eBranches) =
   do (eType, eTest') <- inferType env eTest
@@ -255,7 +256,7 @@ inferType' env (EProp a eObj propName) =
              do traceLog $ text "Failed to find prop: " <+> pretty propName <+> text " in type: " <+> pretty tObj
                 rowTail <- TRowEnd . Just . RowTVar <$> freshFlex KRow
                 propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> freshFlex KStar
-                unify a (Fix . TRow Nothing $ TRowProp (TPropGetName propName) propTypeScheme rowTail) (qualType tObj)
+                unify a (record Nothing $ TRowProp (TPropGetName propName) propTypeScheme rowTail) (qualType tObj)
                 instantiate propTypeScheme
 
          propTypefromTRow tRowList =

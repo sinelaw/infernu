@@ -150,8 +150,8 @@ instance Pretty TVarName where
     pretty tvn =
         bold $
         case tvn of
-        Flex n k -> (colorBy n $ string $ ptv n) -- <+> prettyKind k
-        Skolem n k -> (colorBy n $ string $ '!' : ptv n) -- <+> prettyKind k
+        Flex n k -> (colorBy n $ string $ ptv n) <+> prettyKind k
+        Skolem n k -> (colorBy n $ string $ '!' : ptv n) <+> prettyKind k
 
 -- instance Pretty Bool where
 --   prettyTab _ x = show x
@@ -205,6 +205,7 @@ prettyType (TCons TTuple ts) = pretty ts
 prettyType (TCons (TName name k) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
 prettyType (TCons TStringMap [t]) = text "StringMap " <+> pretty t
 prettyType (TCons TRef [t]) = text "Mut" <+> pretty t
+prettyType (TCons TRecord [t]) = text "Rec" <+> pretty t
 prettyType (TCons tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
 prettyType (TRow label rl) =
     hsep [ case label of
