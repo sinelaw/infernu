@@ -200,12 +200,14 @@ unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ text "breaking infinite recursion cycle, when unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
 unify'' (Just recurse) a t1 t2 =
   do traceLog $ text "unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
-     unless (kind t1 == kind t2) $ wrapError' a t1 t2 $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
-     s <- getMainSubst
-     let t1' = unFix $ applySubst s t1
-         t2' = unFix $ applySubst s t2
-     traceLog $ text "unifying (substed): " <+> pretty t1 <+> text " ~ " <+> pretty t2
-     wrapError' a t1 t2 $ unify' recurse a t1' t2'
+     unlessEq t1 t2 $ do
+         traceLog $ text "They are not equal"
+         unless (kind t1 == kind t2) $ wrapError' a t1 t2 $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
+         s <- getMainSubst
+         let t1' = unFix $ applySubst s t1
+             t2' = unFix $ applySubst s t2
+         traceLog $ text "unifying (substed): " <+> pretty t1 <+> text " ~ " <+> pretty t2
+         wrapError' a t1 t2 $ unify' recurse a t1' t2'
 
 unificationError :: (VarNames x, Pretty x) => Source -> x -> x -> Infer b
 unificationError pos x y = throwError pos $ wrapWithUnifyError a b Nothing
