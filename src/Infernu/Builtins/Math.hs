@@ -53,7 +53,7 @@ math = ts [] $ Fix $ TRow (Just "Math")
                    $ numFuncProp2 "max"
                    $ numFuncProp2 "min"
                    $ numFuncProp2 "pow"
-                   $ TRowProp (TPropGetName $ EPropName "random") (ts [] $ Fix $ TFunc [tvar 0] number)
+                   $ TRowProp (TPropGetName $ EPropName "random") (ts [0] $ Fix $ TFunc [tvar 0] number)
                    $ numFuncProp "round"
                    $ numFuncProp "sign"
                    $ numFuncProp "sin"
