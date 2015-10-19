@@ -28,13 +28,8 @@ import           Infernu.Log
 import           Infernu.Pretty()
 import           Infernu.Types
 import           Infernu.Source     (Source(..), TypeError(..))
-import           Infernu.Expr       (Exp(..), LitVal(..), EVarName(..), EPropName(..))
+import           Infernu.Expr       (Exp(..), LitVal(..), EVarName(..), EPropName(..), getAnnotations)
 import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyl, tryMakeRow)
-
-
-
-getAnnotations :: Exp a -> [a]
-getAnnotations = foldr (:) []
 
 ----------------------------------------------------------------------
 
@@ -247,7 +242,7 @@ inferType' env (ECase a eTest eBranches) =
      allPreds <- unifyPredsL a . concatMap qualPred $ eType : map fst infPatterns ++ map fst infBranches
      let tRes = TQual { qualPred = allPreds, qualType = qualType . fst $ head infBranches } -- TODO unsafe head
      return (tRes, ECase (a, tRes) eTest' $ zip (map fst eBranches) (map snd infBranches))
-inferType' env (EProp a eObj propName) =
+inferType' env e@(EProp a eObj propName) =
   do (tObj, eObj') <- inferType env eObj
      -- This is a hack to make it easier to support higher-rank row properties.  We require to have
      -- determined the type of eObj "good enough" for us to find if it has the required property or
@@ -266,7 +261,7 @@ inferType' env (EProp a eObj propName) =
 
      rowType <- case unFix (qualType tObj) of
                     TRow _ tRowList -> return $ Just tRowList
-                    _ -> tryMakeRow $ unFix (qualType tObj)
+                    _ -> tryMakeRow (head $ getAnnotations e) $ unFix (qualType tObj)
      propType <-
          case rowType of
              Just tRowList -> propTypefromTRow tRowList

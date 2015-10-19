@@ -30,19 +30,20 @@ import           Infernu.Expr         (EPropName(..))
 
 ----------------------------------------------------------------------
 
-tryMakeRow :: FType Type -> Infer (Maybe (TRowList Type))
-tryMakeRow (TCons TStringMap [t]) = Just <$> Builtins.stringMapRowType t
-tryMakeRow (TCons TArray [t]) = Just <$> Builtins.arrayRowType t
-tryMakeRow (TCons TRecord [Fix (TRow _ rl)]) = Just <$> return rl
-tryMakeRow (TBody TRegex) = Just <$> Builtins.regexRowType
-tryMakeRow (TBody TString) = Just <$> Builtins.stringRowType
-tryMakeRow (TBody TDate) = Just <$> Builtins.dateRowType
-tryMakeRow (TRow _ rl) = Just <$> return rl
-tryMakeRow (TFunc targs tres) = Just <$> (return
-                                          . TRowProp (TPropGetName EPropFun) (schemeEmpty $ Fix $ TFunc targs tres)
-                                          $ TRowEnd Nothing)
+tryMakeRow :: Source -> FType Type -> Infer (Maybe (TRowList Type))
+tryMakeRow _ (TCons TStringMap [t]) = Just <$> Builtins.stringMapRowType t
+tryMakeRow _ (TCons TArray [t]) = Just <$> Builtins.arrayRowType t
+tryMakeRow _ (TCons TRecord [Fix (TRow _ rl)]) = Just <$> return rl
+tryMakeRow a t@(TCons TRecord _) = throwError a $ text "Invalid record:" <+> pretty t
+tryMakeRow _ (TBody TRegex) = Just <$> Builtins.regexRowType
+tryMakeRow _ (TBody TString) = Just <$> Builtins.stringRowType
+tryMakeRow _ (TBody TDate) = Just <$> Builtins.dateRowType
+tryMakeRow _ (TRow _ rl) = Just <$> return rl
+tryMakeRow _ (TFunc targs tres) = Just <$> (return
+                                           . TRowProp (TPropGetName EPropFun) (schemeEmpty $ Fix $ TFunc targs tres)
+                                           $ TRowEnd Nothing)
 
-tryMakeRow _ = return Nothing
+tryMakeRow _ _ = return Nothing
 
 ----------------------------------------------------------------------
 
@@ -321,7 +322,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          names1List = Map.keys m1
          names1 = Set.fromList names1List
          -- TODO: order of x,y should depend on get vs. set to ensure variance is handled correctly
-         commonNames = [(x,y) | x <- names1List, y <- names2List, tpropName x == tpropName y]
+         commonNames = Set.toList . Set.fromList $ [(x,y) | x <- names1List, y <- names2List, x == y]
 
          --namesToTypes :: Map EPropName (TScheme t) -> [EPropName] -> [t]
          -- TODO: This ignores quantified variables in the schemes.
@@ -353,16 +354,17 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
 
 unifyTryMakeRow :: UnifyF -> Source -> FType Type -> FType Type -> Infer ()
 unifyTryMakeRow r a t1 t2 =
-  do res1 <- tryMakeRow t1
-     res2 <- tryMakeRow t2
+  do res1 <- tryMakeRow a t1
+     res2 <- tryMakeRow a t2
      case (res1, res2) of
       (Just rowType1, Just rowType2) -> r a t1' t2'
-         where t1' = record (label t1) rowType1
-               t2' = record (label t2) rowType2
+         where t1' = Fix $ TRow (label t1) rowType1
+               t2' = Fix $ TRow (label t2) rowType2
                label t = case t of
-                            TCons cons _ -> Just $ show $ pretty cons
-                            TRow l _ -> l
-                            _ -> Just $ show $ pretty $ Fix t
+                   TCons TRecord [Fix (TRow n _)] -> n
+                   TCons cons _ -> Just $ show $ pretty cons
+                   TRow l _ -> l
+                   _ -> Just $ show $ pretty $ Fix t
       _ -> wrapError' a t1 t2 $ throwError a
            $ text "Failed tryMakeRow unification:" <+> align (vsep [pretty res1, text "with", pretty res2])
 

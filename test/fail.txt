@@ -1,8 +1,5 @@
-ERROR y valid/promise-simple-api.js
 // FAIL valid/arguably/if-undefined.js:8:3: Error:  |      Failed unif y valid/arguably/if-undefined.js
 // FAIL valid/builtins/Date.js:1:5:x:: Error:  |      Failed unifying: y valid/builtins/Date.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |      Failed unify y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:8:7: Error:  |      Failed unifying:  y valid/nothis-as-param.js
-// FAIL valid/objlit-func.js:9:1: Error:  |      Failed unifying: |    y valid/objlit-func.js
 // FAIL valid/poly-method-recursive-this.js:18:17: Error:  |      Fail y valid/poly-method-recursive-this.js
-ERROR n invalid/promise-simple-api.js

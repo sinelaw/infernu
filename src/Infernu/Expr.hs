@@ -8,6 +8,7 @@ module Infernu.Expr
        , mapTopAnnotation
        , LitVal(..)
        , EVarName(..), EPropName(..)
+       , getAnnotations
        ) where
 
 import Data.Hashable (Hashable(..))
@@ -72,3 +73,7 @@ mapTopAnnotation f expr =
         (ENew a x y) -> ENew (f a) x y
 
 ----------------------------------------------------------------------
+
+getAnnotations :: Exp a -> [a]
+getAnnotations = foldr (:) []
+
