@@ -264,7 +264,7 @@ fromExpression f (ES3.CallExpr z expr argExprs) =
   -- (<complicated expr>, ...)) by binding the object expression to '__obj__'.
   -- So that we get: let __obj__ = <complicated expr> in __obj__.method(__obj__, ...)
   case expr of
-   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (getProperty z' var propName)) var
+   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (getProperty z' var propName) var
      where var = fromExpression f varExpr
    ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet (gen z') objVarName obj $ appExpr (Just propName) (EProp (src z') objVar (EPropGetName propName)) objVar
      where obj = fromExpression f objExpr
@@ -287,7 +287,7 @@ fromExpression f e@(ES3.ListExpr z exprs) =
       xs -> ELet (gen z) poo (ETuple (gen z) (tail exprs')) (head exprs')
           where exprs' = reverse . map (fromExpression f) $ xs
 fromExpression f (ES3.ThisRef z) = EVar (src z) "this"
-fromExpression f (ES3.DotRef z expr (ES3.Id propName)) = EProp (src z) (fromExpression f expr) (EPropGetName propName)2
+fromExpression f (ES3.DotRef z expr (ES3.Id _ propName)) = EProp (src z) (fromExpression f expr) (EPropGetName propName)
 fromExpression f (ES3.NewExpr z expr argExprs) = ENew (src z) (fromExpression f expr) (map (fromExpression f) argExprs)
 --  ELet z "__this__" (ERow z True []) (ELet z "_bla_" (EApp z (fromExpression f expr) ((EVar z "__this__") : map (fromExpression f) argExprs)) (EVar z "__this__"))
 fromExpression f e@(ES3.PrefixExpr z op expr) =
@@ -302,7 +302,7 @@ fromExpression f e@(ES3.PrefixExpr z op expr) =
     _ -> EApp (src z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression f expr]
 fromExpression f (ES3.InfixExpr z op e1 e2) = EApp (gen z) (EVar (gen z) $ show . ES3PP.prettyPrint $ op) [makeThis (gen z), fromExpression f e1, fromExpression f e2]
 fromExpression f (ES3.UnaryAssignExpr z op (ES3.LVar _ name)) = assignToVar z name (addConstant z op (EVar (src z) name)) Nothing
-fromExpression f (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty f z (fromExpression f objExpr) name (addConstant z op (EProp (src z) objExpr' (EPropName name))) Nothing
+fromExpression f (ES3.UnaryAssignExpr z op (ES3.LDot _ objExpr name)) = assignToProperty f z (fromExpression f objExpr) name (addConstant z op (EProp (src z) objExpr' (EPropGetName name))) Nothing
     where objExpr' = fromExpression f objExpr
 fromExpression f (ES3.UnaryAssignExpr z op (ES3.LBracket _ objExpr idxExpr)) = assignToIndex f z objExpr idxExpr $ addConstant z op (getIndex f z objExpr idxExpr)
 
@@ -311,7 +311,7 @@ toAssignExpr f z op target expr cont = assignExpr
   where sz = src z
         (assignExpr, oldValue) = case target of
           ES3.LVar _ name -> (assignToVar z name value cont, EVar sz name)
-          ES3.LDot _ objExpr name -> (assignToProperty f z (fromExpression f objExpr) name value cont, EProp sz (fromExpression f objExpr) (EPropName name))
+          ES3.LDot _ objExpr name -> (assignToProperty f z (fromExpression f objExpr) name value cont, EProp sz (fromExpression f objExpr) (EPropGetName name))
           ES3.LBracket _ objExpr idxExpr -> (singleStmt (gen z) (assignToIndex f z objExpr idxExpr value) (fromMaybe atIndex' cont), atIndex')
               where atIndex' = getIndex f z objExpr idxExpr
         expr' = fromExpression f expr
@@ -352,13 +352,13 @@ assignToVar z name expr cont = ELet (gen z) poo assignApp' $ fromMaybe (EVar (ge
     where assignApp' = EApp (src z) (EVar (gen z) refAssignOp) [EVar (gen z) name, expr]
 
 assignToProperty :: Show a => FuncScope -> a -> Exp (GenInfo, a) -> String -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
-assignToProperty f z objExpr name expr cont = ELet (gen z) poo (setProperty z objExpr name expr) $ fromMaybe (EProp (gen z) objExpr (EPropName name)) cont
+assignToProperty f z objExpr name expr cont = ELet (gen z) poo (setProperty z objExpr name expr) $ fromMaybe (EProp (gen z) objExpr (EPropSetName name)) cont
 
 getProperty :: Show a => a -> Exp (GenInfo, a) -> String -> Exp (GenInfo, a)
-getProperty z objExpr name expr = applyPropFunc z objExpr (EPropGetName name) []
+getProperty z objExpr name = applyPropFunc z (EPropGetName name) objExpr []
 
 setProperty :: Show a => a -> Exp (GenInfo, a) -> String -> Exp (GenInfo, a) -> Exp (GenInfo, a)
-setProperty z objExpr name expr = applyPropFunc z objExpr (EPropSetName name) [expr]
+setProperty z objExpr name expr = applyPropFunc z (EPropSetName name) objExpr [expr]
 
 applyPropFunc :: a -> EPropName -> Exp (GenInfo, a) -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)
 applyPropFunc z prop arrExpr args = ELet (gen z) obj' arrExpr $ applyPropFunc'
@@ -377,9 +377,9 @@ assignToIndex f z objExpr idxExpr expr = applyPropFunc z EPropSetIndex objExpr' 
 
 
 fromProp :: ES3.Prop a -> EPropName
-fromProp (ES3.PropId _ (ES3.Id _ x)) = EPropName x
-fromProp (ES3.PropString _ x) = EPropName x
-fromProp (ES3.PropNum _ x) = EPropName $ show x
+fromProp (ES3.PropId _ (ES3.Id _ x)) = EPropGetName x -- TODO maybe we want both get & set?
+fromProp (ES3.PropString _ x) = EPropGetName x
+fromProp (ES3.PropNum _ x) = EPropGetName $ show x
 
 fromPropString :: ES3.Prop a -> Maybe String
 fromPropString (ES3.PropString _ x) = Just x
