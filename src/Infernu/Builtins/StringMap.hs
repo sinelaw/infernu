@@ -6,7 +6,7 @@ import           Infernu.Types
 
 stringMapRowType :: Monad m => Type -> m (TRowList Type)
 stringMapRowType elemType = return
-                            . TRowProp (TPropGetName EPropSetIndex) (ty $ funcN [aType, string, elemType] undef)
-                            . TRowProp (TPropGetName EPropGetIndex) (ty $ func aType string elemType)
+                            . TRowProp (TPropName EPropSetIndex) (ty $ funcN [aType, string, elemType] undef)
+                            . TRowProp (TPropName EPropGetIndex) (ty $ func aType string elemType)
                             $ TRowEnd Nothing
     where aType = Fix $ TCons TStringMap [elemType]

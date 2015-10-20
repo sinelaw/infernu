@@ -61,10 +61,10 @@ openRow :: Int -> Type
 openRow tv = Fix $ TRow Nothing $ TRowEnd $ Just $ RowTVar (Flex tv)
 
 prop :: String -> TScheme t -> TRowList t -> TRowList t
-prop name = TRowProp (TPropGetName $ EPropGetName name)
+prop name = TRowProp (TPropName $ EPropGetName name)
 
 addProp :: VarNames t => TRowList t -> (String, TScheme t) -> Infer (TRowList t)
 addProp rowlist (name, propTS) =
   do allocNames <- forM (schemeVars propTS) $ \tvName -> (tvName,) . Flex <$> fresh
      let ts' = mapVarNames (safeLookup allocNames) propTS
-     return $ TRowProp (TPropGetName $ EPropGetName name) ts' rowlist
+     return $ TRowProp (TPropName $ EPropGetName name) ts' rowlist

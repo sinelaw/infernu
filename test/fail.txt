@@ -1,75 +1,63 @@
-ERROR y valid/builtins/assign-ops-property.js
-ERROR y valid/mutability/mutable-propassign-app.js
-ERROR y valid/new-func.js
-ERROR y valid/new.js
-ERROR y valid/new-recursive.js
-ERROR y valid/new-return.js
-ERROR y valid/object-chaining.js
-ERROR y valid/point.js
-ERROR y valid/poll.js
-ERROR y valid/poly-array-assign2.js
-ERROR y valid/poly-this-new.js
-ERROR y valid/promise-checking-subsumption.js
-ERROR y valid/promise.js
-ERROR y valid/promise-method-workaround.js
-ERROR y valid/promise-simple-api.js
-ERROR y valid/promise-simplified2.js
-ERROR y valid/prop_assign.js
-ERROR y valid/test.js
 // FAIL valid/arguably/if-undefined.js:8:3: Error:  |      Failed unif y valid/arguably/if-undefined.js
 // FAIL *valid/builtins/assign-ops.js:3:1: Error:  |      Failed unify y valid/builtins/assign-ops.js
+// FAIL *valid/builtins/assign-ops-property.js:2:1: Error:  |      Fai y valid/builtins/assign-ops-property.js
+// FAIL valid/builtins/Date.js:2:5:y:: Error:  |      Failed unifying: y valid/builtins/Date.js
+// FAIL *valid/builtins/JSON.js:2:10: Error:  |      Failed unifying:  y valid/builtins/JSON.js
+// FAIL *valid/builtins/map2.js:4:12: Error:  |      Failed unifying:  y valid/builtins/map2.js
+// FAIL *valid/builtins/map.js:2:11: Error:  |      Failed unifying: | y valid/builtins/map.js
+// FAIL *valid/builtins/Math.js:11:10: Error:  |      Failed unifying: y valid/builtins/Math.js
 // FAIL valid/builtins/minusminus.js:2:9: Error:  |      Failed unifyi y valid/builtins/minusminus.js
 // FAIL valid/builtins/plusplus.js:2:9: Error:  |      Failed unifying y valid/builtins/plusplus.js
+// FAIL valid/builtins/regex-exec-2.js:5:5:result:: Error:  |      Fai y valid/builtins/regex-exec-2.js
+// FAIL *valid/builtins/regex-exec.js:3:11: Error:  |      Failed unif y valid/builtins/regex-exec.js
+// FAIL *valid/builtins/regex-test.js:4:11: Error:  |      Failed unif y valid/builtins/regex-test.js
+// FAIL *valid/builtins/string-ops.js:3:9: Error:  |      Failed unify y valid/builtins/string-ops.js
 // FAIL valid/call.js:2:3: Error:  |      Failed unifying: |           y valid/call.js
 // FAIL valid/call-this.js:3:1: Error:  |      Failed unifying: |      y valid/call-this.js
 // FAIL valid/complex/kinda-underscore.js:3:10: Error:  |      Failed  y valid/complex/kinda-underscore.js
 // FAIL valid/complex/sortedUniq.js:9:12: Error:  |      Failed unifyi y valid/complex/sortedUniq.js
-// FAIL valid/debounce-indexable.js:12:29: Error:  |      Failed unify y valid/debounce-indexable.js
-// FAIL valid/debounce.js:13:29: Error:  |      Failed unifying: |     y valid/debounce.js
+// FAIL *valid/debounce-indexable.js:12:22: Error:  |      Failed unif y valid/debounce-indexable.js
+// FAIL *valid/debounce.js:13:22: Error:  |      Failed unifying: |    y valid/debounce.js
 // FAIL valid/for-in.js:4:6: Error:  |      Failed unifying: |         y valid/for-in.js
 // FAIL valid/for.js:3:6: Error:  |      Failed unifying: |           y valid/for.js
 // FAIL valid/map.js:4:10: Error:  |      Failed unifying: |           y valid/map.js
+// FAIL valid/method-as-func.js:3:10: Error:  |      Failed unifying:  y valid/method-as-func.js
+// FAIL *valid/mutability/array-of-polyfuncs-eta-expanded.js:3:5: Erro y valid/mutability/array-of-polyfuncs-eta-expanded.js
+// FAIL *valid/mutability/array-of-polyfuncs.js:3:5: Error:  |      Fa y valid/mutability/array-of-polyfuncs.js
 // FAIL valid/mutability/indirect-mutable2.js:3:1: Error:  |      Fail y valid/mutability/indirect-mutable2.js
 // FAIL valid/mutability/mutable-assign-app.js:5:1: Error:  |      Fai y valid/mutability/mutable-assign-app.js
+// FAIL *valid/mutability/mutable-propassign-app.js:5:1: Error:  |     y valid/mutability/mutable-propassign-app.js
 // FAIL valid/mutability/ok7b.js:3:32: Error:  |      Failed unifying: y valid/mutability/ok7b.js
 // FAIL valid/mutability/ok7c.js:3:36: Error:  |      Failed unifying: y valid/mutability/ok7c.js
 // FAIL valid/mutability/ok7.js:3:32: Error:  |      Failed unifying:  y valid/mutability/ok7.js
+// FAIL valid/new.js:3:5:x:: Error:  |      Failed unifying: |         y valid/new.js
+// FAIL *valid/nothis2.js:11:5: Error:  |      Failed unifying: |      y valid/nothis2.js
 // FAIL valid/nothis-as-obj-param.js:10:7: Error:  |      Failed unify y valid/nothis-as-obj-param.js
 // FAIL valid/nothis-as-param.js:8:7: Error:  |      Failed unifying:  y valid/nothis-as-param.js
-// FAIL valid/objlit-func.js:9:1: Error:  |      Failed unifying: |    y valid/objlit-func.js
+// FAIL *valid/nothis.js:7:5: Error:  |      Failed unifying: |        y valid/nothis.js
+// FAIL *valid/object-chaining.js:6:3: Error:  |      Failed unifying: y valid/object-chaining.js
+// FAIL valid/objlit-func.js:7:3: Error:  |      Failed unifying: |    y valid/objlit-func.js
 // FAIL *valid/once.js:5:13: Error:  |      Failed unifying: |         y valid/once.js
+// FAIL valid/passing-obj-with-poly-method.js:3:5: Error:  |      Fail y valid/passing-obj-with-poly-method.js
+// FAIL valid/point.js:17:5:p:: Error:  |      Failed unifying: |      y valid/point.js
+// FAIL *valid/poll.js:7:13: Error:  |      Failed unifying: |         y valid/poll.js
+// FAIL *valid/poly-array-assign2.js:10:3: Error:  |      Failed unify y valid/poly-array-assign2.js
 // FAIL valid/polyfunc2.js:2:3: Error:  |      Failed unifying: |      y valid/polyfunc2.js
+// FAIL valid/poly-method-rank-3.js:6:6: Error:  |      Failed unifyin y valid/poly-method-rank-3.js
 // FAIL valid/poly-method-rank-3-nothis.js:17:6: Error:  |      Failed y valid/poly-method-rank-3-nothis.js
-// FAIL valid/poly-method-recursive-this.js:18:17: Error:  |      Fail y valid/poly-method-recursive-this.js
+// FAIL *valid/poly-method-recursive-this.js:10:10: Error:  |      Fai y valid/poly-method-recursive-this.js
+// FAIL valid/poly-method-simple.js:6:6: Error:  |      Failed unifyin y valid/poly-method-simple.js
+// FAIL *valid/poly-row-field.js:9:5: Error:  |      Failed unifying:  y valid/poly-row-field.js
+// FAIL *valid/poly-this2.js:6:5: Error:  |      Failed unifying: |    y valid/poly-this2.js
+// FAIL *valid/poly-this-new.js:8:6: Error:  |      Failed unifying: | y valid/poly-this-new.js
+// FAIL *valid/promise.js:14:16: Error:  |      Failed unifying: |     y valid/promise.js
+// FAIL *valid/promise-method-workaround.js:14:16: Error:  |      Fail y valid/promise-method-workaround.js
+// FAIL *valid/promise-simple-api.js:6:15: Error:  |      Failed unify y valid/promise-simple-api.js
+// FAIL *valid/promise-simplified2.js:5:16: Error:  |      Failed unif y valid/promise-simplified2.js
+// FAIL *valid/promise-simplified.js:3:12: Error:  |      Failed unify y valid/promise-simplified.js
+// FAIL valid/prop_assign.js:6:6: Error:  |      Failed unifying: |    y valid/prop_assign.js
+// FAIL valid/recursive-type.js:2:5:x:: Error:  |      Failed unifying y valid/recursive-type.js
 // FAIL valid/return-multi.js:12:1: Error:  |      Failed unifying: |  y valid/return-multi.js
-ERROR n invalid/array-param.js
-ERROR n invalid/blo2.js
-ERROR n invalid/builtins/Math.js
-ERROR n invalid/generalize.js
-ERROR n invalid/inheritance.js
-ERROR n invalid/new.js
-ERROR n invalid/new-override.js
-ERROR n invalid/new-return.js
-ERROR n invalid/object-chaining.js
-ERROR n invalid/occurs-erisco.js
-ERROR n invalid/open-row-erisco.js
-ERROR n invalid/open-row.js
-ERROR n invalid/promise-method-workaround.js
-ERROR n invalid/promise-method-workaround-simplified.js
-ERROR n invalid/promise-simple-api.js
-ERROR n invalid/prop_assign.js
-ERROR n invalid/prop-polymorphic-assign2-b.js
-ERROR n invalid/prop-polymorphic-assign2.js
-ERROR n invalid/prop-polymorphic-assign2-this.js
-ERROR n invalid/prop-polymorphic-assign3-b.js
-ERROR n invalid/prop-polymorphic-assign3.js
-ERROR n invalid/prop-polymorphic-closure.js
-ERROR n invalid/prop-wrong.js
-ERROR n invalid/recursive-type.js
-ERROR n invalid/unfortunately/inheritance.js
-ERROR n invalid/unfortunately/new-recursive-prototype.js
-ERROR n invalid/unfortunately/polymorphic-row-fields/prop-polymorphic-assign2-this.js
-ERROR n invalid/unfortunately/polymorphic-row-fields/prop-polymorphic-assign3.js
-ERROR n invalid/unfortunately/polymorphic-row-fields/prop-polymorphic-assign.js
+// FAIL valid/this.js:3:5:x:: Error:  |      Failed unifying: |        y valid/this.js
 // FAIL  n invalid/builtins/plus-func.js
 // FAIL  n invalid/builtins/string-replace.js

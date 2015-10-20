@@ -163,15 +163,14 @@ liftRowTVar :: (TVarName -> TVarName) -> RowTVar -> RowTVar
 liftRowTVar f (RowTVar x) = RowTVar (f x)
 
 -- | Row type.
-data TProp = TPropSetName !EPropName
-           | TPropGetName !EPropName
+data TProp = TPropName !EPropName
            deriving (Show, Eq, Ord, Generic)
 
 instance Hashable TProp where
 
 tpropName :: TProp -> EPropName
-tpropName (TPropSetName x) = x
-tpropName (TPropGetName x) = x
+tpropName (TPropName x) = x
+tpropName (TPropName x) = x
 
 data TRowList t = TRowProp !TProp !(TScheme t) !(TRowList t)
                 | TRowEnd !(Maybe RowTVar)
