@@ -322,7 +322,7 @@ unify' recurse a t1@(TRow _ row1) t2@(TRow _ row2) =
          names1List = Map.keys m1
          names1 = Set.fromList names1List
          -- TODO: order of x,y should depend on get vs. set to ensure variance is handled correctly
-         commonNames = Set.toList . Set.fromList $ [(x,y) | x <- names1List, y <- names2List, x == y]
+         commonNames = Set.toList . Set.fromList $ [(x,y) | x <- names1List, y <- names2List, tpropName x == tpropName y]
 
          --namesToTypes :: Map EPropName (TScheme t) -> [EPropName] -> [t]
          -- TODO: This ignores quantified variables in the schemes.
