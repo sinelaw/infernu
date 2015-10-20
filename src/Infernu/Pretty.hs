@@ -82,8 +82,8 @@ nakedSingleOrTuple [x] = pretty x
 nakedSingleOrTuple xs = tupled $ map pretty xs
 
 instance Pretty EPropName where
-    pretty (EPropGetName x) = string x
-    pretty (EPropSetName x) = string x
+    pretty (EPropGetName x) = string "get" <+> string x
+    pretty (EPropSetName x) = string "set" <+> string x
     pretty EPropGetIndex = string "=[]"
     pretty EPropSetIndex = string "[]="
     pretty EPropFun = string "call()"
@@ -206,9 +206,9 @@ prettyType (TRow label rl) =
              <> rbrace
            ]
   where (props, r) = flattenRow rl
-        isGet (TPropGetName _) = True
+        isGet (TPropName _) = True
         isGet _ = False
-        isSet (TPropSetName _) = True
+        isSet (TPropName _) = True
         isSet _ = False
 
         propKeysByName = map (\ps -> let name = tpropName . fst $ head ps
@@ -224,8 +224,8 @@ prettyType (TRow label rl) =
         body' = map printProp' propKeysByName
 
 instance Pretty TProp where
-    pretty (TPropSetName n) = text "set" <+> pretty n
-    pretty (TPropGetName n) = text "get" <+> pretty n
+    pretty (TPropName n) = text "set" <+> pretty n
+    pretty (TPropName n) = text "get" <+> pretty n
 
 instance Pretty ClassName where
     pretty (ClassName c) = text c

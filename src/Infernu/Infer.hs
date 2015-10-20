@@ -213,7 +213,10 @@ inferType' env (ERow a isOpen propExprs) =
          accumRowProp' (row, floatedPs') ((propName, propExpr), propType) =
            do (ts, floatedPs) <- generalize propExpr env propType
               -- TODO use unfloated predicates
-              return (TRowProp (TPropGetName propName) ts $ TRowProp (TPropSetName propName) ts $ row, floatedPs' ++ floatedPs)
+              return ( TRowProp (TPropName propName) ts
+                       $ TRowProp (TPropName propName) ts
+                       $ row
+                     , floatedPs' ++ floatedPs)
      (rowType', floatedPreds) <- foldM  accumRowProp' (rowEnd', []) propNamesTypes
      let rowType = TQual { qualPred = floatedPreds, qualType = Fix . TRow Nothing $ rowType' }
      return (rowType, ERow (a,rowType) isOpen $ zip (map fst propExprs) (map snd te))
@@ -237,11 +240,11 @@ inferType' env (EProp a eObj propName) =
              do traceLog $ text "Failed to find prop: " <+> pretty propName <+> text " in type: " <+> pretty tObj
                 rowTail <- TRowEnd . Just . RowTVar <$> freshFlex
                 propTypeScheme <- schemeEmpty . Fix . TBody . TVar <$> freshFlex
-                unify a (Fix . TRow Nothing $ TRowProp (TPropGetName propName) propTypeScheme rowTail) (qualType tObj)
+                unify a (Fix . TRow Nothing $ TRowProp (TPropName propName) propTypeScheme rowTail) (qualType tObj)
                 instantiate propTypeScheme
 
          propTypefromTRow tRowList =
-             case Map.lookup (TPropGetName propName) . fst $ flattenRow tRowList of
+             case Map.lookup (TPropName propName) . fst $ flattenRow tRowList of
                  Just knownPropTypeScheme -> instantiate knownPropTypeScheme
                  Nothing -> propTypeIfMono
 

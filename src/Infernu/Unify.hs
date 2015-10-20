@@ -38,7 +38,7 @@ tryMakeRow (TBody TString) = Just <$> Builtins.stringRowType
 tryMakeRow (TBody TDate) = Just <$> Builtins.dateRowType
 tryMakeRow (TRow _ rl) = Just <$> return rl
 tryMakeRow (TFunc targs tres) = Just <$> (return
-                                          . TRowProp (TPropGetName EPropFun) (schemeEmpty $ Fix $ TFunc targs tres)
+                                          . TRowProp (TPropName EPropFun) (schemeEmpty $ Fix $ TFunc targs tres)
                                           $ TRowEnd Nothing)
 
 tryMakeRow _ = return Nothing
@@ -293,7 +293,7 @@ unify' r a t1@(TBody{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TRow{})  t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
 --unify' r a t1@(TFunc{}) t2@(TRow{}) = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TFunc{}) t2@(TRow  _ rl) =
-    case Map.lookup (TPropGetName EPropFun) . fst $ flattenRow rl of
+    case Map.lookup (TPropName EPropFun) . fst $ flattenRow rl of
         Nothing -> unificationError a t1 t2
         Just ts -> do t2' <- instantiate ts
                       r a (Fix t1) $ qualType t2'
