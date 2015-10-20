@@ -8,13 +8,14 @@ import qualified Data.Map as Map
 
 -- | The term language
 
-data Id = NameId String | ReturnId deriving (Show, Eq, Ord)
+newtype Id = Id String
+           deriving (Show, Eq, Ord)
 
 data Value = VString String
            | VBool Bool
            | VNum Double
            | VUndef
-           | VRow (Map String Value)
+           | VRecord (Map String Location)
            | VFun (RealWorld -> Value -> Value -> (RealWorld, Value))
 
 instance Show Value where
@@ -22,68 +23,80 @@ instance Show Value where
     show (VBool b) = "VBool " ++ show b
     show (VNum b) = "VNum " ++ show b
     show VUndef = "undefined"
-    show (VRow props) = "VRow " ++ show props
+    show (VRecord props) = "VRecord " ++ show props
     show (VFun _) = "VFun" -- "VFun (" ++ show props ++ ", <fun>)"
+
+data Operator = Plus | Minus | GreaterThan
+              deriving (Show)
 
 data Expr = Var String
           | Lit Value
           | App Expr Expr
           | Abs String Statement
+          | Op Operator Expr Expr
+          deriving (Show)
 
 data Statement = Empty
-               | Seq Statement Statement -- bug (continuation always here or in all other stmts?)
-               | Return Expr Statement
+               | Seq Statement Statement
+               | Return Expr
                | JustExpr Expr
                | VarDecl String
                | Assign String Expr
                | While Expr Statement
                | If Expr Statement Statement
-               | Let String Expr Statement
+               -- Let String Expr Statement
+               deriving (Show)
 
 -- | RealWorld
 
 newtype Location = Location Int deriving (Ord, Eq, Show)
-type RealWorld = Map Location Value
+data RealWorld = RealWorld (Map Location Value) Location
+                 deriving (Show)
 
-initialWorld = Map.empty
+initialWorld :: RealWorld
+initialWorld = RealWorld Map.empty (Location 0)
+
+alloc :: RealWorld -> (RealWorld, Location)
+alloc (RealWorld m (Location l)) = ( RealWorld m (Location (l + 1))
+                                   , Location l)
 
 store :: Location -> Value -> RealWorld -> RealWorld
-store = Map.insert
+store l v (RealWorld m maxLoc) = RealWorld (Map.insert l v m) maxLoc
 
-load :: Location -> RealWorld -> Value
-load l rw = case Map.lookup l rw of
-             Just v -> v
-             Nothing -> error $ "Unallocated location: " ++ show l
+load :: RealWorld -> Location -> Value
+load (RealWorld m _) l = case Map.lookup l m of
+    Just v -> v
+    Nothing -> error $ "Unallocated location: " ++ show l
 
 -- | Environment
 
-newtype Env = Env [(Id, (Value, Location))]
+data Env = Env { bindings :: [(Id, Location)]
+               , returns :: [Value] }
+         deriving (Show)
 
 emptyEnv :: Env
-emptyEnv = Env []
+emptyEnv = Env [] []
 
-push :: Id -> Value -> Env -> Env
-push x v (Env []) = Env [(x,(v,Location 0))]
-push x v (Env (p@(_,(_,Location l)):env)) = Env $ (x,(v,Location $ l+1)):p:env
+push :: Id -> Location -> Env -> Env
+push x l (Env bs rs) = Env ((x, l) : bs) rs
 
-pushs :: Env -> Env -> Env
-pushs (Env []) env = env
-pushs (Env ((x,(v, _)):xs)) env = pushs (Env xs) $ push x v env
+pushReturn :: Value -> Env -> Env
+pushReturn r (Env bs rs) = Env bs (r:rs)
 
-composeEnv :: Env -> Env -> Env
-composeEnv (Env env1) (Env env2) = Env $ env1 ++ env2
+popReturn :: Env -> (Env, Value)
+popReturn (Env bs []) = error "No more returns"
+popReturn (Env bs (r:rs)) = (Env bs rs, r)
 
-
-lookup' :: Id -> Env -> (Value, Location)
-lookup' x (Env env) = case lookup x env of
+lookup' :: Id -> Env -> Location
+lookup' x (Env bs _) = case lookup x bs of
     Just p -> p
-    Nothing -> error $ "Undeclared name: " ++ show x
+    Nothing -> error $ "Undeclared name: " ++ show x ++ " not in env: " ++ show bs
 
-get :: Id -> Env -> Value
-get      x env = fst $ lookup' x env
+get :: Id -> Env -> RealWorld -> Value
+get x env rw = load rw $ lookup' x env
 
 location :: Id -> Env -> Location
-location x env = snd $ lookup' x env
+location = lookup'
 
 -- | Expressions
 
@@ -91,26 +104,47 @@ emean :: Expr -> Env -> RealWorld -> (RealWorld, Value)
 
 emean (Lit v) = \_env rw -> (rw, v)
 
-emean (Var x) = \env rw -> (rw, get (NameId x) env)
+emean (Var x) = \env rw -> (rw, get (Id x) env rw)
+
+emean (Op op x y) = \env rw ->
+    case emean x env rw of
+    (rw', VNum vx) -> case emean y env rw' of
+        (rw'', VNum vy) -> (rw'', vx `f` vy)
+    where f = case op of
+              Plus -> \a b -> VNum (a + b)
+              Minus -> \a b -> VNum (a - b)
+              GreaterThan -> \a b -> VBool (a > b)
 
 -- | Function expressions
-
---Return values are passed using a special "return" name pushed onto the environment. The result of a function is the value bound in the environment to that value when the function completes.
+--
+-- The meaning of Abs is a function that takes values and returns a value.
+--
+-- Because the function takes values, not locations, and because there
+-- is no "pointer" in the language, calls are by value. The record
+-- value is special because it's a map from names to locations, so you
+-- can mutably modify the data.
+--
+-- Return values are passed using a special "return" name pushed onto
+-- the environment. The result of a function is the value bound in the
+-- environment to that value when the function completes.
 
 emean (Abs args body) =
     \env rw ->
         ( rw
         , VFun
-          $ \rw' ->
+          $ \rw1 ->
               \this args' ->
-                  let bodyEnv =
-                          push (NameId args) args'
-                          . push (NameId "this") this
-                          . push ReturnId VUndef
+                  let (rw2, argLoc) = alloc rw1
+                      (rw3, thisLoc) = alloc rw2
+                      rw4 = store argLoc args' rw3
+                      rw5 = store thisLoc this rw4
+                      bodyEnv =
+                          push (Id args) argLoc
+                          . push (Id "this") thisLoc
                           $ env
 
-                  in case (smean body) halt bodyEnv rw' of
-                        (env'', rw'') -> (rw'', get ReturnId env'')
+                  in case (smean body) halt bodyEnv rw5 of
+                        (env'', rw6) -> (rw6, snd $ popReturn env'')
         )
 
 -- | Function Call
@@ -136,9 +170,9 @@ smean Empty = id
 
 -- | Return statement
 
-smean (Return expr _stmt) = -- continuation stmt is ignored
+smean (Return expr) =
     \k env rw -> case (emean expr) env rw of
-                     (rw', val) -> k (push ReturnId val env) rw'
+                     (rw', val) -> halt (pushReturn val env) rw'
 
 -- | Expression statements
 
@@ -146,27 +180,31 @@ smean (JustExpr expr) = \k env rw -> k env . fst . (emean expr) env $ rw
 
 -- | Statement sequence ;
 
-smean (Seq stmtA stmtB) = smean stmtA . smean stmtB
+smean (Seq stmtA stmtB) = \k env rw ->
+    smean stmtA (smean stmtB k) env rw
 
 -- | (Mutable) variable declaration
 
-smean (VarDecl x) = \k env rw -> k (push (NameId x) VUndef env) rw
+smean (VarDecl x) = \k env rw ->
+    case alloc rw of
+    (rw', loc) -> k (push (Id x) loc env) rw'
 
 -- | Assignment
 
 smean (Assign x expr) = \k env rw ->
     case ((emean expr) env rw) of
-        (rw', val) -> k env (store (location (NameId x) env) val rw')
+        (rw', val) -> k env (store (location (Id x) env) val rw')
 
 -- | While loop
 
-smean (While expr stmt) =
-    \k env rw ->
-        let w rw' = case (emean expr) env rw' of
-                        (rw'', VBool False) -> k env rw''
-                        (rw'', VBool True)  -> w rw''
-                        _ -> error "Expected boolean"
-        in w rw
+smean (While expr body) = while
+    where
+        while =
+            \k env rw ->
+                case (emean expr) env rw of
+                (rw', VBool False) -> k env rw'
+                (rw', VBool True)  -> smean body (while k) env rw'
+                _ -> error "Expected boolean"
 
 --Note: Recursive let using in the meaning here. It should be the same as using `fix`.
 
@@ -189,9 +227,9 @@ smean (If expr b1 b2) =
 
 --Non-recursive ('x' not free in 'expr'):
 
-smean (Let x expr stmt) = \k env rw ->
-    case (emean expr) env rw of
-        (rw', v) -> (smean stmt) k (push (NameId x) v env) rw'
+-- smean (Let x expr stmt) = \k env rw ->
+--     case (emean expr) env rw of
+--         (rw', v) -> (smean stmt) k (push (Id x) v env) rw'
 
 --Recursive:
 
@@ -208,16 +246,53 @@ smean (Let x expr stmt) = \k env rw ->
 --TODO
 
 -- e[[ fix ]] = \env -> \rw ->
+block = foldr Seq Empty
 
+-- | test
+-- >>> snd $ emean (testReturn True) emptyEnv initialWorld
+-- VNum 1.0
+testReturn :: Bool -> Expr
+testReturn f = (App (Abs "y"
+               (Seq
+                (Return (Lit $ VNum 1) )
+                (If (Var "y")
+                 (Return (Lit $ VNum 2))
+                 (Return (Lit $ VNum 3))
+                ))
+              )
+          (Lit $ VBool f))
 
+-- | test
+-- >>> snd $ emean (testWhile 3) emptyEnv initialWorld
+-- VNum 6.0
+testWhile :: Double -> Expr
+testWhile x = App (Abs "x"
+                   $ block [ sumUpToXIntoY
+                           , Return (Var "y")
+                           ]
+                  ) (Lit $ VNum x)
+    where
+        sumUpToXIntoY =
+            block
+            [ VarDecl "y"
+            , Assign "y" (Lit (VNum 0))
+            , While
+              (Op GreaterThan (Var "x") (Lit (VNum 0)))
+              $ block
+              [ Assign "y" (Op Plus (Var "y") (Var "x"))
+              , Assign "x" (Op Minus (Var "x") (Lit (VNum 1)))
+              ]
+            ]
+
+-- | test
+-- >>> snd $ emean (test True) emptyEnv initialWorld
+-- VNum 2.0
 test :: Bool -> Expr
 test f = (App (Abs "y"
-               (Seq
-                (Return (Lit $ VNum 1) Empty)
                 (If (Var "y")
-                 (Return (Lit $ VNum 2) Empty)
-                 (Return (Lit $ VNum 3) Empty)
-                ))
+                 (Return (Lit $ VNum 2))
+                 (Return (Lit $ VNum 3))
+                )
               )
           (Lit $ VBool f))
 
