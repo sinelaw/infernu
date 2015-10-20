@@ -31,7 +31,7 @@ data Expr = Var String
           | Abs String Statement
 
 data Statement = Empty
-               | Seq Statement Statement
+               | Seq Statement Statement -- bug (continuation always here or in all other stmts?)
                | Return Expr Statement
                | JustExpr Expr
                | VarDecl String
@@ -45,6 +45,8 @@ data Statement = Empty
 newtype Location = Location Int deriving (Ord, Eq, Show)
 type RealWorld = Map Location Value
 
+initialWorld = Map.empty
+
 store :: Location -> Value -> RealWorld -> RealWorld
 store = Map.insert
 
@@ -55,32 +57,41 @@ load l rw = case Map.lookup l rw of
 
 -- | Environment
 
-type Env = [(Id, (Value, Location))]
+newtype Env = Env [(Id, (Value, Location))]
 
-push x v [] = [(x,(v,Location 0))]
-push x v (p@(_,(_,Location l)):env) = (x,(v,Location $ l+1)):p:env
+emptyEnv :: Env
+emptyEnv = Env []
 
-pushs [] env = env
-pushs ((x,v):xs) env = pushs xs $ push x v env
+push :: Id -> Value -> Env -> Env
+push x v (Env []) = Env [(x,(v,Location 0))]
+push x v (Env (p@(_,(_,Location l)):env)) = Env $ (x,(v,Location $ l+1)):p:env
+
+pushs :: Env -> Env -> Env
+pushs (Env []) env = env
+pushs (Env ((x,(v, _)):xs)) env = pushs (Env xs) $ push x v env
+
+composeEnv :: Env -> Env -> Env
+composeEnv (Env env1) (Env env2) = Env $ env1 ++ env2
 
 
-composeEnv env1 env2 = env1 ++ env2
+lookup' :: Id -> Env -> (Value, Location)
+lookup' x (Env env) = case lookup x env of
+    Just p -> p
+    Nothing -> error $ "Undeclared name: " ++ show x
 
-lookup' x env = case lookup x env of
-                Just p -> p
-                Nothing -> error $ "Undeclared name: " ++ show x
-
+get :: Id -> Env -> Value
 get      x env = fst $ lookup' x env
 
+location :: Id -> Env -> Location
 location x env = snd $ lookup' x env
 
 -- | Expressions
 
 emean :: Expr -> Env -> RealWorld -> (RealWorld, Value)
 
-emean (Lit v) = \env rw -> (rw, v)
+emean (Lit v) = \_env rw -> (rw, v)
 
---emean (Var x) =
+emean (Var x) = \env rw -> (rw, get (NameId x) env)
 
 -- | Function expressions
 
@@ -91,8 +102,14 @@ emean (Abs args body) =
         ( rw
         , VFun
           $ \rw' ->
-                \this args' ->
-                    case (smean body) halt (push (NameId args) args' . push (NameId "this") this . push ReturnId VUndef $ env) rw' of
+              \this args' ->
+                  let bodyEnv =
+                          push (NameId args) args'
+                          . push (NameId "this") this
+                          . push ReturnId VUndef
+                          $ env
+
+                  in case (smean body) halt bodyEnv rw' of
                         (env'', rw'') -> (rw'', get ReturnId env'')
         )
 
@@ -108,6 +125,7 @@ emean (App f args) =
 
 -- | Statements
 
+halt :: Env -> RealWorld -> (Env, RealWorld)
 halt = (,)
 
 smean :: Statement
@@ -118,7 +136,7 @@ smean Empty = id
 
 -- | Return statement
 
-smean (Return expr stmt) =
+smean (Return expr _stmt) = -- continuation stmt is ignored
     \k env rw -> case (emean expr) env rw of
                      (rw', val) -> k (push ReturnId val env) rw'
 
@@ -192,5 +210,14 @@ smean (Let x expr stmt) = \k env rw ->
 -- e[[ fix ]] = \env -> \rw ->
 
 
-test = (App (Abs "y" (Return (Lit $ VNum 91) Empty)) (Lit $ VBool False))
+test :: Bool -> Expr
+test f = (App (Abs "y"
+               (Seq
+                (Return (Lit $ VNum 1) Empty)
+                (If (Var "y")
+                 (Return (Lit $ VNum 2) Empty)
+                 (Return (Lit $ VNum 3) Empty)
+                ))
+              )
+          (Lit $ VBool f))
 
