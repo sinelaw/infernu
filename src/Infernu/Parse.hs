@@ -110,10 +110,21 @@ fromStatement f (ES3.SwitchStmt z switch cases) = chainExprs z (EArray (gen z) t
 
 fromStatement f (ES3.VarDeclStmt _ decls) = chainDecls f decls
 fromStatement f (ES3.FunctionStmt z name args stmts) = toNamedAbs f z args stmts name
--- fromStatement f (ES3.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return") (EPropName "value")
---                                      $ case x of
---                                         Nothing -> ELit (gen z) LitUndefined
---                                         Just x' -> fromExpression f x'
+-- fromStatement f (ES3.ReturnStmt z x) = \k -> assignToVar z "return" (EArray (gen z) [returnExpr]) $ Just k
+--     where returnExpr = case x of
+--               Nothing -> ELit (gen z) LitUndefined
+--               Just x' -> fromExpression f x'
+fromStatement f (ES3.ReturnStmt z x) = \k ->
+    assignToProperty f z (EVar (gen z) "return") "value" value $ Just k
+    where
+        value =
+            case x of
+            Nothing -> ELit (gen z) LitUndefined
+            Just x' -> fromExpression f x'
+    -- EPropAssign (gen z) (EVar (gen z) "return") (EPropName "value")
+    --                                  $ case x of
+    --                                     Nothing -> ELit (gen z) LitUndefined
+    --                                     Just x' -> fromExpression f x'
 
 -- TODO: Extremely inefficient, the continuation is duplicated between the case branches.
 --
