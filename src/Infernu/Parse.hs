@@ -332,7 +332,7 @@ fromExpression f e@(ES3.ListExpr z exprs) =
       -- Should the let here use an allocated name here?
       xs -> ELet (gen z) poo (ETuple (gen z) (tail exprs')) (head exprs')
           where exprs' = reverse . map (fromExpression f) $ xs
-fromExpression _ (ES3.ThisRef z) = EVar (src z) "this"
+fromExpression f (ES3.ThisRef z) = EVar (src z) "this"
 fromExpression f (ES3.DotRef z expr (ES3.Id _ propName)) = EProp (src z) (fromExpression f expr) (EPropGetName propName)
 fromExpression f (ES3.NewExpr z expr argExprs) = ENew (src z) (fromExpression f expr) (map (fromExpression f) argExprs)
 --  ELet z "__this__" (ERow z True []) (ELet z "_bla_" (EApp z (fromExpression f expr) ((EVar z "__this__") : map (fromExpression f) argExprs)) (EVar z "__this__"))
@@ -399,7 +399,7 @@ assignToVar z name expr cont = ELet (gen z) poo assignApp' $ fromMaybe (applyDer
     where assignApp' = EApp (src z) (EVar (gen z) refAssignOp) [EVar (gen z) name, expr]
 
 assignToProperty :: Show a => FuncScope -> a -> Exp (GenInfo, a) -> String -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
-assignToProperty f z objExpr name expr cont = ELet (gen z) poo (setProperty z objExpr name expr) $ fromMaybe (EProp (gen z) objExpr (EPropGetName name)) cont
+assignToProperty f z objExpr name expr cont = ELet (gen z) poo (setProperty z objExpr name expr) $ fromMaybe (EProp (gen z) objExpr (EPropSetName name)) cont
 
 getProperty :: Show a => a -> Exp (GenInfo, a) -> String -> Exp (GenInfo, a)
 getProperty z objExpr name = applyPropFunc z (EPropGetName name) objExpr []
@@ -424,7 +424,7 @@ assignToIndex f z objExpr idxExpr expr = applyPropFunc z EPropSetIndex objExpr' 
 
 
 fromProp :: ES3.Prop a -> EPropName
-fromProp (ES3.PropId _ (ES3.Id _ x)) = EPropGetName x
+fromProp (ES3.PropId _ (ES3.Id _ x)) = EPropGetName x -- TODO maybe we want both get & set?
 fromProp (ES3.PropString _ x) = EPropGetName x
 fromProp (ES3.PropNum _ x) = EPropGetName $ show x
 
