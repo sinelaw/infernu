@@ -36,6 +36,13 @@ data Expr = Var String
           | Op Operator Expr Expr
           deriving (Show)
 
+(^+^) :: Expr -> Expr -> Expr
+(^+^) x y = Op Plus x y
+(^-^) x y = Op Minus x y
+(^>^) x y = Op GreaterThan x y
+(^$^) f x = App f x
+
+
 data Statement = Empty
                | Seq Statement Statement
                | Return Expr
@@ -46,6 +53,8 @@ data Statement = Empty
                | If Expr Statement Statement
                -- Let String Expr Statement
                deriving (Show)
+
+(^=) x v = Assign x v
 
 -- | RealWorld
 
@@ -275,12 +284,12 @@ testWhile x = App (Abs "x"
         sumUpToXIntoY =
             block
             [ VarDecl "y"
-            , Assign "y" (Lit (VNum 0))
+            , "y" ^= Lit (VNum 0)
             , While
-              (Op GreaterThan (Var "x") (Lit (VNum 0)))
+              (Var "x" ^>^ Lit (VNum 0))
               $ block
-              [ Assign "y" (Op Plus (Var "y") (Var "x"))
-              , Assign "x" (Op Minus (Var "x") (Lit (VNum 1)))
+              [ "y" ^= (Var "y" ^+^ Var "x")
+              , "x" ^= (Var "x" ^-^ Lit (VNum 1))
               ]
             ]
 
