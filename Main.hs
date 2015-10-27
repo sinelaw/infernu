@@ -8,13 +8,17 @@ import qualified Text.Parsec.Pos     as Pos
 import           Text.PrettyPrint.ANSI.Leijen (Pretty (..))
 import           Infernu.Options     (Options (..), opts)
 import           Infernu.Types       (QualType)
-import           Infernu.Source      (Source(..))
+import           Infernu.Source      (Source(..), SourcePosSpan(..))
 import           Infernu.Util
 import           Infernu.Prelude
 
-process :: [(Source, QualType)] -> [(Pos.SourceName, [String])] -> String
+--process :: [(Source, QualType)] -> [(SourcePosSpan, [String])] -> String
 process ts sourceCodes = concatMap (\(f, ds) -> annotatedSource (filteredTypes f ts) ds) sourceCodes
-    where filteredTypes f' = filter (\(Source (_, p), _) -> (Pos.sourceName p == f'))
+    where filteredTypes f' = filter (\(Source (_, span), _) ->
+                                         case span of
+                                         SourcePosSpan start _end -> Pos.sourceName start == f'
+                                         SourcePosGlobal -> False
+                                     )
 
 main :: IO ()
 main = do

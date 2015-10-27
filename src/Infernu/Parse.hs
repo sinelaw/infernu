@@ -7,7 +7,7 @@ import           Data.Maybe                       (catMaybes, mapMaybe, fromMayb
 import qualified Infernu.Log                      as Log
 import           Infernu.Prelude
 import           Infernu.Expr
-import           Infernu.Source                   (GenInfo(..), Source(..))
+import           Infernu.Source                   (GenInfo(..), Source(..), SourcePosSpan(..))
 
 import qualified Language.ECMAScript5.PrettyPrint as ES5PP
 import qualified Language.ECMAScript5.Syntax      as ES5
@@ -442,7 +442,7 @@ fromPropString _ = Nothing
 
 -- -- ------------------------------------------------------------------------
 
-translate :: [ES5.Statement Pos.SourcePos] -> Exp (GenInfo, Pos.SourcePos)
+translate :: [ES5.Statement SourcePosSpan] -> Exp (GenInfo, SourcePosSpan)
 translate js = ELet (gen pos) poo (empty pos) $ foldStmts f js $ EVar (gen pos) poo
-  where pos = Pos.initialPos "<global>"
+  where pos = SourcePosGlobal
         f = foldr collectVars (FuncScope Set.empty Set.empty) js

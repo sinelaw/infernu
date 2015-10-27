@@ -18,14 +18,15 @@ import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
 import           Infernu.Types               (QualType)
-import           Infernu.Source              (GenInfo(..), Source(..), TypeError(..))
+import           Infernu.Source              (GenInfo(..), Source(..), TypeError(..), SourcePosSpan(..))
 
-zipByPos :: [(Pos.SourcePos, String)] -> [(Int, String)] -> [String]
+zipByPos :: [(SourcePosSpan, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
 zipByPos _  [] = []
-zipByPos ps'@((pos, s):ps) xs'@((i,x):xs) = if Pos.sourceLine pos == i
-                                            then formattedAnnotation : zipByPos ps xs'
-                                            else x : zipByPos ps' xs
+zipByPos ps'@((SourcePosSpan pos _end, s):ps) xs'@((i,x):xs) =
+    if Pos.sourceLine pos == i
+    then formattedAnnotation : zipByPos ps xs'
+    else x : zipByPos ps' xs
     where indentToColumn n = replicate (n-1) ' '
           isMultiline = length sLines > 1
           sLines = lines s
@@ -44,13 +45,20 @@ indexList = zip [1..]
 
 checkSource :: String -> Either TypeError [(Source, QualType)]
 checkSource src = case ES5Parser.parseFromString src of
-                   Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing, Pos.initialPos "<global>"), message = string (show parseError) }
-                   Right expr -> -- case ES5.isValid expr of
-                                 --     False -> Left $ TypeError { source = Source (GenInfo True, Pos.initialPos "<global>"), message = "Invalid syntax" }
-                                 --     True ->
-                                 fmap getAnnotations $ fmap minifyVars $ runTypeInference $ fmap (Source) $ translate $ map (fmap getSource) $ ES5.unProgram expr
+                   Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing, SourcePosGlobal), message = string (show parseError) }
+                   Right expr ->
+                       -- case ES5.isValid expr of
+                       --     False -> Left $ TypeError { source = Source (GenInfo True, SourcePosGlobal), message = "Invalid syntax" }
+                       --     True ->
+                       fmap getAnnotations
+                       $ fmap minifyVars
+                       $ runTypeInference
+                       $ fmap (Source)
+                       $ translate
+                       $ map (fmap getSource)
+                       $ ES5.unProgram expr
 
-getSource (ES5PS.SourceSpan (a, _), _) = a
+getSource (ES5PS.SourceSpan (a, b), _) = SourcePosSpan a b
 
 checkFiles :: Options -> [String] -> IO (Either TypeError [(Source, QualType)])
 checkFiles options fileNames = do
@@ -71,7 +79,7 @@ showDoc = showWidth 100
 annotatedSource :: [(Source, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode
-        unGenInfo :: [(Source, QualType)] -> [(String, Pos.SourcePos, QualType)]
+        unGenInfo :: [(Source, QualType)] -> [(String, SourcePosSpan, QualType)]
         unGenInfo = catMaybes . map (\(Source (g, s), q) -> fmap (\n -> (n, s, q)) $ declName g)
         filterGen :: [(Source, QualType)] -> [(Source, QualType)]
         filterGen = filter (\(Source (g, _), _) -> not . isGen $ g)

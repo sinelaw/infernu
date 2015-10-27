@@ -53,12 +53,31 @@ import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 -- pretty = prettyTab 0
 
 
+prettySourceName p = string (Pos.sourceName p)
+prettySourceLine p = string . show $ Pos.sourceLine p
+prettySourceColumn p = string . show $ Pos.sourceColumn p
+
+prettySourceLineCol p = prettySourceLine p <> string ":" <> prettySourceColumn p
 
 instance Pretty Pos.SourcePos where
-    pretty p = string (Pos.sourceName p) <> string ":" <> (string . show $ Pos.sourceLine p) <> string ":" <> (string . show $ Pos.sourceColumn p)
+    pretty p = prettySourceName p <> string ":" <> prettySourceLineCol p
 
 ifStr :: Bool -> String -> Doc
 ifStr b s = if b then string s else empty
+
+instance Pretty SourcePosSpan where
+    pretty (SourcePosSpan start end)
+        | Pos.sourceName start /= Pos.sourceName end = pretty start <> string " - " <> pretty end
+        | Pos.sourceLine start /= Pos.sourceLine end =
+              prettySourceName start
+              <> string ":" <> prettySourceLineCol start
+              <> string " - " <> prettySourceLineCol end
+        | Pos.sourceColumn start /= Pos.sourceColumn end =
+              prettySourceName start
+              <> string ":" <> prettySourceLine start
+              <> string ":" <> prettySourceColumn start
+              <> string "-" <> prettySourceColumn end
+        | otherwise = pretty start
 
 instance Pretty Source where
     pretty (Source (genInfo, pos)) =
