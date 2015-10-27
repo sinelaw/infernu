@@ -106,7 +106,7 @@ instance Pretty EPropName where
     pretty EPropSetIndex = string "[]="
     pretty EPropFun = string "call()"
 
-instance Pretty (Exp a) where
+instance Pretty t => Pretty (Exp t a) where
     pretty (EVar _ n) = string n
     pretty (EApp _ (EVar _ n) [arg1,arg2]) | n == Names.refAssignOp = parens $ pretty arg1 <+> string ":=" <+> pretty arg2
     pretty (EApp _ e1 args) = parens $ pretty e1 <+> nakedSingleOrTuple args
@@ -134,7 +134,7 @@ instance Pretty (Exp a) where
     pretty (EProp _ e n) = pretty e <> dot <> pretty n
     pretty (ENew _ e args) = string "new" <> space <> pretty e <> space <> nakedSingleOrTuple (map pretty args)
     pretty (EStringMap _ exprs) = encloseSep langle rangle comma $ map (\(n,v) -> pretty n <+> string "=>" <+> pretty v) exprs
-
+    pretty (ETypeAscr _ t expr) = pretty expr <+> string " :: " <+> pretty t
 
 -----------------------------------------------------------------------------
 

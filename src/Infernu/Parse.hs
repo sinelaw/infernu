@@ -23,26 +23,26 @@ poo :: EVarName
 poo = "_/_"
 
 -- | A dummy expression that does nothing (but has a type).
-empty :: a -> Exp (GenInfo, a)
+empty :: a -> Exp t (GenInfo, a)
 empty z = ELit (gen z) LitUndefined -- EVar z poo
 
 errorNotSupported :: (Show a, ES5PP.Pretty b) => String -> a -> b -> c
 errorNotSupported featureName sourcePos expr = error $ "Not supported: '" ++ featureName ++ "' at " ++ show sourcePos ++ " in\n" ++ show (ES5PP.prettyPrint expr)
 
-foldStmts :: Show a => FuncScope -> [ES5.Statement a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+foldStmts :: (Show t, Show a) => FuncScope -> [ES5.Statement a] -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 foldStmts _ [] expr = expr
 foldStmts f [x] expr = fromStatement f x expr
 foldStmts f (x:xs) expr = fromStatement f x (foldStmts f xs expr)
 
 -- Doesn't carry context over from one statement to the next (good for branching)
-parallelStmts :: Show a => FuncScope -> a -> [ES5.Statement a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+parallelStmts :: (Show t, Show a) => FuncScope -> a -> [ES5.Statement a] -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 parallelStmts _ _ [] expr = expr
 parallelStmts f z stmts expr = ETuple (gen z) $ expr : map (flip (fromStatement f) $ empty z) stmts
 
-chainExprs :: Show a => a -> Exp (GenInfo, a) -> (Exp (GenInfo, a) -> Exp (GenInfo, a)) -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+chainExprs :: (Show t, Show a) => a -> Exp t (GenInfo, a) -> (Exp t (GenInfo, a) -> Exp t (GenInfo, a)) -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 chainExprs a init' getExpr expr = ELet (gen a) poo init' $ getExpr expr
 
-singleStmt :: Show a => a -> Exp a -> Exp a -> Exp a
+singleStmt :: (Show t, Show a) => a -> Exp t a -> Exp t a -> Exp t a
 singleStmt a exp' = ELet a poo exp'
 
 gen :: a -> (GenInfo, a)
@@ -54,10 +54,10 @@ src x = (GenInfo False Nothing, x)
 decl :: a -> String -> (GenInfo, a)
 decl x n = (GenInfo False (Just n), x)
 
-litBool :: a -> Bool -> Exp (GenInfo, a)
+litBool :: a -> Bool -> Exp t (GenInfo, a)
 litBool z b = ELit (gen z) (LitBoolean b)
 
-fromStatement :: Show a => FuncScope -> ES5.Statement a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+fromStatement :: (Show t, Show a) => FuncScope -> ES5.Statement a -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 fromStatement f (ES5.BlockStmt _ stmts) = foldStmts f stmts
 fromStatement _ (ES5.EmptyStmt _) = id
 fromStatement f (ES5.ExprStmt z (ES5.AssignExpr _ op target expr)) = \k -> toAssignExpr f z op target expr $ Just k
@@ -119,8 +119,8 @@ fromStatement f (ES5.ReturnStmt z x) = EPropAssign (gen z) (EVar (gen z) "return
 --
 -- We should have a name source (monad?) we can use here to generate unique names and wrap the whole
 -- case in a let, binding 'k' to a unique name and using EVar to refer to it in the branches.
-mkIf :: Show a => FuncScope -> a -> ES5.Expression a -> ES5.Statement a -> ES5.Statement a
-                    -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+mkIf :: (Show t, Show a) => FuncScope -> a -> ES5.Expression a -> ES5.Statement a -> ES5.Statement a
+                    -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 mkIf f z pred' thenS elseS =
     \k -> ECase (gen z) (fromExpression f pred')
           . map (\(v,s) -> (v, chainExprs z (fromStatement f s $ empty z) id k))
@@ -128,7 +128,7 @@ mkIf f z pred' thenS elseS =
             , (LitBoolean False, elseS)]
 
 -- | Creates an EAbs (function abstraction)
-toAbs :: Show a => FuncScope -> a -> [ES5.Id c] -> [ES5.Statement a] -> Exp (GenInfo, a)
+toAbs :: (Show t, Show a) => FuncScope -> a -> [ES5.Id c] -> [ES5.Statement a] -> Exp t (GenInfo, a)
 toAbs f' z args stmts = EAbs (src z) ("this" : args') body'
   -- TODO: this can lead to problems if "return" was never called (there's a partial function here - dereferencing array element 0)
   where f = foldr collectVars f' stmts
@@ -138,7 +138,7 @@ toAbs f' z args stmts = EAbs (src z) ("this" : args') body'
                       else x
         argNames = map ES5.unId args
         args' = map toMutName argNames
-        --mutArgDecl :: String -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+        --mutArgDecl :: String -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
         mutArgDecl x = if x `Set.member` mutableVars f
                        then ELet (gen z) x $ mkRef z (EVar (gen z) (mutName x))
                        else id
@@ -261,15 +261,15 @@ hasReturn (ES5.FunctionStmt _ _ _ _) = False
 hasReturn (ES5.ReturnStmt _ _) = True
 
 
-addDecl :: Show a => a -> String -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+addDecl :: (Show t, Show a) => a -> String -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 addDecl z name expr = Log.trace ("addDecl: " ++ show res) res
     where res = mapTopAnnotation (const $ decl z name) expr
 
-toNamedAbs :: Show a => FuncScope -> a -> [ES5.Id c] -> [ES5.Statement a] -> ES5.Id a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+toNamedAbs :: (Show t, Show a) => FuncScope -> a -> [ES5.Id c] -> [ES5.Statement a] -> ES5.Id a -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 toNamedAbs f z args stmts (ES5.Id zn name) letBody = let abs' = addDecl zn name $ toAbs f z args stmts
                                                      in ELet (gen z) name abs' letBody
 
-chainDecls :: Show a => FuncScope -> [ES5.VarDecl a] -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+chainDecls :: (Show t, Show a) => FuncScope -> [ES5.VarDecl a] -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 chainDecls _ [] k = k
 chainDecls f (ES5.VarDecl z' (ES5.Id _ name) v:xs) k = ELet (gen z') name v' (chainDecls f xs k)
     where ref' = if Set.member name (mutableVars f)
@@ -279,16 +279,16 @@ chainDecls f (ES5.VarDecl z' (ES5.Id _ name) v:xs) k = ELet (gen z') name v' (ch
                  Just v'' -> addDecl z' name $ ref' $ fromExpression f v''
                  Nothing -> ref' (ELit (gen z') LitUndefined)
 
-mkRef :: a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+mkRef :: a -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 mkRef z x = EApp (gen z) (EVar (gen z) refOp) [x]
 
-applyDeref :: a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+applyDeref :: a -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 applyDeref z x = EApp (gen z) (EVar (gen z) derefOp) [x]
 
-makeThis :: Show a => a -> Exp a
+makeThis :: (Show t, Show a) => a -> Exp t a
 makeThis z = ELit z $ LitEmptyThis
 
-fromExpression :: Show a => FuncScope -> ES5.Expression a -> Exp (GenInfo, a)
+fromExpression :: (Show t, Show a) => FuncScope -> ES5.Expression a -> Exp t (GenInfo, a)
 fromExpression _ (ES5.StringLit z s) = ELit (src z) $ LitString s
 fromExpression _ (ES5.RegexpLit z s g i m) = ELit (src z) $ LitRegex s g i m
 fromExpression _ (ES5.BoolLit z s) = ELit (src z) $ LitBoolean s
@@ -366,7 +366,7 @@ fromExpression f (ES5.UnaryAssignExpr z op (ES5.DotRef _ objExpr (ES5.Id _ name)
 fromExpression f (ES5.UnaryAssignExpr z op (ES5.BracketRef _ objExpr idxExpr)) = assignToIndex f z objExpr idxExpr $ addConstant z op (getIndex f z objExpr idxExpr)
 
 -- toAssignExpr :: Show t =>
---     FuncScope -> t -> ES5.AssignOp -> ES5.Expression t -> ES5.Expression t -> Maybe (Exp (GenInfo, t)) -> Exp (GenInfo, t)
+--     FuncScope -> t -> ES5.AssignOp -> ES5.Expression t -> ES5.Expression t -> Maybe (Exp t (GenInfo, t)) -> Exp t (GenInfo, t)
 toAssignExpr f z op target expr cont = assignExpr
   where sz = src z
         (assignExpr, oldValue) = case target of
@@ -392,14 +392,14 @@ toAssignExpr f z op target expr cont = assignExpr
 
 
 
-opFunc :: a -> ES5.InfixOp -> Exp (GenInfo, a)
+opFunc :: a -> ES5.InfixOp -> Exp t (GenInfo, a)
 opFunc z op = EVar (gen z) $ show . ES5PP.prettyPrint $ op
 
-applyOpFunc :: Show a => a -> ES5.InfixOp -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)
+applyOpFunc :: (Show t, Show a) => a -> ES5.InfixOp -> [Exp t (GenInfo, a)] -> Exp t (GenInfo, a)
 applyOpFunc z op exprs = EApp (gen z) (opFunc z op) (makeThis (gen z) : exprs)
 
 -- TODO: the translation results in equivalent types, but currently ignore pre vs. postfix so the data flow is wrong.
-addConstant :: Show a => a -> ES5.UnaryAssignOp -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+addConstant :: (Show t, Show a) => a -> ES5.UnaryAssignOp -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 addConstant z op expr = EApp (gen z) (opFunc z ES5.OpAdd) [makeThis (gen z), expr, ELit (gen z) $ LitNumber x]
   where x = case op of
              ES5.PrefixInc -> 1
@@ -407,25 +407,25 @@ addConstant z op expr = EApp (gen z) (opFunc z ES5.OpAdd) [makeThis (gen z), exp
              ES5.PostfixInc -> 1
              ES5.PostfixDec -> -1
 
-assignToVar :: Show a => a -> EVarName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
+assignToVar :: (Show t, Show a) => a -> EVarName -> Exp t (GenInfo, a) -> Maybe (Exp t (GenInfo, a)) -> Exp t (GenInfo, a)
 assignToVar z name expr cont = ELet (gen z) poo assignApp' $ fromMaybe (applyDeref z $ EVar (src z) name) cont
     where assignApp' = EApp (src z) (EVar (gen z) refAssignOp) [EVar (gen z) name, expr]
 
-assignToProperty :: Show a => FuncScope -> a -> ES5.Expression a -> EPropName -> Exp (GenInfo, a) -> Maybe (Exp (GenInfo, a)) -> Exp (GenInfo, a)
+assignToProperty :: (Show t, Show a) => FuncScope -> a -> ES5.Expression a -> EPropName -> Exp t (GenInfo, a) -> Maybe (Exp t (GenInfo, a)) -> Exp t (GenInfo, a)
 assignToProperty f z objExpr name expr cont = EPropAssign (src z) objExpr' name expr $ fromMaybe (EProp (src z) objExpr' name) cont
   where objExpr' = fromExpression f objExpr
 
-applyPropFunc :: a -> EPropName -> Exp (GenInfo, a) -> [Exp (GenInfo, a)] -> Exp (GenInfo, a)
+applyPropFunc :: a -> EPropName -> Exp t (GenInfo, a) -> [Exp t (GenInfo, a)] -> Exp t (GenInfo, a)
 applyPropFunc z prop arrExpr args = ELet (gen z) obj' arrExpr $ applyPropFunc'
     where obj' = "bracketObj"
           objVar = EVar (gen z) obj'
           applyPropFunc' = EApp (gen z) getProp' (objVar:args)
           getProp' = EProp (gen z) objVar prop
 
-getIndex :: Show a => FuncScope -> a -> ES5.Expression a -> ES5.Expression a -> Exp (GenInfo, a)
+getIndex :: (Show t, Show a) => FuncScope -> a -> ES5.Expression a -> ES5.Expression a -> Exp t (GenInfo, a)
 getIndex f z arrExpr indexExpr = applyPropFunc z EPropGetIndex (fromExpression f arrExpr) [fromExpression f indexExpr]
 
-assignToIndex :: Show a => FuncScope -> a -> ES5.Expression a  -> ES5.Expression a -> Exp (GenInfo, a) -> Exp (GenInfo, a)
+assignToIndex :: (Show t, Show a) => FuncScope -> a -> ES5.Expression a  -> ES5.Expression a -> Exp t (GenInfo, a) -> Exp t (GenInfo, a)
 assignToIndex f z objExpr idxExpr expr = applyPropFunc z EPropSetIndex objExpr' [idxExpr', expr]
   where objExpr' = fromExpression f objExpr
         idxExpr' = fromExpression f idxExpr
@@ -442,7 +442,7 @@ fromPropString _ = Nothing
 
 -- -- ------------------------------------------------------------------------
 
-translate :: [ES5.Statement (SourcePosSpan, [Comment])] -> Exp (Source, [Comment])
+translate :: Show t => [ES5.Statement (SourcePosSpan, [Comment])] -> Exp t (Source, [Comment])
 translate js = fmap (\(g, (span, comments)) -> (Source g span, comments))
                $ ELet (gen pos) poo (empty pos) $ foldStmts f js $ EVar (gen pos) poo
   where pos = (SourcePosGlobal, [])

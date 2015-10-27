@@ -174,7 +174,7 @@ instance VarNames t => VarNames [t] where
 instance VarNames t => VarNames (a, t) where
   freeTypeVars = freeTypeVars'
   mapVarNames = mapVarNames'
-instance VarNames t => VarNames (Exp (a, t)) where
+instance VarNames t => VarNames (Exp u (a, t)) where
   freeTypeVars = freeTypeVars'
   mapVarNames = mapVarNames'
 

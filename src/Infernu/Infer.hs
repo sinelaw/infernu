@@ -31,9 +31,9 @@ import           Infernu.Source     (Source(..), TypeError(..))
 import           Infernu.Expr       (Exp(..), LitVal(..), EVarName(..), EPropName(..))
 import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyl, tryMakeRow)
 
+type TExp a = Exp QualType a
 
-
-getAnnotations :: Exp a -> [a]
+getAnnotations :: Exp t a -> [a]
 getAnnotations = foldr (:) []
 
 ----------------------------------------------------------------------
@@ -64,7 +64,7 @@ closeRow _ t = return t
 
 
 -- For efficiency reasons, types list is returned in reverse order.
-accumInfer :: TypeEnv -> [Exp Source] -> Infer [(QualType, Exp (Source, QualType))]
+accumInfer :: TypeEnv -> [TExp Source] -> Infer [(QualType, TExp (Source, QualType))]
 accumInfer env =
   do traceLog $ text "accumInfer: env: " <+> pretty env
      foldM accumInfer' []
@@ -72,7 +72,7 @@ accumInfer env =
              do (t, e) <- inferType env expr
                 return ((t,e):types)
 
--- wrapInferError :: Exp Source -> Infer a -> Infer a
+-- wrapInferError :: TExp Source -> Infer a -> Infer a
 -- wrapInferError exp act = wrapError format' s act
 --     where format' te = vsep [text "During type inference for:"
 --                             , indent 4 $ pretty exp
@@ -81,7 +81,7 @@ accumInfer env =
 --                             ]
 --           s = head $ getAnnotations exp
 
-inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
+inferType  :: TypeEnv -> TExp Source -> Infer (QualType, TExp (Source, QualType))
 inferType env expr = do
   traceLog $ text ">> " <+> pretty expr <+> text " -- env: " <+> pretty env
 --  (t, e) <- wrapInferError expr $ inferType' env expr
@@ -93,7 +93,7 @@ inferType env expr = do
   traceLog $ indent 4 $ text "infer state: " <+> pretty st
   return (applySubst s t, fmap (applySubst s) e)
 
-inferType' :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
+inferType' :: TypeEnv -> TExp Source -> Infer (QualType, TExp (Source, QualType))
 inferType' _ (ELit a lit) = do
   let t = Fix $ TBody $ case lit of
                     LitNumber _ -> TNumber
@@ -285,7 +285,7 @@ createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins
                addVarScheme m name $ mapVarNames (safeLookup allocNames) tscheme
 
 
-typeInference :: Map EVarName TypeScheme -> Exp Source -> Infer (Exp (Source, QualType))
+typeInference :: Map EVarName TypeScheme -> TExp Source -> Infer (TExp (Source, QualType))
 typeInference builtins e =
   do env <- createEnv builtins
      (_t, e') <- inferType env e
@@ -400,11 +400,11 @@ typeInference builtins e =
 --
 -- >>> test $ let' "x" (fun ["a"] (var "a")) (let' "getX" (fun ["v"] (var "x")) (let' "setX" (fun ["v"] (let' "_" (assign "x" (var "v") (var "x")) (lit (LitBoolean True)))) (let' "_" (app (var "setX") (fun ["a"] (lit (LitString "a")))) (var "getX"))))
 -- "e.(f -> d.(String -> String))"
-test :: Exp Source -> String
+test :: TExp Source -> String
 test e = case runTypeInference e of
           Left err -> show $ pretty err
           Right expr -> show $ pretty $ snd . head . getAnnotations . minifyVars $ expr
 
 
-runTypeInference :: Exp Source -> Either TypeError (Exp (Source, QualType))
+runTypeInference :: TExp Source -> Either TypeError (TExp (Source, QualType))
 runTypeInference e = runInfer $ typeInference Builtins.builtins e

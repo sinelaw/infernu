@@ -34,27 +34,28 @@ data LitVal = LitNumber !Double
             | LitEmptyThis
             deriving (Show, Eq, Ord)
 
-data Exp a = EVar !a !EVarName
-           | EApp !a !(Exp a) ![Exp a]
-           | EAbs !a ![EVarName] !(Exp a)
-           | ELet !a !EVarName !(Exp a) !(Exp a)
-           | ECase !a !(Exp a) ![(LitVal, Exp a)]
-           | EProp !a !(Exp a) !EPropName
-           | EPropAssign !a !(Exp a) !EPropName !(Exp a) !(Exp a)
-             -- TODO consider better options for causing rows to become closed outside the 'new' call
-           | ENew !a !(Exp a) ![Exp a]
-             -- Various literal expressions
-           | ELit !a !LitVal
-           | EArray !a ![Exp a]
-           | ETuple !a ![Exp a]
-           | ERow !a !Bool ![(EPropName, Exp a)]
-           | EStringMap !a ![(String, Exp a)]
+data Exp t a = EVar !a !EVarName
+             | EApp !a !(Exp t a) ![Exp t a]
+             | EAbs !a ![EVarName] !(Exp t a)
+             | ELet !a !EVarName !(Exp t a) !(Exp t a)
+             | ECase !a !(Exp t a) ![(LitVal, Exp t a)]
+             | EProp !a !(Exp t a) !EPropName
+             | EPropAssign !a !(Exp t a) !EPropName !(Exp t a) !(Exp t a)
+               -- TODO consider better options for causing rows to become closed outside the 'new' call
+             | ENew !a !(Exp t a) ![Exp t a]
+               -- Various literal expressions
+             | ELit !a !LitVal
+             | EArray !a ![Exp t a]
+             | ETuple !a ![Exp t a]
+             | ERow !a !Bool ![(EPropName, Exp t a)]
+             | EStringMap !a ![(String, Exp t a)]
+             | ETypeAscr !a !t !(Exp t a)
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
 
 -- TODO: Horrible, terrible boilerplate. get rid of it.
-mapTopAnnotation :: (a -> a) -> Exp a -> Exp a
+mapTopAnnotation :: (a -> a) -> Exp t a -> Exp t a
 mapTopAnnotation f expr =
     case expr of
         (EVar a b) -> EVar (f a) b

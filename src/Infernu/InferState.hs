@@ -455,7 +455,7 @@ unsafeGeneralize tenv t = do
 
     return (TScheme (Set.toList unboundVars) t'', floatedPreds)
 
-isExpansive :: Exp a -> Bool
+isExpansive :: Exp t a -> Bool
 isExpansive (EVar{})    = False
 isExpansive (EAbs{})    = False
 isExpansive (ELit{})    = False
@@ -471,7 +471,7 @@ isExpansive (ERow{})        = True
 isExpansive (ENew{})        = True
 
 
-generalize :: Exp a -> TypeEnv -> QualType -> Infer (TypeScheme, [TPred Type])
+generalize :: Exp t a -> TypeEnv -> QualType -> Infer (TypeScheme, [TPred Type])
 generalize exp' env t = if isExpansive exp'
                         then return (TScheme [] t, [])
                         else unsafeGeneralize env t
