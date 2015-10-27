@@ -18,7 +18,8 @@ import           Infernu.Parse               (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
 import           Infernu.Types               (QualType)
-import           Infernu.Source              (GenInfo(..), Source(..), TypeError(..), SourcePosSpan(..))
+import           Infernu.Source              (GenInfo(..), Source(..), TypeError(..),
+                                              SourcePosSpan(..), Comment(..))
 
 zipByPos :: [(SourcePosSpan, String)] -> [(Int, String)] -> [String]
 zipByPos [] xs = map snd xs
@@ -53,18 +54,22 @@ checkSource src = case ES5Parser.parseFromString src of
                        fmap getAnnotations
                        $ fmap minifyVars
                        $ runTypeInference
-                       $ fmap (uncurry Source)
+                       $ fmap fst
                        $ translate
                        $ map (fmap getSource)
                        $ ES5.unProgram expr
 
-getSource (ES5PS.SourceSpan (a, b), _) = SourcePosSpan a b
+translateComment :: ES5PS.Comment -> Comment
+translateComment (ES5PS.SingleLineComment s) = SingleLineComment s
+translateComment (ES5PS.MultiLineComment s) = MultiLineComment s
+
+getSource (ES5PS.SourceSpan (a, b), c) = (SourcePosSpan a b, map translateComment c)
 
 checkFiles :: Options -> [String] -> IO (Either TypeError [(Source, QualType)])
 checkFiles options fileNames = do
   expr <- concatMap ES5.unProgram <$> forM fileNames ES5Parser.parseFromFile
   when (optShowParsed options) $ putStrLn $ show $ ES5Pretty.prettyPrint expr
-  let expr' = fmap (uncurry Source) $ translate $ map (fmap getSource) expr
+  let expr' = fmap fst $ translate $ map (fmap getSource) expr
   when (optShowCore options) $ putStrLn $ show $ pretty expr'
   let expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''

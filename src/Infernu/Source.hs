@@ -2,7 +2,7 @@
 
 module Infernu.Source
        ( GenInfo(..)
-       , Source(..), SourcePosSpan(..)
+       , Source(..), SourcePosSpan(..), Comment(..)
        , emptySource
        , TypeError(..)
        ) where
