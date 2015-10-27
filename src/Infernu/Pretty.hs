@@ -80,7 +80,7 @@ instance Pretty SourcePosSpan where
         | otherwise = pretty start
 
 instance Pretty Source where
-    pretty (Source (genInfo, pos)) =
+    pretty (Source genInfo pos) =
         ifStr (isGen genInfo) "*"
         <> pretty pos
         <> maybe empty (\x -> string ":" <> string x <> string ":") (declName genInfo)

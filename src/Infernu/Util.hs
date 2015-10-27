@@ -45,7 +45,7 @@ indexList = zip [1..]
 
 checkSource :: String -> Either TypeError [(Source, QualType)]
 checkSource src = case ES5Parser.parseFromString src of
-                   Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing, SourcePosGlobal), message = string (show parseError) }
+                   Left parseError -> Left $ TypeError { source = Source (GenInfo True Nothing) SourcePosGlobal, message = string (show parseError) }
                    Right expr ->
                        -- case ES5.isValid expr of
                        --     False -> Left $ TypeError { source = Source (GenInfo True, SourcePosGlobal), message = "Invalid syntax" }
@@ -53,7 +53,7 @@ checkSource src = case ES5Parser.parseFromString src of
                        fmap getAnnotations
                        $ fmap minifyVars
                        $ runTypeInference
-                       $ fmap (Source)
+                       $ fmap (uncurry Source)
                        $ translate
                        $ map (fmap getSource)
                        $ ES5.unProgram expr
@@ -64,7 +64,7 @@ checkFiles :: Options -> [String] -> IO (Either TypeError [(Source, QualType)])
 checkFiles options fileNames = do
   expr <- concatMap ES5.unProgram <$> forM fileNames ES5Parser.parseFromFile
   when (optShowParsed options) $ putStrLn $ show $ ES5Pretty.prettyPrint expr
-  let expr' = fmap Source $ translate $ map (fmap getSource) expr
+  let expr' = fmap (uncurry Source) $ translate $ map (fmap getSource) expr
   when (optShowCore options) $ putStrLn $ show $ pretty expr'
   let expr'' = fmap minifyVars $ runTypeInference expr'
       res = fmap getAnnotations expr''
@@ -80,7 +80,7 @@ annotatedSource :: [(Source, QualType)] -> [String] -> String
 annotatedSource xs sourceCode = unlines $ zipByPos (prettyRes $ unGenInfo $ filterGen xs) indexedSource
   where indexedSource = indexList sourceCode
         unGenInfo :: [(Source, QualType)] -> [(String, SourcePosSpan, QualType)]
-        unGenInfo = catMaybes . map (\(Source (g, s), q) -> fmap (\n -> (n, s, q)) $ declName g)
+        unGenInfo = catMaybes . map (\(Source g s, q) -> fmap (\n -> (n, s, q)) $ declName g)
         filterGen :: [(Source, QualType)] -> [(Source, QualType)]
-        filterGen = filter (\(Source (g, _), _) -> not . isGen $ g)
+        filterGen = filter (\(Source g _, _) -> not . isGen $ g)
         prettyRes = Set.toList . Set.fromList . fmap (\(n, s, q) -> (s, showDoc $ pretty n <+> string ":" <+> pretty q))

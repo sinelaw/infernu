@@ -14,7 +14,7 @@ import           Infernu.Prelude
 
 --process :: [(Source, QualType)] -> [(SourcePosSpan, [String])] -> String
 process ts sourceCodes = concatMap (\(f, ds) -> annotatedSource (filteredTypes f ts) ds) sourceCodes
-    where filteredTypes f' = filter (\(Source (_, span), _) ->
+    where filteredTypes f' = filter (\(Source _ span, _) ->
                                          case span of
                                          SourcePosSpan start _end -> Pos.sourceName start == f'
                                          SourcePosGlobal -> False
