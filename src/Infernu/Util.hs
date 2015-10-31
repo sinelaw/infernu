@@ -14,7 +14,7 @@ import           Text.PrettyPrint.ANSI.Leijen (Pretty (..), (<+>), string, rende
 
 import           Infernu.Prelude
 import           Infernu.Options             (Options(..))
-import           Infernu.Parse               (translate)
+import           Infernu.Parse.JS               (translate)
 -- TODO move pretty stuff to Pretty module
 import           Infernu.Infer               (getAnnotations, minifyVars, runTypeInference)
 import           Infernu.Types               (QualType)

@@ -1,4 +1,4 @@
-module Infernu.Parse
+module Infernu.Parse.JS
        (translate)
        where
 
