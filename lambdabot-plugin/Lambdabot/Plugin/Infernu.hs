@@ -15,7 +15,7 @@ import qualified Language.ECMAScript5.Syntax as ES5
 
 import           Infernu.Infer                (getAnnotations, minifyVars,
                                               pretty, runTypeInference)
-import           Infernu.Parse                (translate)
+import           Infernu.Parse.JS                (translate)
 import           Infernu.Types (GenInfo(..), Source(..))
 
 import Text.PrettyPrint.ANSI.Leijen (plain, displayS, renderPretty, Doc)
