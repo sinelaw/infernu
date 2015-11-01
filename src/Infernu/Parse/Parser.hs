@@ -18,8 +18,10 @@ emptyStream = []
 
 data ParserSingle a t = ParserSingle (Stream a -> Maybe (Stream a, t))
 
+unParserSingle :: ParserSingle s a -> Stream s -> Maybe (Stream s, a)
 unParserSingle (ParserSingle p) = p
 
+runParserSingle :: ParserSingle s a -> Stream s -> Maybe (Stream s, a)
 runParserSingle (ParserSingle p) s = p s
 
 instance Functor (ParserSingle s) where
@@ -124,12 +126,12 @@ runParser (PSome p) s =
 
 runParser (PAlt ps) s = firstJust $ map (flip runParser s) ps
     where firstJust []              = Nothing
-          firstJust (Just x  : mxs) = Just x
+          firstJust (Just x  : _)   = Just x
           firstJust (Nothing : mxs) = firstJust mxs
 
 runParser (PSeq ps) s = foldr accumParse (Just (s, mempty)) ps
     where
-        accumParse p' Nothing = Nothing
+        accumParse _ Nothing = Nothing
         accumParse p' (Just (s', x')) =
             case runParser p' s' of
             Nothing -> Nothing
@@ -137,13 +139,16 @@ runParser (PSeq ps) s = foldr accumParse (Just (s, mempty)) ps
 
 ----------------------------------------------------------------------
 
+isSingle :: (t -> Bool) -> ParserSingle t t
 isSingle f = ParserSingle $
            \s -> case s of
            (x:s') | f x -> Just (s', x)
            _ -> Nothing
 
+is :: (t -> Bool) -> Parser t t
 is = POne . isSingle
 
+are :: (a -> Bool) -> Parser a [a]
 are = many . is
 
 oneOf opts = is (\x -> elem x opts)

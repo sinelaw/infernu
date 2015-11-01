@@ -20,10 +20,15 @@ data Token = Space | Arrow | FatArrow | Colon | Comma
            deriving (Show)
 
 data Body = Var String | Fun [Body] Body | App Constructor Body
+          deriving Show
 data Constructor = Constructor String
+                 deriving Show
 data Constraint = Constraint TypeClass Body
+                deriving Show
 data TypeClass = TypeClass String
+               deriving Show
 data PType = PType [Constraint] Body
+             deriving Show
 
 spaces = fmap (const Space) $ many space
 inSpace p = spaces *> p <* spaces
