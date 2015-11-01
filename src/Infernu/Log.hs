@@ -2,6 +2,7 @@
 {-# LANGUAGE TupleSections   #-}
 {-# LANGUAGE BangPatterns    #-}
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Log
        (trace, tracePretty, traceLog, traceLogVal)
        where

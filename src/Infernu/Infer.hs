@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections   #-}
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Infer
     ( runTypeInference
     , test

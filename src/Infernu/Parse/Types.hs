@@ -1,5 +1,6 @@
 -- |
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Parse.Types where
 
 import           Control.Applicative  (many, some, (<*), (*>), (<|>))

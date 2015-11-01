@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Lib where
 
 import           Data.Maybe                (fromMaybe)

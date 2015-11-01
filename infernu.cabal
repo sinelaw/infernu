@@ -86,7 +86,7 @@ library
   -- TODO: use only mtl (not transformers)
   build-depends:       base >= 4.6 && < 5, base-compat, base-orphans, mtl, containers, transformers, either, language-ecmascript >= 1.0, digits, parsec, optparse-applicative, ansi-wl-pprint, unordered-containers, hashable
   default-language:    Haskell2010
-  default-extensions: NoImplicitPrelude
+  default-extensions:
   ghc-options: -Wall -O2 -rtsopts -threaded
   ghc-prof-options:  -threaded -auto-all -caf-all -O2 -rtsopts
   if flag(debug)
@@ -102,7 +102,7 @@ executable infernu
   main-is: Main.hs
   build-depends:       base, parsec, infernu, optparse-applicative, ansi-wl-pprint
   default-language:    Haskell2010
-  default-extensions: NoImplicitPrelude
+  default-extensions:
   ghc-options:  -Wall -O2 -rtsopts -threaded
   ghc-prof-options:  -threaded -auto-all -caf-all -O2 -rtsopts
   if flag(debug)
@@ -119,7 +119,7 @@ executable infernu-demo
   hs-source-dirs: test
   build-depends:       base, infernu, ansi-wl-pprint
   default-language:    Haskell2010
-  default-extensions: NoImplicitPrelude
+  default-extensions:
   ghc-options: -Wall  -O2 -main-is Demo
   if flag(trace)
     cpp-options: -DTRACE
@@ -139,7 +139,7 @@ executable test
   hs-source-dirs: test
   build-depends:       base, infernu
   default-language:    Haskell2010
-  default-extensions: NoImplicitPrelude
+  default-extensions:
   ghc-options: -Wall  -O2 -main-is Test
   if flag(trace)
     cpp-options: -DTRACE

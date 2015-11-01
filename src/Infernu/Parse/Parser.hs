@@ -2,6 +2,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 -- | A simple applicative parser
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Parse.Parser where
 
 import Control.Applicative (Alternative(..), (<|>))
