@@ -1,4 +1,3 @@
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 -- | A simple applicative parser
@@ -6,7 +5,7 @@
 module Infernu.Parse.Parser where
 
 import Control.Applicative (Alternative(..), (<|>))
-import Data.List (foldl', intercalate)
+import Data.List (intercalate)
 import Data.Monoid ((<>))
 import qualified Data.Char as Char
 
@@ -14,6 +13,7 @@ import Infernu.Prelude
 
 type Stream a = [a]
 
+emptyStream :: [a]
 emptyStream = []
 
 data ParserSingle a t = ParserSingle (Stream a -> Maybe (Stream a, t))
@@ -94,6 +94,8 @@ instance Monoid a => Monoid (Parser s a) where
     x `mappend` (PSeq ys) = PSeq (x : ys)
     x `mappend` y = PSeq [x,y]
 
+cons :: (Functor f, Monoid (f [a])) => f a -> f [a] -> f [a]
+cons x xs = fmap (:[]) x <> xs
 
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
@@ -158,20 +160,13 @@ str = some letter
 
 space = is Char.isSpace
 
-data Token = Space | Arrow | Colon
-           deriving (Show)
-
-spaces = fmap (const Space) $ many space
-inSpace p = spaces *> p <* spaces
-
-arrow = fmap (const Arrow) $ is (== '-') *> is (== '>')
-colon = fmap (const Colon) $ is (== ':')
-
-sstr = inSpace str
-
 openPar = is (=='(')
 closePar = is (==')')
 
+withParens :: Parser Char a -> Parser Char a
 withParens x = openPar *> x <* closePar
+
+optParens :: Parser Char a -> Parser Char a
 optParens x = x <|> withParens x
+
 
