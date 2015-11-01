@@ -3,7 +3,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Parse.Types where
 
-import           Control.Applicative  (many, some, (<*), (*>), (<|>))
+import           Control.Applicative  (many, some, (<*), (*>), (<|>), empty)
 
 
 import           Infernu.Parse.Parser as P
@@ -39,7 +39,7 @@ colon = fmap (const Colon) $ is (== ':')
 comma = fmap (const Comma) $ is (== ',')
 sstr = inSpace str
 
-manyInTuple x = optParens (fmap (:[]) x)
+someInTuple x = optParens (fmap (:[]) x)
                 <|> withParens (x `P.cons` some (comma *> x))
 
 identChar = P.alphaNum <|> P.oneOf "_'"
@@ -51,14 +51,15 @@ constrName :: TParser String
 constrName = inSpace $ P.upper `P.cons` many identChar
 
 tvar = Var <$> tvarName
-fun = Fun <$> manyInTuple body <* inSpace arrow <*> body
+fun = Fun <$> someInTuple body <* inSpace arrow <*> body
 app = App <$> constructor <*> body
-body = inSpace $ tvar <|> fun <|> app
+body = inSpace $ optParens $ inSpace (tvar <|> fun <|> app)
 
 constructor = Constructor <$> constrName
 constraint = Constraint <$> typeClass <*> body
 typeClass = TypeClass <$> constrName
 
-ptype = PType <$> many constraint <* fatArrow <*> body
+constraints = (inSpace (someInTuple constraint) <* inSpace fatArrow) <|> pure []
+ptype = PType <$> constraints <*> body
 
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 -- | A simple applicative parser
 
@@ -7,7 +8,7 @@ module Infernu.Parse.Parser where
 
 import Control.Applicative (Alternative(..), (<|>))
 import Data.List (intercalate)
-import Data.Monoid ((<>))
+import Data.Monoid ((<>), mconcat)
 import qualified Data.Char as Char
 
 import Infernu.Prelude
@@ -67,7 +68,7 @@ instance Show (Parser a t) where
     show (PAlt ps) = "(" ++ intercalate " | " (map show ps) ++ ")"
     show (PApp pf px) = show pf ++ " <*> " ++ show px
     show (PSome p) = "some " ++ show p
-    show (PSeq ps) = "(" ++ intercalate " " (map show ps) ++ ")"
+    show (PSeq ps) = "(" ++ intercalate ", " (map show ps) ++ ")"
 
 instance Functor (Parser s) where
     fmap f p = pure f <*> p
@@ -92,18 +93,18 @@ instance Monoid a => Monoid (Parser s a) where
     mempty = PZero
     PZero `mappend` p = p
     p `mappend` PZero = p
-    (PSeq xs) `mappend` (PSeq ys) = PSeq (xs ++ ys)
-    (PSeq xs) `mappend` y = PSeq (xs ++ [y])
-    x `mappend` (PSeq ys) = PSeq (x : ys)
-    x `mappend` y = PSeq [x,y]
+    (PSeq xs) `mappend` (PSeq ys) = PSeq (ys ++ xs)
+    (PSeq xs) `mappend` y = PSeq (y : xs)
+    x `mappend` (PSeq ys) = PSeq (ys ++ [x])
+    x `mappend` y = PSeq [y,x]
 
-cons :: (Functor f, Monoid (f [a])) => f a -> f [a] -> f [a]
-cons x xs = fmap (:[]) x <> xs
+cons :: Parser s a -> Parser s [a] -> Parser s [a]
+cons x xs = (fmap (:[]) x) <> xs
 
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
 
-runParser :: Parser a t -> Stream a -> Maybe (Stream a, [t])
+runParser :: forall a t. Parser a t -> Stream a -> Maybe (Stream a, [t])
 runParser PZero _ = Nothing
 runParser (POne p) s =
     case runParserSingle p s of
@@ -118,25 +119,27 @@ runParser (PApp pf px) s =
 runParser (PSome p) s =
     case runParser p s of
     Nothing -> Nothing
-    Just (s', x) -> fmap (fmapParserResult reverse) $ go s' [x]
+    Just (s', x) -> go s' x
     where
         go s1 x1 =
             case runParser p s1 of
-            Nothing -> Just (s1, x1)
-            Just (s2, x2) -> go s2 (x2 : x1)
+            Nothing -> Just (s1, [x1])
+            Just (s2, x2) -> go s2 (x1 ++ x2)
 
 runParser (PAlt ps) s = firstJust $ map (flip runParser s) ps
     where firstJust []              = Nothing
           firstJust (Just x  : _)   = Just x
           firstJust (Nothing : mxs) = firstJust mxs
 
-runParser (PSeq ps) s = foldr accumParse (Just (s, mempty)) ps
+runParser (PSeq ps) s = fmap (fmapParserResult (:[])) results
     where
+        results :: Maybe (Stream a, t)
+        results = foldr accumParse (Just (s, mempty)) ps
         accumParse _ Nothing = Nothing
         accumParse p' (Just (s', x')) =
             case runParser p' s' of
             Nothing -> Nothing
-            Just (s'', x'') -> Just (s'', x'' <> x')
+            Just (s'', x'') -> Just (s'', x' <> mconcat x'')
 
 ----------------------------------------------------------------------
 
