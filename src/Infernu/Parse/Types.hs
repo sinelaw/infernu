@@ -53,7 +53,7 @@ constrName = inSpace $ P.upper `P.cons` many identChar
 tvar = Var <$> tvarName
 fun = Fun <$> someInTuple body <* inSpace arrow <*> body
 app = App <$> constructor <*> body
-body = inSpace $ optParens $ inSpace (tvar <|> fun <|> app)
+body = inSpace $ optParens $ inSpace (fun <|> tvar <|> app)
 
 constructor = Constructor <$> constrName
 constraint = Constraint <$> typeClass <*> body
