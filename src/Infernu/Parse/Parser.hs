@@ -7,13 +7,14 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Parse.Parser where
 
-import Control.Applicative (Alternative(..), (<|>))
-import Data.List (intercalate)
-import Data.Maybe (catMaybes)
-import Data.Monoid ((<>), mconcat)
+import           Control.Applicative (Alternative(..), (<|>))
+import           Data.List (intercalate)
+
+
+import           Data.Monoid ((<>), mconcat)
 import qualified Data.Char as Char
 
-import Infernu.Prelude
+import           Infernu.Prelude
 
 type Stream a = [a]
 
@@ -106,55 +107,40 @@ cons x xs = (fmap (:[]) x) <> xs
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
 
-flatten :: [Maybe [a]] -> Maybe [a]
-flatten = fmap concat . sequence
+-- flatten :: [Maybe a] -> Maybe [a]
+-- flatten = emptyToNothing . catMaybes
+--     where
+--         emptyToNothing [] = Nothing
+--         emptyToNothing xs = Just xs
 
-runParserSome :: forall a t. Parser a t -> Stream a -> Maybe [(Stream a, [t])]
-runParserSome p s =
-    case runParser p s of
-    Nothing -> Nothing
-    Just alts -> flatten $ map go alts
+runParserSome :: forall a t. Parser a t -> Stream a -> [(Stream a, [t])]
+runParserSome p s = do
+    (s', t) <- runParser p s
+    res <- (s', []) : runParserSome p s'
+    return $ fmapParserResult (t:) res
+
+runParserAlt :: [Parser a t] -> Stream a -> [(Stream a, t)]
+runParserAlt ps s = concat $ map (flip runParser s) ps
+
+runParserSeq :: forall a t. Monoid t => [Parser a t] -> Stream a -> [(Stream a, t)]
+runParserSeq ps stream = foldr flattenSeq [(stream, mempty)] ps
     where
-        prependX :: t -> [(Stream a, [t])] -> [(Stream a, [t])]
-        prependX x res = map (fmapParserResult (x:)) res
-        go :: (Stream a, t) -> Maybe [(Stream a, [t])]
-        go (s1, x1) =
-            case runParser p s1 of
-            Nothing -> Just [(s1, [x1])]
-            Just alts' -> fmap (prependX x1) . flatten $ Just [(s1, [])] : map go alts'
+        flattenSeq :: Parser a t -> [(Stream a, t)] -> [(Stream a, t)]
+        flattenSeq p alts = do
+            (s, t) <- alts
+            (s', t') <- runParser p s
+            return (s', t <> t')
 
-runParserAlt :: [Parser a t] -> Stream a -> Maybe [(Stream a, t)]
-runParserAlt ps s = flatten $ map (flip runParser s) ps
-
-runParserSeq :: forall a t. Monoid t => [Parser a t] -> Stream a -> Maybe [(Stream a, t)]
-runParserSeq ps s = foldr flattenSeq (Just [(s, mempty)]) ps
-    where
-        flattenSeq :: Parser a t -> Maybe [(Stream a, t)] -> Maybe [(Stream a, t)]
-        flattenSeq p Nothing = Nothing
-        flattenSeq p (Just alts) = flattenSeqAlt p alts
-        flattenSeqAlt :: Parser a t -> [(Stream a, t)] -> Maybe [(Stream a, t)]
-        flattenSeqAlt p alts = flatten nextAltses
-            where
-                combineAlts :: t -> [(Stream a, t)] -> [(Stream a, t)]
-                combineAlts t [] = error "TODO should avoid this statically"
-                combineAlts t ((s2, t2) : alts) = (s2, t <> t2) : combineAlts t alts
-                nextAltses :: [Maybe [(Stream a, t)]]
-                nextAltses = map (\(s, t) -> fmap (combineAlts t) $ runParser p s) alts
-
-runParser :: forall a t. Parser a t -> Stream a -> Maybe [(Stream a, t)]
-runParser PZero _ = Nothing
+runParser :: forall a t. Parser a t -> Stream a -> [(Stream a, t)]
+runParser PZero _ = []
 runParser (POne p) s =
     case runParserSingle p s of
-    Nothing -> Nothing
-    Just (s', t) -> Just [(s', t)]
-runParser (PApp pf px) s =
-    case runParser pf s of
-    Nothing -> Nothing
-    Just altFs -> fmap concat . sequence $ map appAlt altFs
-        where appAlt (s', f) =
-                  case runParser px s' of
-                  Nothing -> Nothing
-                  Just altXs -> Just $ map (\(s'', x) -> (s'', f x)) altXs
+    Nothing -> []
+    Just (s', t) -> [(s', t)]
+runParser (PApp pf px) s = do
+    (s1, f) <- runParser pf s
+    (s2, x) <- runParser px s1
+    return (s2, f x)
 runParser (PSome p) s = runParserSome p s
 runParser (PAlt ps) s = runParserAlt ps s
 runParser (PSeq ps) s = runParserSeq ps s
