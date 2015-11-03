@@ -51,7 +51,7 @@ constrName :: TParser String
 constrName = inSpace $ P.upper `P.cons` many identChar
 
 tvar = Var <$> tvarName
-fun = Fun <$> someInTuple body <* inSpace arrow <*> body
+fun = Fun <$> (someInTuple body <* inSpace arrow) <*> body
 app = App <$> constructor <*> body
 body = inSpace $ optParens $ inSpace (fun <|> tvar <|> app)
 
