@@ -59,37 +59,45 @@ instance Alternative (ParserSingle s) where
 
 data Parser a t where
     PZero :: Parser a t
-    POne :: (ParserSingle a t) -> Parser a t
-    PAlt :: [Parser a t] -> Parser a t
-    PApp :: (Parser a (u -> t)) -> (Parser a u) -> Parser a t
-    PSome :: Parser a t -> Parser a [t]
-    PSeq :: Monoid t => [Parser a t] -> Parser a t
+    POne  :: (ParserSingle a t) -> Parser a t
+    PAlt  :: Int -> [Parser a t] -> Parser a t
+    PApp  :: Int -> (Parser a (u -> t)) -> (Parser a u) -> Parser a t
+    PSome :: Int -> Parser a t -> Parser a [t]
+    PSeq  :: Monoid t => Int -> [Parser a t] -> Parser a t
+
+level :: Parser a t -> Int
+level PZero = 0
+level (POne _) = 1
+level (PAlt l _) = l
+level (PApp l _ _) = l
+level (PSome l _) = l
+level (PSeq l _) = l
 
 instance Show (Parser a t) where
     show (PZero)      = "PZero"
     show (POne _)     = "POne"
-    show (PAlt ps)    = "(" ++ intercalate " | " (map show ps) ++ ")"
-    show (PApp pf px) = show pf ++ " <*> " ++ show px
-    show (PSome p)    = "some " ++ show p
-    show (PSeq ps)    = "(" ++ intercalate ", " (map show ps) ++ ")"
+    show (PAlt _ ps)    = "(" ++ intercalate " | " (map show ps) ++ ")"
+    show (PApp _ pf px) = show pf ++ " <*> " ++ show px
+    show (PSome _ p)    = "some " ++ show p
+    show (PSeq _ ps)    = "(" ++ intercalate ", " (map show ps) ++ ")"
 
 instance Functor (Parser s) where
     fmap f p = pure f <*> p
 
 instance Applicative (Parser s) where
     pure    = POne . pure
-    p <*> x = PApp p x
+    p <*> x = PApp (level p + level x) p x
 
 instance Alternative (Parser s) where
     empty          = PZero
-    p1      <|> p2 = PAlt [p1, p2]
+    p1      <|> p2 = PAlt (level p1 + level p2) [p1, p2]
 
-    some p         = PSome p
+    some p         = PSome (level p) p
     many p         = some p <|> pure []
 
 instance Monoid a => Monoid (Parser s a) where
     mempty        = PZero
-    x `mappend` y = PSeq [y,x]
+    x `mappend` y = PSeq (level y + level x) [y,x]
 
 cons :: Parser s a -> Parser s [a] -> Parser s [a]
 cons x xs = (fmap (:[]) x) <> xs
@@ -127,13 +135,13 @@ runParser (POne p) s =
     case runParserSingle p s of
     Nothing -> []
     Just (s', t) -> [(s', t)]
-runParser (PApp pf px) s = do
+runParser (PApp _ pf px) s = do
     (s1, f) <- runParser pf s
     (s2, x) <- runParser px s1
     return (s2, f x)
-runParser (PSome p) s = runParserSome p s
-runParser (PAlt ps) s = runParserAlt ps s
-runParser (PSeq ps) s = runParserSeq ps s
+runParser (PSome _ p) s = runParserSome p s
+runParser (PAlt _ ps) s = runParserAlt ps s
+runParser (PSeq _ ps) s = runParserSeq ps s
 
 ----------------------------------------------------------------------
 
