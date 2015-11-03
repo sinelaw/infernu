@@ -66,26 +66,26 @@ data Parser a t where
     PSeq :: Monoid t => [Parser a t] -> Parser a t
 
 instance Show (Parser a t) where
-    show (PZero) = "PZero"
-    show (POne _) = "POne"
-    show (PAlt ps) = "(" ++ intercalate " | " (map show ps) ++ ")"
+    show (PZero)      = "PZero"
+    show (POne _)     = "POne"
+    show (PAlt ps)    = "(" ++ intercalate " | " (map show ps) ++ ")"
     show (PApp pf px) = show pf ++ " <*> " ++ show px
-    show (PSome p) = "some " ++ show p
-    show (PSeq ps) = "(" ++ intercalate ", " (map show ps) ++ ")"
+    show (PSome p)    = "some " ++ show p
+    show (PSeq ps)    = "(" ++ intercalate ", " (map show ps) ++ ")"
 
 instance Functor (Parser s) where
     fmap f p = pure f <*> p
 
 instance Applicative (Parser s) where
-    pure = POne . pure
+    pure    = POne . pure
     p <*> x = PApp p x
 
 instance Alternative (Parser s) where
     empty          = PZero
     p1      <|> p2 = PAlt [p1, p2]
 
-    some p = PSome p
-    many p = some p <|> pure []
+    some p         = PSome p
+    many p         = some p <|> pure []
 
 instance Monoid a => Monoid (Parser s a) where
     mempty        = PZero
