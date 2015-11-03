@@ -81,24 +81,14 @@ instance Applicative (Parser s) where
     p <*> x = PApp p x
 
 instance Alternative (Parser s) where
-    empty                         = PZero
-    p       <|> PZero   = p
-    PZero   <|> p       = p
-    PAlt xs <|> PAlt ys = PAlt $ xs ++ ys
-    PAlt xs <|> p       = PAlt $ xs ++ [p]
-    p       <|> PAlt xs = PAlt $ p : xs
-    p1      <|> p2      = PAlt [p1, p2]
+    empty          = PZero
+    p1      <|> p2 = PAlt [p1, p2]
 
     some p = PSome p
     many p = some p <|> pure []
 
 instance Monoid a => Monoid (Parser s a) where
-    mempty = PZero
-    PZero `mappend` p = p
-    p `mappend` PZero = p
-    (PSeq xs) `mappend` (PSeq ys) = PSeq (ys ++ xs)
-    (PSeq xs) `mappend` y = PSeq (y : xs)
-    x `mappend` (PSeq ys) = PSeq (ys ++ [x])
+    mempty        = PZero
     x `mappend` y = PSeq [y,x]
 
 cons :: Parser s a -> Parser s [a] -> Parser s [a]
