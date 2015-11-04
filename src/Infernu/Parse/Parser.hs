@@ -37,7 +37,7 @@ data Parser a where
     POneOf  :: (Eq a, Show a) => PElem a -> Parser a
     PAlt  :: [Parser a] -> Parser a
     POneOrMore :: Parser a -> Parser a
-    PSeq  :: Monoid a => [Parser a] -> Parser a
+    PSeq  :: [Parser a] -> Parser a
 
 deriving instance Show (Parser a)
 deriving instance Eq (Parser a)
@@ -50,7 +50,7 @@ instance Opaque Parser where
 oneOrMore p         = POneOrMore p
 zeroOrMore p         = none ^| oneOrMore p
 
-instance Monoid a => Monoid (Parser a) where
+instance Monoid (Parser a) where
     mempty        = PZero
     x `mappend` y = PSeq [y,x]
 
@@ -68,7 +68,7 @@ runParserSome r p s = do
 runParserAlt :: Eq a => RunParser a ->  [Parser a] -> Stream a -> [(Stream a, [a])]
 runParserAlt r ps s = concat $ map (flip r s) ps
 
-runParserSeq :: forall a t. (Eq a, Monoid a) => RunParser a -> [Parser a] -> Stream a -> [(Stream a, [a])]
+runParserSeq :: forall a t. (Eq a) => RunParser a -> [Parser a] -> Stream a -> [(Stream a, [a])]
 runParserSeq r ps stream = foldr flattenSeq [(stream, mempty)] ps
     where
         -- flattenSeq :: Parser a -> [(Stream a, a)] -> [(Stream a, a)]
