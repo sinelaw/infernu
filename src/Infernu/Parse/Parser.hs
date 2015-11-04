@@ -10,7 +10,9 @@ module Infernu.Parse.Parser where
 import Infernu.Decycle (decycle2)
 import           Data.Monoid ((<>), mconcat)
 import qualified Data.Char as Char
-
+import qualified Data.Char as Char
+import qualified Data.Map as Map
+import           Data.Map (Map)
 import           Infernu.Prelude
 
 type Stream a = [a]
@@ -18,72 +20,70 @@ type Stream a = [a]
 emptyStream :: [a]
 emptyStream = []
 
-data PElem a = PElem [a] -- list of matching characters
+data PElem a b = PElem (Map a b) -- matching characters a map to tokens b
              deriving (Eq, Ord, Show)
 
 -- runPElem :: Eq s => PElem s -> Stream s -> Maybe (Stream s, s)
 runPElem _ [] = Nothing
-runPElem (PElem cs) (s:ss)
-    | s `elem` cs = Just (ss, s)
-    | otherwise   = Nothing
+runPElem (PElem m) (s:ss) = fmap (ss,) $ Map.lookup s m
 
 class Opaque f where
     infixl ^|
     (^|) :: f a -> f a -> f a
     none :: f a
 
-data Parser a where
-    PZero :: Parser a
-    POneOf  :: (Eq a, Show a) => PElem a -> Parser a
-    PAlt  :: [Parser a] -> Parser a
-    POneOrMore :: Parser a -> Parser a
-    PSeq  :: [Parser a] -> Parser a
+data Parser s a where
+    PZero :: Parser s a
+    POneOf  :: PElem s a -> Parser s a
+    PAlt  :: [Parser s a] -> Parser s a
+    POneOrMore :: Parser s a -> Parser s a
+    PSeq  :: [Parser s a] -> Parser s a
 
-deriving instance Show (Parser a)
-deriving instance Eq (Parser a)
-deriving instance Ord a => Ord (Parser a)
+deriving instance (Show s, Show a) => Show (Parser s a)
+deriving instance (Eq s, Eq a) => Eq (Parser s a)
+deriving instance (Ord s, Ord a) => Ord (Parser s a)
 
-instance Opaque Parser where
+instance Opaque (Parser s) where
     none     = PZero
     p1 ^| p2 = PAlt [p1, p2]
 
-oneOrMore p         = POneOrMore p
-zeroOrMore p         = none ^| oneOrMore p
+oneOrMore p  = POneOrMore p
+zeroOrMore p = none ^| oneOrMore p
 
-instance Monoid (Parser a) where
-    mempty        = PZero
+instance Monoid (Parser s a) where
+    mempty        = PSeq []
     x `mappend` y = PSeq [y,x]
 
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
 
-type RunParser a = (Parser a -> Stream a -> [(Stream a, [a])])
+type RunParser s a = (Parser s a -> Stream s -> [(Stream s, [a])])
 
-runParserSome :: forall a. Eq a => RunParser a -> Parser a -> Stream a -> [(Stream a, [a])]
+runParserSome :: RunParser s a -> Parser s a -> Stream s -> [(Stream s, [a])]
 runParserSome r p s = do
     (s', t) <- r p s
     res <- (s', []) : runParserSome r p s'
     return $ fmapParserResult (t++) res
 
-runParserAlt :: Eq a => RunParser a ->  [Parser a] -> Stream a -> [(Stream a, [a])]
+runParserAlt :: RunParser s a ->  [Parser s a] -> Stream s -> [(Stream s, [a])]
 runParserAlt r ps s = concat $ map (flip r s) ps
 
-runParserSeq :: forall a t. (Eq a) => RunParser a -> [Parser a] -> Stream a -> [(Stream a, [a])]
+runParserSeq :: RunParser s a -> [Parser s a] -> Stream s -> [(Stream s, [a])]
 runParserSeq r ps stream = foldr flattenSeq [(stream, mempty)] ps
     where
-        -- flattenSeq :: Parser a -> [(Stream a, a)] -> [(Stream a, a)]
+        -- flattenSeq :: Parser s a -> [(Stream s, a)] -> [(Stream s, a)]
         flattenSeq p alts = do
             (s, t) <- alts
             (s', t') <- r p s
             return (s', t <> t')
 
-runParserOneOf :: Eq a => PElem a -> Stream a -> [(Stream a, [a])]
+runParserOneOf :: Ord s => PElem s a -> Stream s -> [(Stream s, [a])]
 runParserOneOf p s =
     case runPElem p s of
     Nothing -> []
     Just (s', t) -> [(s', [t])]
 
-runParser'' :: forall a. Eq a => RunParser a -> Parser a -> Stream a -> [(Stream a, [a])]
+runParser'' :: Ord s => RunParser s a -> Parser s a -> Stream s -> [(Stream s, [a])]
 runParser'' r  PZero _ = []
 runParser'' r (POneOf p) s = runParserOneOf p s
 runParser'' r (POneOrMore p) s = runParserSome r p s
@@ -93,19 +93,19 @@ runParser'' r (PSeq ps) s = runParserSeq r ps s
 runParser' Nothing _ _ = []
 runParser' (Just r) p s = runParser'' r p s
 
-runParser :: Ord a => RunParser a
+runParser :: (Ord s, Ord a) => RunParser s a
 runParser = decycle2 runParser'
 
 ----------------------------------------------------------------------
 
-is :: (Eq t, Show t) => [t] -> Parser t
+is :: Ord s => Map s a -> Parser s a
 is = POneOf . PElem
 
-are :: (Eq a, Show a) => [a] -> Parser a
+are :: Ord s => Map s a -> Parser s a
 are = zeroOrMore . is
 
 allChars = ['a'..'z'] ++ ['0'..'9'] ++ ['A'..'Z']
-isChar f = is $ filter f allChars
+isChar f = is $ foldr (\k -> Map.insert k k) Map.empty $ filter f allChars
 lower = isChar Char.isLower
 digit = isChar Char.isDigit
 upper = isChar Char.isUpper
@@ -116,8 +116,8 @@ str = oneOrMore letter
 
 space = isChar Char.isSpace
 
-openPar = is ['(']
-closePar = is [')']
+openPar = isChar (=='(')
+closePar = isChar (==')')
 
 -- withParens :: Parser Char a -> Parser Char a
 -- withParens x = openPar *> x <* closePar
