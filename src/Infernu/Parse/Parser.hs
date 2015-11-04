@@ -1,9 +1,12 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-
+{-# LANGUAGE MultiParamTypeClasses #-}
 -- | A simple applicative parser
 module Infernu.Parse.Parser where
 
@@ -27,51 +30,55 @@ data PElem a b = PElem (Map a b) -- matching characters a map to tokens b
 runPElem _ [] = Nothing
 runPElem (PElem m) (s:ss) = fmap (ss,) $ Map.lookup s m
 
-class Opaque f where
+data Parser s a p where
+    PZero      :: Parser s a p
+    POneOf     :: PElem s a -> Parser s a p
+    PAlt       :: [p]   -> Parser s a p
+    POneOrMore :: p     -> Parser s a p
+    PSeq       :: [p]   -> Parser s a p
+
+data Named n f = Named n (f (Named n f))
+
+class Opaque n f where
     infixl ^|
-    (^|) :: f a -> f a -> f a
-    none :: f a
+    (^|) :: n f -> n f -> f (n f)
+    none :: n f
 
-data Parser s a where
-    PZero :: Parser s a
-    POneOf  :: PElem s a -> Parser s a
-    PAlt  :: [Parser s a] -> Parser s a
-    POneOrMore :: Parser s a -> Parser s a
-    PSeq  :: [Parser s a] -> Parser s a
+named n p = (Named n p)
 
-deriving instance (Show s, Show a) => Show (Parser s a)
-deriving instance (Eq s, Eq a) => Eq (Parser s a)
-deriving instance (Ord s, Ord a) => Ord (Parser s a)
+deriving instance (Show p, Show s, Show a) => Show (Parser s a p)
+-- deriving instance (Eq s, Eq a)     => Eq (Parser s a p)
+-- deriving instance (Ord s, Ord a)   => Ord (Parser s a p)
 
-instance Opaque (Parser s) where
-    none     = PZero
+instance Opaque (Named Int) (Parser s a) where
+    none     = named 0 PZero
     p1 ^| p2 = PAlt [p1, p2]
 
 oneOrMore p  = POneOrMore p
 zeroOrMore p = none ^| oneOrMore p
 
-instance Monoid (Parser s a) where
+instance Monoid (Parser s a p) where
     mempty        = PSeq []
     x `mappend` y = PSeq [y,x]
 
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
 
-type RunParser s a = (Parser s a -> Stream s -> [(Stream s, [a])])
+type RunParser s a p = (Parser s a p -> Stream s -> [(Stream s, [a])])
 
-runParserSome :: RunParser s a -> Parser s a -> Stream s -> [(Stream s, [a])]
+runParserSome :: RunParser s a p -> Parser s a p -> Stream s -> [(Stream s, [a])]
 runParserSome r p s = do
     (s', t) <- r p s
     res <- (s', []) : runParserSome r p s'
     return $ fmapParserResult (t++) res
 
-runParserAlt :: RunParser s a ->  [Parser s a] -> Stream s -> [(Stream s, [a])]
+runParserAlt :: RunParser s a p ->  [Parser s a p] -> Stream s -> [(Stream s, [a])]
 runParserAlt r ps s = concat $ map (flip r s) ps
 
-runParserSeq :: RunParser s a -> [Parser s a] -> Stream s -> [(Stream s, [a])]
+runParserSeq :: RunParser s a p -> [Parser s a p] -> Stream s -> [(Stream s, [a])]
 runParserSeq r ps stream = foldr flattenSeq [(stream, mempty)] ps
     where
-        -- flattenSeq :: Parser s a -> [(Stream s, a)] -> [(Stream s, a)]
+        -- flattenSeq :: Parser s a p -> [(Stream s, a)] -> [(Stream s, a)]
         flattenSeq p alts = do
             (s, t) <- alts
             (s', t') <- r p s
@@ -83,7 +90,7 @@ runParserOneOf p s =
     Nothing -> []
     Just (s', t) -> [(s', [t])]
 
-runParser'' :: Ord s => RunParser s a -> Parser s a -> Stream s -> [(Stream s, [a])]
+runParser'' :: Ord s => RunParser s a p -> Parser s a p -> Stream s -> [(Stream s, [a])]
 runParser'' r  PZero _ = []
 runParser'' r (POneOf p) s = runParserOneOf p s
 runParser'' r (POneOrMore p) s = runParserSome r p s
@@ -93,15 +100,15 @@ runParser'' r (PSeq ps) s = runParserSeq r ps s
 runParser' Nothing _ _ = []
 runParser' (Just r) p s = runParser'' r p s
 
-runParser :: (Ord s, Ord a) => RunParser s a
+runParser :: (Ord s, Ord a) => RunParser s a p
 runParser = decycle2 runParser'
 
 ----------------------------------------------------------------------
 
-is :: Ord s => Map s a -> Parser s a
+is :: Ord s => Map s a -> Parser s a p
 is = POneOf . PElem
 
-are :: Ord s => Map s a -> Parser s a
+are :: Ord s => Map s a -> Parser s a p
 are = zeroOrMore . is
 
 allChars = ['a'..'z'] ++ ['0'..'9'] ++ ['A'..'Z']
