@@ -7,10 +7,13 @@
 -- | A simple applicative parser
 module Infernu.Parse.Parser where
 
-import           Infernu.Parse.NameRec (Named(..))
+import           Control.Monad.Fix (MonadFix(..))
 import           Infernu.Decycle (decycle)
+import           Infernu.Parse.NameRec (Named(..), named, runNamed, Names(..), NameT)
 
 -- import           Data.Monoid ((<>), mconcat)
+
+
 import qualified Data.Char as Char
 
 import qualified Data.Map as Map
@@ -57,6 +60,9 @@ data Parser s a p where
 --deriving instance (Show s, Show a) => Show (Parser s a)
 
 type NamedParser s a = Named Int (Parser s a)
+
+emptyNames :: Names Int
+emptyNames = Names { namesNext = (+1), namesCurrent = 0 }
 
 instance WrapAlt (Parser s a) where
     naught    = PZero
@@ -118,6 +124,9 @@ runNamedParser' (Just r) p s = runNamedParser'' r (nameUnwrap p) s
 runNamedParser :: Ord s => NamedParser s a -> Stream s -> [(Stream s, [a])]
 runNamedParser = decycle runNamedParser'
 
+runParser :: Ord s => Parser s a (NamedParser s a) -> Stream s -> [(Stream s, [a])]
+runParser p s = runNamedParser (Named 0 p) s
+
 ----------------------------------------------------------------------
 
 is :: Ord s => Map s a -> Parser s a p
@@ -142,6 +151,28 @@ space = isChar Char.isSpace
 
 openPar = isChar (=='(')
 closePar = isChar (==')')
+
+append :: (MonadFix m, WrapSeq x)
+          => x (Named a x)
+          -> x (Named a x)
+          -> NameT a m (Named a x)
+x `append` y = do
+    nx <- named x
+    ny <- named y
+    named $ nx <^> ny
+
+perhaps :: (MonadFix m, WrapAlt x)
+           => x (Named a x)
+           -> x (Named a x)
+           -> NameT a m (Named a x)
+x `perhaps` y = do
+    nx <- named x
+    ny <- named y
+    named $ nx ^|^ ny
+
+
+
+--withParens x = runIdentity $ runNamed $ named $ openPar <^> str
 
 -- withParens :: NamedParser Char a -> NamedParser Char a
 -- withParens x = openPar *> x <* closePar

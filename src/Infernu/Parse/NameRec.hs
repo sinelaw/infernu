@@ -1,3 +1,17 @@
+-- | Non-applicative, transparent parser
+-- (no opaque Haskell functions or values anywhere; everything can be analyzed)
+--
+-- TODO/Ideas: Use De Bruijn names to refer to the recursion. Then we
+-- can ditch the state (maybe?) and create standalone values without
+-- caring about how they will be used. We'll need a way to 'fix'
+-- values that generates the appropriate De Bruijn index, something
+-- equivalent to:
+--
+--    nfix :: \(Named a x) -> Named a x
+--
+-- `nfix` should figure out how deeply nested each usage of the
+-- expression is.
+--
 module Infernu.Parse.NameRec where
 
 import Control.Monad.Fix (MonadFix(..))
@@ -53,6 +67,7 @@ showNamed ::
     -> Named a x -> String
 showNamed fx = convertNamed (\a -> "@" ++ show a) (\r x -> "(" ++ fx r x ++ ")")
 
+type NameT n m a = StateT (Names n) m a
 
 runNamed :: Monad m => StateT s m a -> s -> m a
 runNamed x names = evalStateT x names
