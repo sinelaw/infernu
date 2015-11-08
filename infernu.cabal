@@ -75,6 +75,7 @@ library
                    , Infernu.Options
                    , Infernu.Parse.JS
                    , Infernu.Parse.Parser
+                   , Infernu.Parse.NameRec
                    , Infernu.Parse.Types
                    , Infernu.Prelude
                    , Infernu.Pretty

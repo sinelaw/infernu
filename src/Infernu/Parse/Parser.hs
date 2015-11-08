@@ -15,6 +15,7 @@ import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Infernu.Prelude
 
+
 type Stream a = [a]
 
 emptyStream :: [a]
@@ -40,8 +41,6 @@ data Parser s a where
     PSeq  :: [Parser s a] -> Parser s a
 
 deriving instance (Show s, Show a) => Show (Parser s a)
-deriving instance (Eq s, Eq a) => Eq (Parser s a)
-deriving instance (Ord s, Ord a) => Ord (Parser s a)
 
 instance Opaque (Parser s) where
     none     = PZero
@@ -84,17 +83,20 @@ runParserOneOf p s =
     Just (s', t) -> [(s', [t])]
 
 runParser'' :: Ord s => RunParser s a -> Parser s a -> Stream s -> [(Stream s, [a])]
-runParser'' r  PZero _ = []
-runParser'' r (POneOf p) s = runParserOneOf p s
+--runParser'' _  _    [] = []
+runParser'' _  PZero _ = []
+runParser'' _ (POneOf p) s = runParserOneOf p s
 runParser'' r (POneOrMore p) s = runParserSome r p s
 runParser'' r (PAlt ps) s = runParserAlt r ps s
 runParser'' r (PSeq ps) s = runParserSeq r ps s
 
-runParser' Nothing _ _ = []
-runParser' (Just r) p s = runParser'' r p s
+runParser' :: Ord s => (Stream s) -> Parser s a -> Stream s -> [(Stream s, [a])]
+runParser' [] _ _     = [] -- stream exhausted
+runParser' (_:ss) p s = runParser'' (runParser' ss) p s
 
-runParser :: (Ord s, Ord a) => RunParser s a
-runParser = decycle2 runParser'
+runParser :: Ord s => Parser s a -> Stream s -> [(Stream s, [a])]
+runParser p [] = []
+runParser p (s:ss) = runParser' (s:s:ss) p (s:ss)
 
 ----------------------------------------------------------------------
 
@@ -104,7 +106,7 @@ is = POneOf . PElem
 are :: Ord s => Map s a -> Parser s a
 are = zeroOrMore . is
 
-allChars = ['a'..'z'] ++ ['0'..'9'] ++ ['A'..'Z']
+allChars = map Char.chr [0..127]
 isChar f = is $ foldr (\k -> Map.insert k k) Map.empty $ filter f allChars
 lower = isChar Char.isLower
 digit = isChar Char.isDigit
