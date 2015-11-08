@@ -5,7 +5,7 @@ module Infernu.Parse.Types where
 
 import           Control.Applicative  (many, some, (<*), (*>), (<|>), empty)
 
-
+import           Infernu.Parse.NameRec as N
 import           Infernu.Parse.Parser as P
 import           Infernu.Prelude
 
