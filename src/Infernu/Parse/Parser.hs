@@ -8,11 +8,9 @@
 module Infernu.Parse.Parser where
 
 import           Control.Monad.Fix (MonadFix(..))
+import           Data.Functor.Identity
 import           Infernu.Decycle (decycle)
 import           Infernu.Parse.NameRec (Named(..), named, runNamed, Names(..), NameT)
-
--- import           Data.Monoid ((<>), mconcat)
-
 
 import qualified Data.Char as Char
 
@@ -29,6 +27,7 @@ data PElem a b = PElem (Map a b) -- matching characters a map to tokens b
              deriving (Eq, Ord, Show)
 
 -- runPElem :: Eq s => PElem s -> Stream s -> Maybe (Stream s, s)
+runPElem :: Ord k => PElem k a -> Stream k -> Maybe (Stream k, a)
 runPElem _ [] = Nothing
 runPElem (PElem m) (s:ss) = fmap (ss,) $ Map.lookup s m
 
@@ -49,13 +48,21 @@ class WrapSeq f where
     (<^>) :: a -> a -> f a
     empty :: f a
 
+    infixl <^
+    (<^) :: a -> b -> f a
+
+    infixl ^>
+    (^>) :: b -> a -> f a
+    (^>) = flip (<^)
+
 
 data Parser s a p where
     PZero      :: Parser s a p
     POneOf     :: PElem s a -> Parser s a p
     PAlt       :: [p] -> Parser s a p
-    POneOrMore :: p   -> Parser s a p
+    POneOrMore :: p -> Parser s a p
     PSeq       :: [p] -> Parser s a p
+    PFirst     :: p -> p -> Parser s a p
 
 --deriving instance (Show s, Show a) => Show (Parser s a)
 
@@ -68,16 +75,16 @@ instance WrapAlt (Parser s a) where
     naught    = PZero
     p1 ^|^ p2 = PAlt [p1, p2]
 
+oneOrMore :: p -> Parser s a p
 oneOrMore p  = POneOrMore p
+
+zeroOrMore :: WrapAlt f => a -> f (Parser s b a)
 zeroOrMore p = naught ^|^ oneOrMore p
 
 instance WrapSeq (Parser s a) where
     empty   = PSeq []
     x <^> y = PSeq [y,x]
-
--- | TODO: add these, like `mappend` but drops one side:
--- (<^) :: f a -> f b -> f a
--- (^>) :: f a -> f b -> f b
+    x <^ y = PFirst x y
 
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
@@ -116,6 +123,10 @@ runNamedParser'' _ (POneOf p) s = runNamedParserOneOf p s
 runNamedParser'' r (POneOrMore p) s = runNamedParserSome r p s
 runNamedParser'' r (PAlt ps) s = runNamedParserAlt r ps s
 runNamedParser'' r (PSeq ps) s = runNamedParserSeq r ps s
+runNamedParser'' r (PFirst x y) s = do
+    (s', t) <- r x s
+    (s'', _) <- r y s'
+    return (s'', t)
 
 runNamedParser' :: Ord s => Maybe (RunParser s a) -> NamedParser s a -> Stream s -> [(Stream s, [a])]
 runNamedParser' Nothing _ _ = []
@@ -127,6 +138,8 @@ runNamedParser = decycle runNamedParser'
 runParser :: Ord s => Parser s a (NamedParser s a) -> Stream s -> [(Stream s, [a])]
 runParser p s = runNamedParser (Named 0 p) s
 
+type Parse s a = NameT Int Identity (NamedParser s a)
+
 ----------------------------------------------------------------------
 
 is :: Ord s => Map s a -> Parser s a p
@@ -135,8 +148,13 @@ is = POneOf . PElem
 --are :: Ord s => Map s a -> Parser s a p
 --are = zeroOrMore . is
 
+-- TODO: Ugh.
+allChars :: [Char]
 allChars = map Char.chr [0..127]
-isChar f = is $ foldr (\k -> Map.insert k k) Map.empty $ filter f allChars
+
+isChar :: (Char -> Bool) -> a -> Parse Char a
+isChar f x = named . is $ foldr (\k -> Map.insert k x) Map.empty $ filter f allChars
+
 lower = isChar Char.isLower
 digit = isChar Char.isDigit
 upper = isChar Char.isUpper
@@ -149,23 +167,23 @@ str = oneOrMore letter
 
 space = isChar Char.isSpace
 
-openPar = isChar (=='(')
-closePar = isChar (==')')
+openPar = isChar (=='(') ()
+closePar = isChar (==')') ()
 
-append :: (MonadFix m, WrapSeq x)
+_then :: (MonadFix m, WrapSeq x)
           => x (Named a x)
           -> x (Named a x)
           -> NameT a m (Named a x)
-x `append` y = do
+x `_then` y = do
     nx <- named x
     ny <- named y
     named $ nx <^> ny
 
-perhaps :: (MonadFix m, WrapAlt x)
+_or :: (MonadFix m, WrapAlt x)
            => x (Named a x)
            -> x (Named a x)
            -> NameT a m (Named a x)
-x `perhaps` y = do
+x `_or` y = do
     nx <- named x
     ny <- named y
     named $ nx ^|^ ny
@@ -174,8 +192,8 @@ x `perhaps` y = do
 
 --withParens x = runIdentity $ runNamed $ named $ openPar <^> str
 
--- withParens :: NamedParser Char a -> NamedParser Char a
--- withParens x = openPar *> x <* closePar
+withParens :: NamedParser Char a -> NamedParser Char a
+withParens x = (openPar ^> x) >>= (<^ closePar)
 
 -- optParens :: NamedParser Char a -> NamedParser Char a
 -- optParens x = x ^|^ withParens x
