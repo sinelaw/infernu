@@ -7,12 +7,12 @@
 -- | A simple applicative parser
 module Infernu.Parse.Parser where
 
+
 import           Control.Monad.Fix (MonadFix(..))
+import qualified Data.Char as Char
 import           Data.Functor.Identity
 import           Infernu.Decycle (decycle)
 import           Infernu.Parse.NameRec (Named(..), named, runNamed, Names(..), NameT)
-
-import qualified Data.Char as Char
 
 import qualified Data.Map as Map
 import           Data.Map (Map)
@@ -49,10 +49,10 @@ class WrapSeq f where
     empty :: f a
 
     infixl <^
-    (<^) :: a -> b -> f a
+    (<^) :: a -> a -> f a
 
     infixl ^>
-    (^>) :: b -> a -> f a
+    (^>) :: a -> a -> f a
     (^>) = flip (<^)
 
 
@@ -66,10 +66,11 @@ data Parser s a p where
 
 --deriving instance (Show s, Show a) => Show (Parser s a)
 
-type NamedParser s a = Named Int (Parser s a)
+type ParserName = Maybe Int
+type NamedParser s a = Named ParserName (Parser s a)
 
-emptyNames :: Names Int
-emptyNames = Names { namesNext = (+1), namesCurrent = 0 }
+emptyNames :: Names ParserName
+emptyNames = Names { namesNext = (fmap (+1)), namesCurrent = Nothing }
 
 instance WrapAlt (Parser s a) where
     naught    = PZero
@@ -136,9 +137,11 @@ runNamedParser :: Ord s => NamedParser s a -> Stream s -> [(Stream s, [a])]
 runNamedParser = decycle runNamedParser'
 
 runParser :: Ord s => Parser s a (NamedParser s a) -> Stream s -> [(Stream s, [a])]
-runParser p s = runNamedParser (Named 0 p) s
+runParser p s = runNamedParser (Named Nothing p) s
 
-type Parse s a = NameT Int Identity (NamedParser s a)
+type Parse s a = NameT ParserName Identity (NamedParser s a)
+
+anon = Named Nothing
 
 ----------------------------------------------------------------------
 
@@ -152,8 +155,8 @@ is = POneOf . PElem
 allChars :: [Char]
 allChars = map Char.chr [0..127]
 
-isChar :: (Char -> Bool) -> a -> Parse Char a
-isChar f x = named . is $ foldr (\k -> Map.insert k x) Map.empty $ filter f allChars
+isChar :: (Char -> Bool) -> a -> NamedParser Char a
+isChar f x = anon . is $ foldr (\k -> Map.insert k x) Map.empty $ filter f allChars
 
 lower = isChar Char.isLower
 digit = isChar Char.isDigit
@@ -167,8 +170,11 @@ str = oneOrMore letter
 
 space = isChar Char.isSpace
 
-openPar = isChar (=='(') ()
-closePar = isChar (==')') ()
+openPar :: a -> NamedParser Char a
+openPar = isChar (=='(')
+
+closePar :: a -> NamedParser Char a
+closePar = isChar (==')')
 
 _then :: (MonadFix m, WrapSeq x)
           => x (Named a x)
@@ -188,12 +194,20 @@ x `_or` y = do
     ny <- named y
     named $ nx ^|^ ny
 
-
-
 --withParens x = runIdentity $ runNamed $ named $ openPar <^> str
 
-withParens :: NamedParser Char a -> NamedParser Char a
-withParens x = (openPar ^> x) >>= (<^ closePar)
+--withParens :: Monoid a => NamedParser Char a -> NamedParser Char a
+--withParens :: (Monad m, Monoid a, WrapSeq m) => Parse Char a -> m (Parse Char a)
+within
+    :: Monoid a => (a -> NamedParser c a) -> (a -> NamedParser c a)
+    -> NamedParser c a
+    -> Parse c a
+within pre post x = do
+    b <- named $ (pre mempty) ^> x
+    named $ b <^ (post mempty)
+
+withParens :: Monoid a => NamedParser Char a -> Parse Char a
+withParens = within openPar closePar
 
 -- optParens :: NamedParser Char a -> NamedParser Char a
 -- optParens x = x ^|^ withParens x
