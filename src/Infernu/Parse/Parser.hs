@@ -8,7 +8,7 @@
 module Infernu.Parse.Parser where
 
 
-import           Control.Monad.Fix (MonadFix(..))
+
 import qualified Data.Char as Char
 import           Data.Functor.Identity
 import           Infernu.Decycle (decycle)
@@ -176,23 +176,14 @@ openPar = isChar (=='(')
 closePar :: a -> NamedParser Char a
 closePar = isChar (==')')
 
-_then :: (MonadFix m, WrapSeq x)
-          => x (Named a x)
-          -> x (Named a x)
-          -> NameT a m (Named a x)
-x `_then` y = do
-    nx <- named x
-    ny <- named y
-    named $ nx <^> ny
+infixl <^^>
 
-_or :: (MonadFix m, WrapAlt x)
-           => x (Named a x)
-           -> x (Named a x)
-           -> NameT a m (Named a x)
-x `_or` y = do
-    nx <- named x
-    ny <- named y
-    named $ nx ^|^ ny
+(<^^>) :: NamedParser c a -> NamedParser c a -> NamedParser c a
+x <^^> y = anon $ x <^> y
+
+infixl ^||^
+(^||^) :: NamedParser c a -> NamedParser c a -> NamedParser c a
+x ^||^ y = anon $ x ^|^ y
 
 --withParens x = runIdentity $ runNamed $ named $ openPar <^> str
 
@@ -201,16 +192,14 @@ x `_or` y = do
 within
     :: Monoid a => (a -> NamedParser c a) -> (a -> NamedParser c a)
     -> NamedParser c a
-    -> Parse c a
-within pre post x = do
-    b <- named $ (pre mempty) ^> x
-    named $ b <^ (post mempty)
+    -> NamedParser c a
+within pre post x = anon $ (anon $ (pre mempty) ^> x) <^ (post mempty)
 
-withParens :: Monoid a => NamedParser Char a -> Parse Char a
+withParens :: Monoid a => NamedParser Char a -> NamedParser Char a
 withParens = within openPar closePar
 
--- optParens :: NamedParser Char a -> NamedParser Char a
--- optParens x = x ^|^ withParens x
+optParens :: Monoid a => NamedParser Char a -> NamedParser Char a
+optParens x = anon $ x ^|^ withParens x
 
 --afix :: (NamedParser a -> NamedParser a) -> NamedParser a
 -- afix  p = p (afix p)
