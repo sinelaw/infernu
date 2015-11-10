@@ -8,7 +8,7 @@
 module Infernu.Parse.Parser where
 
 import           Control.Applicative (Alternative(..), (<|>))
-import           Data.List (intercalate)
+import           Data.List (intercalate, sortBy)
 
 
 import           Data.Monoid ((<>))
@@ -155,7 +155,7 @@ runParser' sc (PAlt ps)     s =
 runParser' sc (PAppend ps)  s = runParserSeq (runParser' sc) ps s
 
 runParser :: Stream s => Parser s c t -> s c -> [(s c, t)]
-runParser p s = runParser' s p s
+runParser p s = sortBy (\(s1,_) (s2,_) -> streamPos s2 `compare` streamPos s1) $ runParser' s p s
 
 ----------------------------------------------------------------------
 
