@@ -2,10 +2,16 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
--- | A simple applicative parser
-
 {-# LANGUAGE NoImplicitPrelude #-}
-module Infernu.Parse.Parser where
+
+-- | A simple applicative parser
+module Infernu.Parse.Parser
+       ( Stream(..)
+       , ListStream(..), lsNew
+       , Parser, runParser
+       , cons, oneOf, followedBy, isSingle, is, are, lower, upper, letter, alphaNum, str, space
+       , openPar, closePar, withParens, optParens
+       ) where
 
 import           Control.Applicative (Alternative(..), (<|>))
 import           Data.List (intercalate, sortBy)
@@ -35,9 +41,6 @@ instance Stream ListStream where
 
     streamRead (ListStream [] _)       = Nothing
     streamRead (ListStream (x:xs) p)   = Just (x, ListStream xs (p+1))
-
-emptyStream :: [a]
-emptyStream = []
 
 data ParserSingle s c t = Stream s => ParserSingle (s c -> Maybe (s c, t))
 
@@ -171,6 +174,7 @@ is = POne . isSingle
 are :: Stream s => (a -> Bool) -> Parser s a [a]
 are = many . is
 
+oneOf :: (Eq a, Foldable t, Stream s) => t a -> Parser s a a
 oneOf opts = is (\x -> elem x opts)
 
 lower :: Stream s => Parser s Char Char
@@ -182,6 +186,7 @@ letter = is Char.isLetter
 alphaNum :: Stream s => Parser s Char Char
 alphaNum = is Char.isAlphaNum
 
+followedBy :: Applicative f => f a -> f b -> f (a, b)
 x `followedBy` y = (,) <$> x <*> y
 
 str :: Stream s => Parser s Char String
@@ -204,14 +209,14 @@ optParens x = x <|> withParens x
 
 -- Example
 
-data Expr = Var Char | App Expr Expr
-          deriving Show
+-- data Expr = Var Char | App Expr Expr
+--           deriving Show
 
-evar :: Stream s => Parser s Char Expr
-evar = Var <$> letter
+-- evar :: Stream s => Parser s Char Expr
+-- evar = Var <$> letter
 
-eapp :: Stream s => Parser s Char Expr
-eapp = App <$> eexpr <*> eexpr
+-- eapp :: Stream s => Parser s Char Expr
+-- eapp = App <$> eexpr <*> eexpr
 
-eexpr :: Stream s => Parser s Char Expr
-eexpr = evar <|> eapp
+-- eexpr :: Stream s => Parser s Char Expr
+-- eexpr = evar <|> eapp
