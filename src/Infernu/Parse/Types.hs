@@ -35,7 +35,7 @@ spaces :: Stream s => Parser s Char Token
 spaces = fmap (const Space) $ many space
 
 inSpace :: Stream s => Parser s Char a -> Parser s Char a
-inSpace p = spaces *> p <* spaces
+inSpace p = (spaces *> p) <* spaces
 
 arrow :: Stream s => Parser s Char Token
 arrow = fmap (const Arrow) $ is (== '-') *> is (== '>')
@@ -53,7 +53,7 @@ sstr :: Stream s => Parser s Char String
 sstr = inSpace str
 
 someInTuple :: Stream s => Parser s Char a -> Parser s Char [a]
-someInTuple x = optParens (fmap (:[]) x)
+someInTuple x = fmap (:[]) (optParens x)
                 <|> withParens (x `P.cons` some (comma *> x))
 
 identChar :: Stream s => Parser s Char Char
@@ -68,14 +68,17 @@ constrName = inSpace $ P.upper `P.cons` many identChar
 tvar :: Stream s => Parser s Char Body
 tvar = Var <$> tvarName
 
-fun :: Stream s => Parser s Char Body
-fun = Fun <$> (someInTuple body <* inSpace arrow) <*> body
+fun :: Stream s => Parser s Char Body -> Parser s Char Body
+fun p = Fun <$> (someInTuple p <* inSpace arrow) <*> p
 
-app :: Stream s => Parser s Char Body
-app = App <$> constructor <*> body
+app :: Stream s => Parser s Char Body -> Parser s Char Body
+app p = App <$> constructor <*> p
+
+body' :: Stream s => Parser s Char Body -> Parser s Char Body
+body' p = inSpace $ optParens $ inSpace (tvar <|> fun p <|> app p)
 
 body :: Stream s => Parser s Char Body
-body = inSpace $ optParens $ inSpace (fun <|> tvar <|> app)
+body = pfix body'
 
 constructor :: Stream s => Parser s Char Constructor
 constructor = Constructor <$> constrName

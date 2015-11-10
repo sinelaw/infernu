@@ -9,6 +9,7 @@ module Infernu.Parse.Parser
        ( Stream(..)
        , ListStream(..), lsNew
        , Parser, runParser
+       , pfix
        , cons, oneOf, followedBy, isSingle, is, are, lower, upper, letter, alphaNum, str, space
        , openPar, closePar, withParens, optParens
        ) where
@@ -85,6 +86,10 @@ data Parser s a t where
     PApp :: (Parser s a (u -> t)) -> (Parser s a u) -> Parser s a t
     PSome :: Parser s a t -> Parser s a [t]
     PAppend :: Monoid t => [Parser s a t] -> Parser s a t
+    PFix :: Parser s a t -> Parser s a t
+
+pfix :: (Parser s a t -> Parser s a t) -> Parser s a t
+pfix f = f (pfix $ f . PFix)
 
 instance Show (Parser s a t) where
     show (PZero)      = "PZero"
@@ -92,7 +97,8 @@ instance Show (Parser s a t) where
     show (PAlt ps)    = "(" ++ intercalate " | " (map show ps) ++ ")"
     show (PApp pf px) = show pf ++ " <*> " ++ show px
     show (PSome p)    = "some " ++ show p
-    show (PAppend ps)    = "(" ++ intercalate ", " (map show ps) ++ ")"
+    show (PAppend ps) = "(" ++ intercalate ", " (map show ps) ++ ")"
+    show (PFix p)     = "PFix " ++ show p
 
 instance Stream s => Functor (Parser s a) where
     fmap f p = pure f <*> p
@@ -103,14 +109,20 @@ instance Stream s => Applicative (Parser s a) where
 
 instance Stream s => Alternative (Parser s a) where
     empty          = PZero
-    p1      <|> p2 = PAlt [p1, p2]
+    (PAlt p1) <|> (PAlt p2) = PAlt (p1 ++ p2)
+    (PAlt p1) <|> p2        = PAlt (p1 ++ [p2])
+    p1        <|> (PAlt p2) = PAlt (p1 : p2)
+    p1        <|> p2        = PAlt [p1, p2]
 
     some p         = PSome p
     many p         = some p <|> pure []
 
 instance (Stream s, Monoid t) => Monoid (Parser s a t) where
     mempty        = PZero
-    x `mappend` y = PAppend [y,x]
+    (PAppend x) `mappend` (PAppend y) = PAppend (y ++ x)
+    (PAppend x) `mappend` y           = PAppend (y : x)
+    x           `mappend` (PAppend y) = PAppend (y ++ [x])
+    x           `mappend` y           = PAppend [y,x]
 
 cons :: Stream s => Parser s c a -> Parser s c [a] -> Parser s c [a]
 cons x xs = (fmap (:[]) x) <> xs
@@ -118,7 +130,7 @@ cons x xs = (fmap (:[]) x) <> xs
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
 
-type RunParser s a t = Parser s a t -> s a -> [(s a, t)]
+type RunParser s c t = Parser s c t -> s c -> [(s c, t)]
 
 runParserSome :: forall s c t. Stream s => RunParser s c t -> Parser s c t -> s c -> [(s c, [t])]
 runParserSome r p s = do
@@ -139,7 +151,6 @@ runParserSeq r ps stream = foldr flattenSeq [(stream, mempty)] ps
             return (s', t <> t')
 
 runParser' :: forall s c t. Stream s => s c -> RunParser s c t
-runParser' _  _ s | streamIsEmpty s  = []
 runParser' _ PZero _ = []
 runParser' _ (POne p) s =
     case runParserSingle p s of
@@ -150,12 +161,13 @@ runParser' sc (PApp pf px) s = do
     (s2, x) <- runParser' sc px s1
     return (s2, f x)
 runParser' sc (PSome p)     s = runParserSome (runParser' sc) p s
-runParser' sc (PAlt _)      _ | streamIsEmpty sc = []
-runParser' sc (PAlt ps)     s =
+runParser' sc (PAlt ps)     s = runParserAlt (runParser' sc) ps s
+runParser' sc (PAppend ps)  s = runParserSeq (runParser' sc) ps s
+runParser' sc (PFix _)      _ | streamIsEmpty sc = []
+runParser' sc (PFix p)      s =
     case streamRead sc of
     Nothing -> []
-    Just (_, sc') -> runParserAlt (runParser' sc') ps s
-runParser' sc (PAppend ps)  s = runParserSeq (runParser' sc) ps s
+    Just (_, sc') -> runParser' sc' p s
 
 runParser :: Stream s => Parser s c t -> s c -> [(s c, t)]
 runParser p s = sortBy (\(s1,_) (s2,_) -> streamPos s2 `compare` streamPos s1) $ runParser' s p s
@@ -215,8 +227,12 @@ optParens x = x <|> withParens x
 -- evar :: Stream s => Parser s Char Expr
 -- evar = Var <$> letter
 
--- eapp :: Stream s => Parser s Char Expr
--- eapp = App <$> eexpr <*> eexpr
+-- eapp :: Stream s => Parser s Char Expr -> Parser s Char Expr
+-- eapp p = App <$> p <*> p
+
+-- eexpr' :: Stream s => Parser s Char Expr -> Parser s Char Expr
+-- eexpr' p = evar <|> eapp p
 
 -- eexpr :: Stream s => Parser s Char Expr
--- eexpr = evar <|> eapp
+-- eexpr = pfix eexpr'
+
