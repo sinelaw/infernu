@@ -8,9 +8,9 @@
 module Infernu.Parse.Parser
        ( Stream(..)
        , ListStream(..), lsNew
-       , Parser, runParser
-       , pfix
-       , cons, oneOf, followedBy, isSingle, is, are, lower, upper, letter, alphaNum, str, space
+       , Parser, runParser, runParserFull
+       , pfix, (<?>), isStr
+       , isChar, cons, oneOf, followedBy, isSingle, is, are, lower, upper, letter, alphaNum, str, space
        , openPar, closePar, withParens, optParens
        ) where
 
@@ -91,9 +91,14 @@ data Parser s a t where
     PFix :: Parser s a t -> Parser s a t
     PFirst :: Parser s a t -> Parser s a t' -> Parser s a t
     PLast :: Parser s a t' -> Parser s a t -> Parser s a t
+    PName :: Parser s a t -> String -> Parser s a t
 
 pfix :: (Parser s a t -> Parser s a t) -> Parser s a t
 pfix f = f (pfix $ f . PFix)
+
+infixl <?>
+(<?>) :: Parser s a t -> String -> Parser s a t
+(<?>) = PName
 
 instance Show (Parser s a t) where
     show (PZero)       = "PZero"
@@ -102,9 +107,10 @@ instance Show (Parser s a t) where
     show (PApp pf px)  = "(" ++ show pf ++ " <*> " ++ show px ++ ")"
     show (PSome p)     = "some " ++ show p
     show (PAppend ps)  = "(" ++ intercalate ", " (map show ps) ++ ")"
-    show (PFix p)      = "PFix " ++ show p
+    show (PFix p)      = "PFix" -- ++ show p
     show (PFirst p ps) = "(" ++ show p ++ " <* " ++ show ps ++ ")"
     show (PLast ps p)  = "(" ++ show ps ++ " *> " ++ show p ++ ")"
+    show (PName _ s)   = s
 
 instance Stream s => Functor (Parser s a) where
     fmap f p = pure f <*> p
@@ -146,6 +152,13 @@ runParserSome r p s = do
     res <- (s', []) : runParserSome r p s'
     return $ fmapParserResult (t:) res
 
+-- sortByGreediest :: Stream s => [(s c, t)] -> [(s c, t)]
+-- sortByGreediest = sortBy (\(s1,_) (s2,_) -> streamPos s2 `compare` streamPos s1)
+
+-- headOrEmpty :: [a] -> [a]
+-- headOrEmpty [] = []
+-- headOrEmpty (x:_) = [x]
+
 runParserAlt :: Stream s => RunParser s c t -> [Parser s c t] -> s c -> [(s c, t)]
 runParserAlt r ps s = concat $ map (flip r s) ps
 
@@ -181,18 +194,33 @@ runParser' sc (PFix p)      s =
     Just (_, sc') -> runParser' sc' p s
 runParser' sc (PFirst p1 p2) s = do
     (s1, x) <- runParser' sc p1 s
-    (s2, _) <- nubByPos $ runParser' sc p2 s1
+    (s2, _) <- runParser' sc p2 s1
     return (s2, x)
 runParser' sc (PLast p1 p2) s = do
-    (s1, _) <- nubByPos $ runParser' sc p1 s
+    (s1, _) <- runParser' sc p1 s
     (s2, x) <- runParser' sc p2 s1
     return (s2, x)
-
+runParser' sc (PName p _) s = runParser' sc p s
 
 runParser :: Stream s => Parser s c t -> s c -> [(s c, t)]
-runParser p s = sortBy (\(s1,_) (s2,_) -> streamPos s2 `compare` streamPos s1) $ runParser' s p s
+runParser p s = runParser' s p s
 
+runParserFull :: Stream s => Parser s c t -> s c -> Maybe (s c, t)
+runParserFull p s = case empty of
+    [] -> Nothing
+    (x:_) -> Just x
+    where
+        (nonEmpty, empty) = break (\(s,_) -> streamIsEmpty s)
+                            $ runParser p s
 ----------------------------------------------------------------------
+
+isStr :: Stream s => String -> Parser s Char String
+isStr str' = (POne $ ParserSingle (go str' [])) <?> str'
+    where
+        go [] rem' s = Just (s, rem')
+        go (x:xs) rem' s = case streamRead s of
+            Just (x', s') | x' == x -> go xs (x:rem') s'
+            _ -> Nothing
 
 isSingle :: Stream s => (t -> Bool) -> ParserSingle s t t
 isSingle f = ParserSingle $
@@ -210,13 +238,16 @@ oneOf :: (Eq a, Foldable t, Stream s) => t a -> Parser s a a
 oneOf opts = is (\x -> elem x opts)
 
 lower :: Stream s => Parser s Char Char
-lower = is Char.isLower
+lower = is Char.isLower <?> "lower"
 upper :: Stream s => Parser s Char Char
-upper = is Char.isUpper
+upper = is Char.isUpper <?> "upper"
 letter :: Stream s => Parser s Char Char
-letter = is Char.isLetter
+letter = (is Char.isLetter) <?> "letter"
 alphaNum :: Stream s => Parser s Char Char
-alphaNum = is Char.isAlphaNum
+alphaNum = (is Char.isAlphaNum) <?> "alphanum"
+
+isChar :: Stream s => Char -> Parser s Char Char
+isChar c = is (==c) <?> (['\'', c, '\''])
 
 followedBy :: Applicative f => f a -> f b -> f (a, b)
 x `followedBy` y = (,) <$> x <*> y
@@ -224,14 +255,15 @@ x `followedBy` y = (,) <$> x <*> y
 str :: Stream s => Parser s Char String
 str = some letter
 
+
 space :: Stream s => Parser s Char Char
 space = is Char.isSpace
 
 openPar :: Stream s => Parser s Char Char
-openPar = is (=='(')
+openPar = isChar '('
 
 closePar :: Stream s => Parser s Char Char
-closePar = is (==')')
+closePar = isChar ')'
 
 withParens :: Stream s => Parser s Char a -> Parser s Char a
 withParens x = openPar *> x <* closePar

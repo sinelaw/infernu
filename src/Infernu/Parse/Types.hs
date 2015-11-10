@@ -31,66 +31,66 @@ data TypeClass = TypeClass String
 data PType = PType [Constraint] Body
              deriving Show
 
+inSparens :: Stream s => Parser s Char a -> Parser s Char a
+inSparens x = x <|> withParens (inSpace x)
+
 spaces :: Stream s => Parser s Char Token
-spaces = fmap (const Space) $ many space
+spaces = (fmap (const Space) $ many space) <?> "spaces"
 
 inSpace :: Stream s => Parser s Char a -> Parser s Char a
 inSpace p = (spaces *> p) <* spaces
 
 arrow :: Stream s => Parser s Char Token
-arrow = fmap (const Arrow) $ is (== '-') *> is (== '>')
+arrow = fmap (const Arrow) $ isStr "->" <?> "'->'"
 
 fatArrow :: Stream s => Parser s Char Token
-fatArrow = fmap (const FatArrow) $ is (== '=') *> is (== '>')
+fatArrow = fmap (const FatArrow) (isStr "=>") <?> "'=>'"
 
 colon :: Stream s => Parser s Char Token
-colon = fmap (const Colon) $ is (== ':')
+colon = fmap (const Colon) (isStr "::") <?> "'::'"
 
 comma :: Stream s => Parser s Char Token
-comma = fmap (const Comma) $ is (== ',')
-
-sstr :: Stream s => Parser s Char String
-sstr = inSpace str
+comma = fmap (const Comma) (isChar ',') <?> "','"
 
 someInTuple :: Stream s => Parser s Char a -> Parser s Char [a]
-someInTuple x = fmap (:[]) (optParens x)
+someInTuple x = fmap (:[]) x
                 <|> withParens (x `P.cons` some (comma *> x))
 
 identChar :: Stream s => Parser s Char Char
 identChar = P.alphaNum <|> P.oneOf "_'"
 
 tvarName :: Stream s => TParser s String
-tvarName = inSpace $ P.lower `P.cons` many identChar
+tvarName = P.lower `P.cons` many identChar
 
 constrName :: Stream s => TParser s String
-constrName = inSpace $ P.upper `P.cons` many identChar
+constrName = P.upper `P.cons` many identChar
 
 tvar :: Stream s => Parser s Char Body
-tvar = Var <$> tvarName
+tvar = Var <$> tvarName <?> "tvar"
 
 fun :: Stream s => Parser s Char Body -> Parser s Char Body
 fun p = Fun <$> (someInTuple p <* inSpace arrow) <*> p
 
 app :: Stream s => Parser s Char Body -> Parser s Char Body
-app p = App <$> constructor <*> p
+app p = App <$> (constructor <* some space) <*> p
 
 body' :: Stream s => Parser s Char Body -> Parser s Char Body
-body' p = inSpace $ optParens $ inSpace (tvar <|> fun p <|> app p)
+body' p = (inSparens (tvar <|> fun p <|> app p))
 
 body :: Stream s => Parser s Char Body
-body = pfix body'
+body = pfix body' <?> "type-body"
 
 constructor :: Stream s => Parser s Char Constructor
-constructor = Constructor <$> constrName
+constructor = (Constructor <$> constrName) <?> "type-constructor"
 
 constraint :: Stream s => Parser s Char Constraint
 constraint = Constraint <$> typeClass <*> body
 
 typeClass :: Stream s => Parser s Char TypeClass
-typeClass = TypeClass <$> constrName
+typeClass = (TypeClass <$> constrName) <?> "typeclass-constriant"
 
 constraints :: Stream s => Parser s Char [Constraint]
-constraints = (inSpace (someInTuple constraint) <* inSpace fatArrow) <|> pure []
+constraints = ((someInTuple constraint) <* inSpace fatArrow) <|> pure []
 
 ptype :: Stream s => Parser s Char PType
 ptype = PType <$> constraints <*> body
