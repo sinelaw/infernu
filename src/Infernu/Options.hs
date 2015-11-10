@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Options
        (Options(..), defaultOptions, opts)
        where

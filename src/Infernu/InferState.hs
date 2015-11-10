@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP           #-}
 {-# LANGUAGE TupleSections #-}
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.InferState
        ( Infer
        , addPendingUnification

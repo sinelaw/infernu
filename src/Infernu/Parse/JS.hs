@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Parse.JS
        (translate)
        where

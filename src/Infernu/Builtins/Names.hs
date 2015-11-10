@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Builtins.Names where
 
 import Infernu.Prelude

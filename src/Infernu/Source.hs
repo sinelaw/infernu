@@ -1,5 +1,6 @@
 -- |
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Source
        ( GenInfo(..)
        , Source(..), SourcePosSpan(..), Comment(..)

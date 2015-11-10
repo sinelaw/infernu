@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP           #-}
 {-# LANGUAGE TupleSections #-}
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Unify
        (unify, unifyAll, unifyl, unifyTypeSchemes, unifyPredsL, unifyPending, tryMakeRow)
        where

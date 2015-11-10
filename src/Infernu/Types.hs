@@ -8,6 +8,7 @@
 {-# LANGUAGE InstanceSigs         #-}
 {-# LANGUAGE TupleSections        #-}
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Types
        ( TVarName(..)
        , unTVarName

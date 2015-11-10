@@ -2,6 +2,7 @@
 
 -- | copied from https://raw.githubusercontent.com/Peaker/lamdu/wip_integration/bottlelib/Data/Function/Decycle.hs
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Decycle(decycleOn, decycle, decycle2, decycle3) where
 
 import Infernu.Prelude

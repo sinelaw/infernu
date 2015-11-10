@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Builtins.StringMap where
 
 import           Infernu.Builtins.Util

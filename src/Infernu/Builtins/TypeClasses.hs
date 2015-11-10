@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Builtins.TypeClasses
        (typeClasses)
        where

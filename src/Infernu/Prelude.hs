@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 
 -- | The sole purpose of this module is to fix pre/post ghc 7.10 compatibility issues
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Prelude
   ( module Prelude.Compat
   , bool

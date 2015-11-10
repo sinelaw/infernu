@@ -1,6 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Fix
        ( Fix(..)
        , fmapReplace

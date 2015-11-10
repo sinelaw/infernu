@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 -- |
 
+{-# LANGUAGE NoImplicitPrelude #-}
 module Infernu.Expr
        ( Exp(..)
        , mapTopAnnotation
