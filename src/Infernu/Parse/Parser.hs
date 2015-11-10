@@ -22,6 +22,10 @@ class Stream s where
     streamIsEmpty :: s a -> Bool
 
 data ListStream a = ListStream { lsData :: [a], lsPos :: Int }
+                  deriving Show
+
+lsNew :: [a] -> ListStream a
+lsNew xs = ListStream xs 0
 
 instance Stream ListStream where
     streamPos                          = lsPos
@@ -111,40 +115,47 @@ cons x xs = (fmap (:[]) x) <> xs
 fmapParserResult :: (a -> b) -> (s, a) -> (s, b)
 fmapParserResult = fmap
 
---type RunParser s a t = Parser s a t -> s a -> [(s a, t)]
+type RunParser s a t = Parser s a t -> s a -> [(s a, t)]
 
-runParserSome :: forall s c t. Stream s => Parser s c t -> s c -> [(s c, [t])]
-runParserSome p s = do
-    (s', t) <- runParser p s
-    res <- (s', []) : runParserSome p s'
+runParserSome :: forall s c t. Stream s => RunParser s c t -> Parser s c t -> s c -> [(s c, [t])]
+runParserSome r p s = do
+    (s', t) <- r p s
+    res <- (s', []) : runParserSome r p s'
     return $ fmapParserResult (t:) res
 
-runParserAlt :: Stream s => [Parser s c t] -> s c -> [(s c, t)]
-runParserAlt ps s = concat $ map (flip runParser s) ps
+runParserAlt :: Stream s => RunParser s c t -> [Parser s c t] -> s c -> [(s c, t)]
+runParserAlt r ps s = concat $ map (flip r s) ps
 
-runParserSeq :: forall s c t. (Stream s, Monoid t) => [Parser s c t] -> s c -> [(s c, t)]
-runParserSeq ps stream = foldr flattenSeq [(stream, mempty)] ps
+runParserSeq :: forall s c t. (Stream s, Monoid t) => RunParser s c t -> [Parser s c t] -> s c -> [(s c, t)]
+runParserSeq r ps stream = foldr flattenSeq [(stream, mempty)] ps
     where
-        flattenSeq :: Parser s a t -> [(s a, t)] -> [(s a, t)]
+        flattenSeq :: Parser s c t -> [(s c, t)] -> [(s c, t)]
         flattenSeq p alts = do
             (s, t) <- alts
-            (s', t') <- runParser p s
+            (s', t') <- r p s
             return (s', t <> t')
 
-runParser :: forall s c t. Stream s => Parser s c t -> s c -> [(s c, t)]
-runParser _ s | streamIsEmpty s = []
-runParser PZero _ = []
-runParser (POne p) s =
+runParser' :: forall s c t. Stream s => s c -> RunParser s c t
+runParser' _  _ s | streamIsEmpty s  = []
+runParser' _ PZero _ = []
+runParser' _ (POne p) s =
     case runParserSingle p s of
     Nothing -> []
     Just (s', t) -> [(s', t)]
-runParser (PApp pf px) s = do
-    (s1, f) <- runParser pf s
-    (s2, x) <- runParser px s1
+runParser' sc (PApp pf px) s = do
+    (s1, f) <- runParser' sc pf s
+    (s2, x) <- runParser' sc px s1
     return (s2, f x)
-runParser (PSome p) s = runParserSome p s
-runParser (PAlt ps) s = runParserAlt ps s
-runParser (PAppend ps) s = runParserSeq ps s
+runParser' sc (PSome p)     s = runParserSome (runParser' sc) p s
+runParser' sc (PAlt _)      _ | streamIsEmpty sc = []
+runParser' sc (PAlt ps)     s =
+    case streamRead sc of
+    Nothing -> []
+    Just (_, sc') -> runParserAlt (runParser' sc') ps s
+runParser' sc (PAppend ps)  s = runParserSeq (runParser' sc) ps s
+
+runParser :: Stream s => Parser s c t -> s c -> [(s c, t)]
+runParser p s = runParser' s p s
 
 ----------------------------------------------------------------------
 
