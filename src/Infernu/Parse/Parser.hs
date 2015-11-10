@@ -15,8 +15,7 @@ module Infernu.Parse.Parser
        ) where
 
 import           Control.Applicative (Alternative(..), (<|>))
-import           Data.List (intercalate, sortBy)
-
+import           Data.List (intercalate, sortBy, nubBy)
 
 import           Data.Monoid ((<>))
 import qualified Data.Char as Char
@@ -27,6 +26,9 @@ class Stream s where
     streamPos     :: s a -> Int
     streamRead    :: s a -> Maybe (a, s a)
     streamIsEmpty :: s a -> Bool
+
+streamPosEqual :: (Stream s1, Stream s2) => s1 a -> s2 b -> Bool
+streamPosEqual s1 s2 = streamPos s1 == streamPos s2
 
 data ListStream a = ListStream { lsData :: [a], lsPos :: Int }
                   deriving Show
@@ -87,18 +89,22 @@ data Parser s a t where
     PSome :: Parser s a t -> Parser s a [t]
     PAppend :: Monoid t => [Parser s a t] -> Parser s a t
     PFix :: Parser s a t -> Parser s a t
+    PFirst :: Parser s a t -> Parser s a t' -> Parser s a t
+    PLast :: Parser s a t' -> Parser s a t -> Parser s a t
 
 pfix :: (Parser s a t -> Parser s a t) -> Parser s a t
 pfix f = f (pfix $ f . PFix)
 
 instance Show (Parser s a t) where
-    show (PZero)      = "PZero"
-    show (POne _)     = "POne"
-    show (PAlt ps)    = "(" ++ intercalate " | " (map show ps) ++ ")"
-    show (PApp pf px) = show pf ++ " <*> " ++ show px
-    show (PSome p)    = "some " ++ show p
-    show (PAppend ps) = "(" ++ intercalate ", " (map show ps) ++ ")"
-    show (PFix p)     = "PFix " ++ show p
+    show (PZero)       = "PZero"
+    show (POne _)      = "POne"
+    show (PAlt ps)     = "(" ++ intercalate " | " (map show ps) ++ ")"
+    show (PApp pf px)  = "(" ++ show pf ++ " <*> " ++ show px ++ ")"
+    show (PSome p)     = "some " ++ show p
+    show (PAppend ps)  = "(" ++ intercalate ", " (map show ps) ++ ")"
+    show (PFix p)      = "PFix " ++ show p
+    show (PFirst p ps) = "(" ++ show p ++ " <* " ++ show ps ++ ")"
+    show (PLast ps p)  = "(" ++ show ps ++ " *> " ++ show p ++ ")"
 
 instance Stream s => Functor (Parser s a) where
     fmap f p = pure f <*> p
@@ -106,6 +112,8 @@ instance Stream s => Functor (Parser s a) where
 instance Stream s => Applicative (Parser s a) where
     pure    = POne . pure
     p <*> x = PApp p x
+    p1 <* p2 = PFirst p1 p2
+    p1 *> p2 = PLast p1 p2
 
 instance Stream s => Alternative (Parser s a) where
     empty          = PZero
@@ -150,6 +158,9 @@ runParserSeq r ps stream = foldr flattenSeq [(stream, mempty)] ps
             (s', t') <- r p s
             return (s', t <> t')
 
+nubByPos :: Stream s => [(s c, t)] -> [(s c, t)]
+nubByPos = nubBy (\r1 r2 -> (fst r1) `streamPosEqual` (fst r2))
+
 runParser' :: forall s c t. Stream s => s c -> RunParser s c t
 runParser' _ PZero _ = []
 runParser' _ (POne p) s =
@@ -168,6 +179,15 @@ runParser' sc (PFix p)      s =
     case streamRead sc of
     Nothing -> []
     Just (_, sc') -> runParser' sc' p s
+runParser' sc (PFirst p1 p2) s = do
+    (s1, x) <- runParser' sc p1 s
+    (s2, _) <- nubByPos $ runParser' sc p2 s1
+    return (s2, x)
+runParser' sc (PLast p1 p2) s = do
+    (s1, _) <- nubByPos $ runParser' sc p1 s
+    (s2, x) <- runParser' sc p2 s1
+    return (s2, x)
+
 
 runParser :: Stream s => Parser s c t -> s c -> [(s c, t)]
 runParser p s = sortBy (\(s1,_) (s2,_) -> streamPos s2 `compare` streamPos s1) $ runParser' s p s
