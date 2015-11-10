@@ -2,6 +2,8 @@ dist
 cabal-dev
 *.o
 *.hi
+*.i_o
+*.i_hi
 *.chi
 *.chs.h
 .virtualenv
@@ -16,3 +18,4 @@ cabal.sandbox.config
 TAGS
 *.orig
 
+.stack-work/

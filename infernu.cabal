@@ -74,6 +74,9 @@ library
                    , Infernu.Log
                    , Infernu.Options
                    , Infernu.Parse.JS
+                   , Infernu.Parse.Types.Grammar
+                   , Infernu.Parse.Types.Tokens
+                   , Infernu.Parse.Types
                    , Infernu.Prelude
                    , Infernu.Pretty
                    , Infernu.Source
@@ -82,7 +85,7 @@ library
                    , Infernu.Util
   other-modules: Infernu.Builtins.Util
   -- TODO: use only mtl (not transformers)
-  build-depends:       base >= 4.6 && < 5, base-compat, base-orphans, mtl, containers, transformers, either, language-ecmascript >= 1.0, digits, parsec, optparse-applicative, ansi-wl-pprint, unordered-containers, hashable, parsec
+  build-depends:       base >= 4.6 && < 5, base-compat, base-orphans, mtl, containers, transformers, either, language-ecmascript >= 1.0, digits, parsec, optparse-applicative, ansi-wl-pprint, unordered-containers, hashable, array
   default-language:    Haskell2010
   default-extensions:
   ghc-options: -Wall -O2 -rtsopts -threaded
