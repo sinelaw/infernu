@@ -64,7 +64,6 @@ cons s =
     "Regex" -> Regex
     "Undefined" -> Undefined
     "Null" -> Null
-    "EmptyThis" -> EmptyThis
     "Date" -> Date
     _ -> error $ "Unknown constructor name: " ++ s
 
@@ -76,6 +75,6 @@ data TypeExp = App TypeExp TypeExp
              | Tuple [TypeExp]
              | This TypeExp [TypeExp] TypeExp
              | Row [(String, TypeExp)] (Maybe String)
-             | Number | Boolean | String | Regex | Undefined | Null | EmptyThis | Date
+             | Number | Boolean | String | Regex | Undefined | Null | Date
              deriving Show
 }

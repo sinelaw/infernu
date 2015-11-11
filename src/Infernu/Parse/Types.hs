@@ -7,7 +7,8 @@ import qualified Infernu.Parse.Types.Tokens as Tokens
 import           Infernu.Types ( TConsName(..)
                                , FType(..), TBody(..), Type
                                , RowTVar(..), TRowList(..), TProp(..)
-                               , TVarName(..), schemeEmpty)
+                               , TVarName(..)
+                               , schemeEmpty, TScheme(..))
 import           Infernu.Expr (EPropName(..))
 import           Infernu.Fix (Fix(..))
 
@@ -15,11 +16,13 @@ import qualified Data.Char as Char
 
 import           Infernu.Prelude
 
---parseTypeExp :: String -> TypeExp
+parseTypeExp :: String -> TypeExp
 parseTypeExp s = Grammar.parseType (Tokens.scanTokens s)
 
+strToTVar :: Foldable t => t Char -> Int
 strToTVar s = foldl (\n c -> (Char.ord c - Char.ord 'a') + 10 * n) 0 s
 
+toScheme :: TypeExp -> TScheme Type
 toScheme = schemeEmpty . toType
 
 toType :: TypeExp -> Type
@@ -28,7 +31,8 @@ toType (Tuple ts)   = Fix $ TCons TTuple $ map toType ts
 toType (Arr t1 t2)  = Fix $ TFunc [fakeThis, toType t1] $ toType t2
     where fakeThis = Fix $ TBody TEmptyThis
 toType (Var s)      = Fix $ TBody (TVar (Flex $ strToTVar s))
-toType (This this args res) = Fix (TFunc (toType this : map toType args) $ toType res)
+toType (This this args res) =
+    Fix (TFunc (toType this : map toType args) $ toType res)
 --toType (App (Cons n) t2)
 toType (Row fields end) = Fix (TRow Nothing rowList)
     where
