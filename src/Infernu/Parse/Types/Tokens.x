@@ -11,6 +11,8 @@ $lower = [a-z]
 tokens :-
 
   $white+                       ;
+  \.                            { \p s -> TokenDot p }
+  \,                            { \p s -> TokenComma p }
   \-\>                          { \p s -> TokenArrow p }
   \(                            { \p s -> TokenLParen p }
   \)                            { \p s -> TokenRParen p }
@@ -31,6 +33,8 @@ data Token = TokenLParen AlexPosn
            | TokenLBrace AlexPosn
            | TokenRBrace AlexPosn
            | TokenArrow AlexPosn
+           | TokenDot AlexPosn
+           | TokenComma AlexPosn
            | TokenVar AlexPosn String
            | TokenCons AlexPosn String
            deriving (Eq,Show)

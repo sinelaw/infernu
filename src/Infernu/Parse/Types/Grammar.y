@@ -17,17 +17,28 @@ import Infernu.Parse.Types.Tokens
     '{'  { TokenLBrace _ }
     '}'  { TokenRBrace _ }
     ar   { TokenArrow  _ }
+    '.'  { TokenDot    _ }
+    ','  { TokenComma  _ }
 
+%right '.'
 %right ar
 %right APP
 %%
 
 TypeExp : '(' TypeExp ')'           { $2 }
+        -- | '(' tupledn ')'           { Tuple $2 }
         | '[' TypeExp ']'           { Array $2 }
+        | TypeExp '.' '(' tupled ar TypeExp ')' { This $1 $4 $6 }
+        | TypeExp '.' '(' TypeExp ar TypeExp ')' { This $1 [$4] $6 }
         | TypeExp ar TypeExp        { Arr $1 $3 }
         | TypeExp TypeExp %prec APP { App $1 $2 }
         | cons                      { cons $1 }
         | var                       { Var $1 }
+
+tupled : '(' tupledn ')' { $2 }
+
+tupledn  : TypeExp            { [$1] }
+         | tupledn ',' TypeExp { $3 : $1 }
 
 {
 
@@ -51,6 +62,8 @@ data TypeExp = App TypeExp TypeExp
              | Var String
              | Cons String
              | Array TypeExp
+             | Tuple [TypeExp]
+             | This TypeExp [TypeExp] TypeExp
              | Number | Boolean | String | Regex | Undefined | Null | EmptyThis | Date
              deriving Show
 }
