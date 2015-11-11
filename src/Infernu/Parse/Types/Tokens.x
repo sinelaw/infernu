@@ -20,6 +20,8 @@ tokens :-
   \]                            { \p s -> TokenRBracket p }
   \{                            { \p s -> TokenLBrace p }
   \}                            { \p s -> TokenRBrace p }
+  \:                            { \p s -> TokenColon p }
+  \|                            { \p s -> TokenPipe p }
   $lower [$alpha $digit \_ \']* { \p s -> TokenVar p s }
   $upper [$alpha $digit \_ \']* { \p s -> TokenCons p s }
 
@@ -35,6 +37,8 @@ data Token = TokenLParen AlexPosn
            | TokenArrow AlexPosn
            | TokenDot AlexPosn
            | TokenComma AlexPosn
+           | TokenColon AlexPosn
+           | TokenPipe AlexPosn
            | TokenVar AlexPosn String
            | TokenCons AlexPosn String
            deriving (Eq,Show)

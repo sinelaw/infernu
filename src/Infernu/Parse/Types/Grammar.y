@@ -19,6 +19,8 @@ import Infernu.Parse.Types.Tokens
     ar   { TokenArrow  _ }
     '.'  { TokenDot    _ }
     ','  { TokenComma  _ }
+    ':'  { TokenColon  _ }
+    '|'  { TokenPipe   _ }
 
 %right '.'
 %right ar
@@ -32,6 +34,8 @@ TypeExp : '(' TypeExp ')'           { $2 }
         | TypeExp '.' '(' TypeExp ar TypeExp ')' { This $1 [$4] $6 }
         | TypeExp ar TypeExp        { Arr $1 $3 }
         | TypeExp TypeExp %prec APP { App $1 $2 }
+        | '{' fields '}'            { Row $2 Nothing }
+        | '{' fields '|' var '}'    { Row $2 (Just $4) }
         | cons                      { cons $1 }
         | var                       { Var $1 }
 
@@ -39,6 +43,13 @@ tupled : '(' tupledn ')' { $2 }
 
 tupledn  : TypeExp            { [$1] }
          | tupledn ',' TypeExp { $3 : $1 }
+
+fields : field { [$1] }
+       | fields ',' field { $3 : $1 }
+
+field : var ':' TypeExp { ($1, $3) }
+
+
 
 {
 
@@ -64,6 +75,7 @@ data TypeExp = App TypeExp TypeExp
              | Array TypeExp
              | Tuple [TypeExp]
              | This TypeExp [TypeExp] TypeExp
+             | Row [(String, TypeExp)] (Maybe String)
              | Number | Boolean | String | Regex | Undefined | Null | EmptyThis | Date
              deriving Show
 }
