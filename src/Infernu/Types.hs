@@ -396,7 +396,10 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow _ tRowList)) -> tRowList
-      Just (Fix (TCons (TName tid k) ts)) -> TRowRec tid ts
+      Just t'@(Fix (TCons (TName tid k) ts))
+          | k == KRow -> TRowRec tid ts
+          | otherwise ->
+                error $ "Kind checking failed (expecting KRow) when substituting: " ++ show t ++ " -> " ++ show t'
       Just (Fix (TBody (TVar n))) -> TRowEnd $ Just $ RowTVar n
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
