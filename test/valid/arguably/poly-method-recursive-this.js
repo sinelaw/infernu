@@ -1,6 +1,6 @@
 function foo(x, y) { return { o: x, v: x.bla(y) }; }
 
-var obj = { bla: function(z) { return z == this.val; }, 
+var obj = { bla: function(z) { return z == this.val; },
             val: false
           };
 
