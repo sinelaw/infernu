@@ -414,7 +414,7 @@ unifyRows :: (VarNames x, Pretty x) => UnifyF -> Source -> RowTVar
                -> (x, Set TProp, Map TProp TypeScheme)
                -> (x, Set TProp, FlatRowEnd Type)
                -> Infer ()
-unifyRows recurse a r (t1, names1, m1) (t2, names2, r2) =
+unifyRows recurse a r (_t1, names1, m1) (t2, names2, r2) =
     do let in1NotIn2 = names1 `Set.difference` names2
            rowTail = case r2 of
                       FlatRowEndTVar (Just _) -> FlatRowEndTVar $ Just r

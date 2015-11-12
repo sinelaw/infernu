@@ -7,7 +7,7 @@ module Infernu.Expr
        ( Exp(..)
        , mapTopAnnotation
        , LitVal(..)
-       , EVarName(..), EPropName(..)
+       , EVarName, EPropName(..)
        , getAnnotations
        ) where
 

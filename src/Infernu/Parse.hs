@@ -7,7 +7,7 @@ import           Data.Maybe                       (catMaybes, mapMaybe, fromMayb
 import qualified Infernu.Log                      as Log
 import           Infernu.Prelude
 import           Infernu.Expr
-import           Infernu.Source                   (GenInfo(..), Source(..))
+import           Infernu.Source                   (GenInfo(..))
 
 import qualified Language.ECMAScript3.PrettyPrint as ES3PP
 import qualified Language.ECMAScript3.Syntax      as ES3

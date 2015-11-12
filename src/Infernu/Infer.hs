@@ -28,7 +28,7 @@ import           Infernu.Log
 import           Infernu.Pretty()
 import           Infernu.Types
 import           Infernu.Source     (Source(..), TypeError(..))
-import           Infernu.Expr       (Exp(..), LitVal(..), EVarName(..), EPropName(..), getAnnotations)
+import           Infernu.Expr       (Exp(..), LitVal(..), EVarName, getAnnotations)
 import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL, unifyl, tryMakeRow)
 
 ----------------------------------------------------------------------
