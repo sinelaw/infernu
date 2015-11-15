@@ -195,8 +195,7 @@ prettyType (TFunc ts tres) = wrapThis this $ parens $ args <+> string "->" <+> p
         wrapThis Nothing s = s
         wrapThis (Just (Fix (TBody TUndefined))) s = s
         wrapThis (Just (Fix (TBody TEmptyThis))) s = s
-        -- if "this" is a recursive type, only show the recursive type name (no params) - this is "lossy"
-        wrapThis (Just (Fix (TCons (TName name k) _))) s = pretty name <> dot <> s
+        wrapThis (Just (Fix (TCons (TName name k) ts'))) s = pretty name <> colon <+> hsep (map pretty ts') <> dot <> s
         wrapThis (Just (Fix (TBody (TVar n)))) s | not (n `Set.member` (freeTypeVars $ drop 1 ts)) = s
         wrapThis (Just t) s = pretty t <> dot <> s
 -- prettyTab _ (TCons TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
