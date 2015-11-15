@@ -200,8 +200,12 @@ wrapError' s ta tb = wrapError (wrapWithUnifyError ta tb . Just) s
 unify'' :: Maybe UnifyF -> UnifyF
 unify'' Nothing _ t1 t2 = traceLog $ text "breaking infinite recursion cycle, when unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
 unify'' (Just recurse) a t1 t2 =
-  do traceLog $ text "unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
-     unlessEq t1 t2 $ do
+  do traceLog $ text ">>> unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
+     traceLog $ text "   which are: " <+> text (show t1) <+> text " ~ " <+> text (show t2)
+     unlessEq t1 t2 go
+     traceLog $ text "<<< Done unifying: " <+> pretty t1 <+> text " ~ " <+> pretty t2
+  where
+      go = do
          traceLog $ text "They are not equal"
          unless (kind t1 == kind t2) $ wrapError' a t1 t2 $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
          s <- getMainSubst
