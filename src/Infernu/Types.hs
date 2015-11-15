@@ -154,7 +154,10 @@ tpropName (TPropGetName x) = x
 data TRowList t = TRowProp !TProp !(TScheme t) !(TRowList t)
                 | TRowEnd !(Maybe RowTVar)
                 | TRowRec !TypeId ![t]
-                  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+                  deriving (Show, Ord, Functor, Foldable, Traversable)
+
+instance Eq t => Eq (TRowList t) where
+    x == y = flattenRow x == flattenRow y
 
 data FType t = TBody !TBody
              | TCons !TConsName ![t]
