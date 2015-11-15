@@ -35,6 +35,7 @@ tryMakeRow (TCons TStringMap [t]) = Just <$> Builtins.stringMapRowType t
 tryMakeRow (TCons TArray [t]) = Just <$> Builtins.arrayRowType t
 tryMakeRow (TBody TRegex) = Just <$> Builtins.regexRowType
 tryMakeRow (TBody TString) = Just <$> Builtins.stringRowType
+tryMakeRow (TBody TNumber) = Just <$> Builtins.numberRowType
 tryMakeRow (TBody TDate) = Just <$> Builtins.dateRowType
 tryMakeRow (TRow _ rl) = Just <$> return rl
 tryMakeRow (TFunc targs tres) = Just <$> (return

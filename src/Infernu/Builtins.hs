@@ -4,6 +4,7 @@ module Infernu.Builtins
        , dateRowType
        , regexRowType
        , stringRowType
+       , numberRowType
        , stringMapRowType
        )
        where
@@ -15,6 +16,7 @@ import           Infernu.Types              (TypeScheme)
 import           Infernu.Expr               (EVarName)
 import           Infernu.Builtins.Regex     (regexRowType)
 import           Infernu.Builtins.String    (stringRowType)
+import           Infernu.Builtins.Number    (numberRowType)
 import           Infernu.Builtins.StringMap (stringMapRowType)
 
 import           Data.Map                   (Map)

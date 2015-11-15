@@ -58,6 +58,7 @@ library
                    --, Infernu.Builtins.DOM
                    , Infernu.Builtins.Math
                    , Infernu.Builtins.Names
+                   , Infernu.Builtins.Number
                    , Infernu.Builtins.Object
                    , Infernu.Builtins.Operators
                    , Infernu.Builtins.Regex
