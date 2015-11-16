@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -15,6 +16,12 @@ import Data.Hashable (Hashable(..))
 import GHC.Generics (Generic)
 
 import           Infernu.Prelude
+
+#ifdef QUICKCHECK
+import           Data.DeriveTH
+import           Test.QuickCheck           (choose)
+import           Test.QuickCheck.Arbitrary (Arbitrary (..))
+#endif
 
 
 type EVarName = String
@@ -77,3 +84,10 @@ mapTopAnnotation f expr =
 getAnnotations :: Exp a -> [a]
 getAnnotations = foldr (:) []
 
+#ifdef QUICKCHECK
+-- Test runner
+return []
+
+$( derive makeArbitrary ''EPropName )
+
+#endif

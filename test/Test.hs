@@ -2,6 +2,7 @@
 module Test where
 
 import Infernu.Types
+import Infernu.Prelude
 
 main :: IO ()
 main = do

@@ -561,11 +561,19 @@ instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Map k v) where
     arbitrary = Map.fromList <$> resize 2 arbitrary
     shrink m = map (flip Map.delete m) (Map.keys m)
 
+$( derive makeArbitrary ''Kind )
+$( derive makeArbitrary ''TVarName )
+$( derive makeArbitrary ''TProp )
+$( derive makeArbitrary ''TCons )
 $( derive makeArbitrary ''TypeId )
 $( derive makeArbitrary ''RowTVar )
 $( derive makeArbitrary ''TRowList )
 $( derive makeArbitrary ''TConsName )
 $( derive makeArbitrary ''TBody )
+$( derive makeArbitrary ''TScheme )
+$( derive makeArbitrary ''TQual )
+$( derive makeArbitrary ''TPred )
+$( derive makeArbitrary ''ClassName )
 $( derive makeArbitrary ''FType )
 
 instance Arbitrary (Fix FType) where
