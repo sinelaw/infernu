@@ -195,17 +195,17 @@ prettyType (TFunc ts tres) = wrapThis this $ parens $ args <+> string "->" <+> p
         wrapThis Nothing s = s
         wrapThis (Just (Fix (TBody TUndefined))) s = s
         wrapThis (Just (Fix (TBody TEmptyThis))) s = s
-        wrapThis (Just (Fix (TApp (TName name k) ts'))) s = pretty name <> colon <+> hsep (map pretty ts') <> dot <> s
+        wrapThis (Just (Fix (TApp (TCons (TName name) k) ts'))) s = pretty name <> colon <+> hsep (map pretty ts') <> dot <> s
         wrapThis (Just (Fix (TBody (TVar n)))) s | not (n `Set.member` (freeTypeVars $ drop 1 ts)) = s
         wrapThis (Just t) s = pretty t <> dot <> s
 -- prettyTab _ (TApp TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
-prettyType (TApp TArray [t]) = brackets $ pretty t
-prettyType (TApp TTuple ts) = pretty ts
-prettyType (TApp (TName name k) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
-prettyType (TApp TStringMap [t]) = text "StringMap " <+> pretty t
-prettyType (TApp TRef [t]) = text "Mut" <+> pretty t
-prettyType (TApp TRecord [t]) = text "Rec" <+> pretty t
-prettyType (TApp tcn ts) = error $ "Malformed TCons: " ++ show (pretty tcn <+> pretty ts)
+prettyType (TApp (TCons (TName name) k) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
+prettyType (TApp (TCons TArray k) [t]) = brackets $ pretty t
+prettyType (TApp (TCons TTuple k) ts) = pretty ts
+prettyType (TApp (TCons TStringMap k) [t]) = text "StringMap " <+> pretty t
+prettyType (TApp (TCons TRef k) [t]) = text "Mut" <+> pretty t
+prettyType (TApp (TCons TRecord k) [t]) = text "Rec" <+> pretty t
+prettyType (TApp tcn ts) = error $ "Malformed TCons: " ++ show tcn ++ " applied on " ++ show (pretty ts)
 prettyType (TRow label rl) =
     hsep [ case label of
                Just l' -> string l' <> string "="
@@ -218,7 +218,7 @@ instance Pretty (TRowList Type) where
       encloseSep (string "{ ") space (string ", ") body'
       <> case r of
       FlatRowEndTVar r' -> maybe empty ((text "|" <+>) . pretty) r'
-      FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TApp (TName tid KRow) ts)) -- TODO
+      FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TApp (TCons (TName tid) KRow) ts)) -- TODO
       <> rbrace
       where (props, r) = flattenRow rl
             isGet (TPropGetName _) = True

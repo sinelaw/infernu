@@ -31,10 +31,10 @@ import           Infernu.Expr         (EPropName(..))
 ----------------------------------------------------------------------
 
 tryMakeRow :: Source -> FType Type -> Infer (Maybe (TRowList Type))
-tryMakeRow _ (TApp TStringMap [t]) = Just <$> Builtins.stringMapRowType t
-tryMakeRow _ (TApp TArray [t]) = Just <$> Builtins.arrayRowType t
-tryMakeRow _ (TApp TRecord [Fix (TRow _ rl)]) = Just <$> return rl
-tryMakeRow a t@(TApp TRecord _) = throwError a $ text "Invalid record:" <+> pretty t
+tryMakeRow _ (TApp (TCons TStringMap _) [t]) = Just <$> Builtins.stringMapRowType t
+tryMakeRow _ (TApp (TCons TArray _) [t]) = Just <$> Builtins.arrayRowType t
+tryMakeRow _ (TApp (TCons TRecord _) [Fix (TRow _ rl)]) = Just <$> return rl
+tryMakeRow a t@(TApp (TCons TRecord _) _) = throwError a $ text "Invalid record:" <+> pretty t
 tryMakeRow _ (TBody TRegex) = Just <$> Builtins.regexRowType
 tryMakeRow _ (TBody TString) = Just <$> Builtins.stringRowType
 tryMakeRow _ (TBody TDate) = Just <$> Builtins.dateRowType
@@ -207,7 +207,7 @@ unify'' (Just recurse) a t1 t2 =
   where
       go = do
          traceLog $ text "They are not equal"
-         unless (kind t1 == kind t2) $ wrapError' a t1 t2 $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
+--         unless (kind t1 == kind t2) $ wrapError' a t1 t2 $ throwError a $ text "Can't unify, mismatching kinds:" <+> pretty (kind t1) <+> text "!=" <+> pretty (kind t2)
          s <- getMainSubst
          let t1' = unFix $ applySubst s t1
              t2' = unFix $ applySubst s t2
@@ -247,7 +247,7 @@ unify' _ _ (TBody TUndefined) (TBody TEmptyThis) = return ()
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
 -- | Two recursive types
-unify' recurse a t1@(TApp (TName n1 k1) targs1) t2@(TApp (TName n2 k2) targs2) =
+unify' recurse a t1@(TApp (TCons (TName n1) k1) targs1) t2@(TApp (TCons (TName n2) k2) targs2) =
     -- TODO check kinds
     if n1 == n2
     then case matchZip targs1 targs2 of
@@ -262,11 +262,11 @@ unify' recurse a t1@(TApp (TName n1 k1) targs1) t2@(TApp (TName n2 k2) targs2) =
            recurse a (qualType t1') (qualType t2')
 
 -- | A recursive type and another type
-unify' recurse a (TApp (TName n1 k) targs1) t2 =
+unify' recurse a (TApp (TCons (TName n1) k) targs1) t2 =
     unrollName a n1 targs1
     >>= assertNoPred
     >>= flip (recurse a) (Fix t2)
-unify' recurse a t1 (TApp (TName n2 k) targs2) =
+unify' recurse a t1 (TApp (TCons (TName n2) k) targs2) =
     unrollName a n2 targs2
     >>= assertNoPred
     >>= recurse a (Fix t1)
@@ -277,7 +277,7 @@ unify' recurse a t1@(TApp n1 ts1) t2@(TApp n2 ts2)
     | (n1 == n2) = case matchZip ts1 ts2 of
         Nothing -> unificationError a t1 t2
         Just ts -> unifyl recurse a ts
-    | (n1 == TRecord) || (n2 == TRecord) = unifyTryMakeRow recurse a t1 t2
+    -- | (n1 == TRecord) || (n2 == TRecord) = unifyTryMakeRow recurse a t1 t2
     | otherwise = unificationError a t1 t2
 
 -- | Two functions
@@ -365,8 +365,8 @@ unifyTryMakeRow r a t1 t2 =
          where t1' = Fix $ TRow (label t1) rowType1
                t2' = Fix $ TRow (label t2) rowType2
                label t = case t of
-                   TApp TRecord [Fix (TRow n _)] -> n
-                   TApp cons _ -> Just $ show $ pretty cons
+                   TApp (TCons TRecord _) [Fix (TRow n _)] -> n
+                   TApp (TCons cons _) _ -> Just $ show $ pretty cons
                    TRow l _ -> l
                    _ -> Just $ show $ pretty $ Fix t
       _ -> wrapError' a t1 t2 $ throwError a
@@ -436,7 +436,7 @@ unifyRows recurse a r (_t1, names1, m1) (t2, names2, r2) =
                                                             , indent 4 $ pretty t2
                                                             ]
          FlatRowEndTVar (Just r2') -> recurse a in1NotIn2row (Fix . TBody . TVar $ getRowTVar r2')
-         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TApp (TName tid (karrow KStar $ map kind ts)) ts)
+         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TApp (TCons (TName tid) (karrow KStar $ map kind ts)) ts)
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Source -> [(Type, Type)] -> Infer ()
@@ -480,7 +480,7 @@ varBind' :: Source -> TVarName -> Type -> Infer (Maybe TSubst)
 varBind' a n t | t == Fix (TBody (TVar n)) = return Nothing
                | Just (rowN, rowList) <- getSingleton $ isInsideRowType n t =
                    do recVar <- flip Flex KStar <$> fresh
-                      let rowT = Fix $ TApp TRecord [Fix $ TRow rowN rowList]
+                      let rowT = Fix $ TApp (TCons TRecord (KArrow KRow KStar)) [Fix $ TRow rowN rowList]
                           withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = applySubst (singletonSubst n withRecVar) rowT
                       traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT

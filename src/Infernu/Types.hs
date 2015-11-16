@@ -14,7 +14,7 @@ module Infernu.Types
        , unTVarName
        , setTVarName
        , TBody(..)
-       , TConsName(..)
+       , TCons(..), TConsName(..)
        , TypeId(..)
        , Type
        , Fix(..)
@@ -123,13 +123,17 @@ newtype TypeId = TypeId Int
                 deriving (Show, Eq, Ord, Generic)
 instance Hashable TypeId where
 
-data TConsName = TArray
-               | TTuple
-               | TName !TypeId Kind
-               | TStringMap
-               | TRef
-               | TRecord
-                 deriving (Show, Eq, Ord)
+data TConsName
+    = TArray
+    | TTuple
+    | TName !TypeId
+    | TStringMap
+    | TRef
+    | TRecord
+    deriving (Show, Eq, Ord)
+
+data TCons = TCons TConsName Kind
+    deriving (Show, Eq, Ord)
 
 newtype RowTVar = RowTVar TVarName
                 deriving (Show, Eq, Ord)
@@ -160,7 +164,7 @@ instance Eq t => Eq (TRowList t) where
     x == y = flattenRow x == flattenRow y
 
 data FType t = TBody !TBody
-             | TApp !TConsName ![t]
+             | TApp !TCons ![t]
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
              | TFunc ![t] !t
@@ -173,7 +177,7 @@ type Type = Fix FType
 
 
 record :: Maybe String -> TRowList (Type) -> Type
-record name row = Fix $ TApp TRecord [Fix $ TRow name row]
+record name row = Fix $ TApp (TCons TRecord (KArrow KStar KRow)) [Fix $ TRow name row]
 
 ----------------------------------------------------------------------
 
@@ -194,13 +198,8 @@ instance HasKind RowTVar where
 instance HasKind (TRowList t) where
     kind _ = KRow
 
-instance HasKind TConsName where
-    kind TArray = KArrow KStar KStar
-    kind TStringMap = KArrow KStar KStar
-    kind TRef = KArrow KStar KStar
-    kind TTuple = KArrow KStar (KArrow KStar KStar)
-    kind TRecord = KArrow KRow KStar
-    kind (TName _ k) = k
+instance HasKind TCons where
+    kind (TCons _ k) = k
 
 instance HasKind Type where
     kind (Fix (TBody b)) = kind b
@@ -399,8 +398,8 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow _ tRowList)) -> tRowList
-      Just t'@(Fix (TApp (TName tid k) ts))
-          | k == KRow -> TRowRec tid ts
+      Just t'@(Fix (TApp (TCons (TName tid) k) ts))
+          | k == KRow -> TRowRec tid ts -- TODO: Bug! k is the constructor kind
           | otherwise ->
                 error $ "Kind checking failed (expecting KRow) when substituting: " ++ show t ++ " -> " ++ show t'
       Just (Fix (TBody (TVar n))) -> TRowEnd $ Just $ RowTVar n

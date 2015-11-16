@@ -37,9 +37,9 @@ builtins = Map.fromList [
 
     -- TODO: refOp and derefOp should be data constructors of the built-in Ref type (need to add
     -- support for data constructors)
-    (Names.refOp,          ts [1] $ Fix $ TFunc [tvar 1] (tcons TRef [tvar 1])),
-    (Names.refAssignOp,    ts [1] $ Fix $ TFunc [tcons TRef [tvar 1], tvar 1] (tvar 1)),
-    (Names.derefOp,        ts [1] $ Fix $ TFunc [tcons TRef [tvar 1]] (tvar 1)),
+    (Names.refOp,          ts [1] $ Fix $ TFunc [tvar 1] (ref (tvar 1))),
+    (Names.refAssignOp,    ts [1] $ Fix $ TFunc [ref (tvar 1), tvar 1] (tvar 1)),
+    (Names.derefOp,        ts [1] $ Fix $ TFunc [ref (tvar 1)] (tvar 1)),
 
     ("!",            unaryFunc boolean boolean),
     ("~",            unaryFunc number  number),

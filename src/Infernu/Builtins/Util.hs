@@ -32,13 +32,16 @@ number :: Type
 number = Fix $ TBody TNumber
 
 array :: Type -> Type
-array t = Fix $ TApp TArray [t]
+array t = Fix $ TApp (TCons TArray (KArrow KStar KStar)) [t]
 
 stringMap :: Type -> Type
-stringMap t = Fix $ TApp TStringMap [t]
+stringMap t = Fix $ TApp (TCons TStringMap (KArrow KStar KStar)) [t]
 
 boolean :: Fix FType
 boolean = Fix $ TBody TBoolean
+
+ref :: Type -> Type
+ref t = Fix $ TApp (TCons TRef (KArrow KStar KStar)) [t]
 
 undef :: Type
 undef = Fix $ TBody TUndefined
@@ -55,8 +58,10 @@ ty t = TScheme [] $ qualEmpty t
 tvar :: Int -> Type
 tvar n = Fix . TBody . TVar $ Flex n KStar
 
-tcons :: TConsName -> [Type] -> Type
-tcons n ts' = Fix $ TApp n ts'
+tcons :: TConsName -> Kind -> [Type] -> FType Type
+tcons n k ts' = TApp (TCons n k') ts'
+    where
+        k' = karrow k (map kind ts')
 
 withTypeClass :: String -> a -> a -> TQual a
 withTypeClass n t t' = TQual { qualPred = [TPredIsIn { predClass = ClassName n, predType = t }], qualType = t' }
