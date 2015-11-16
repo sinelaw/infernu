@@ -30,8 +30,8 @@ replaceFix tsource tdest (Fix t') = Fix $ fmapReplace replaceFix tsource tdest t
 
 -- | Flattens a fix-type to a list of all tree nodes
 --
--- >>> fixToList $ (Fix $ TCons TArray [Fix $ TCons TArray [Fix $ TBody TNumber]])
--- [Fix (TCons TArray [Fix (TCons TArray [Fix (TBody TNumber)])]),Fix (TCons TArray [Fix (TBody TNumber)]),Fix (TBody TNumber)]
+-- >>> fixToList $ (Fix $ TApp TArray [Fix $ TApp TArray [Fix $ TBody TNumber]])
+-- [Fix (TApp TArray [Fix (TApp TArray [Fix (TBody TNumber)])]),Fix (TApp TArray [Fix (TBody TNumber)]),Fix (TBody TNumber)]
 -- >>> fixToList $ (Fix $ TRow $ TRowProp "x" (TScheme [] $ Fix $ TBody TNumber) (TRowEnd Nothing))
 -- [Fix (TRow (TRowProp "x" (TScheme {schemeVars = [], schemeType = Fix (TBody TNumber)}) (TRowEnd Nothing))),Fix (TBody TNumber)]
 fixToList :: Foldable t => Fix t -> [Fix t]

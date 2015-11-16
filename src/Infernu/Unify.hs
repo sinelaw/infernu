@@ -31,10 +31,10 @@ import           Infernu.Expr         (EPropName(..))
 ----------------------------------------------------------------------
 
 tryMakeRow :: Source -> FType Type -> Infer (Maybe (TRowList Type))
-tryMakeRow _ (TCons TStringMap [t]) = Just <$> Builtins.stringMapRowType t
-tryMakeRow _ (TCons TArray [t]) = Just <$> Builtins.arrayRowType t
-tryMakeRow _ (TCons TRecord [Fix (TRow _ rl)]) = Just <$> return rl
-tryMakeRow a t@(TCons TRecord _) = throwError a $ text "Invalid record:" <+> pretty t
+tryMakeRow _ (TApp TStringMap [t]) = Just <$> Builtins.stringMapRowType t
+tryMakeRow _ (TApp TArray [t]) = Just <$> Builtins.arrayRowType t
+tryMakeRow _ (TApp TRecord [Fix (TRow _ rl)]) = Just <$> return rl
+tryMakeRow a t@(TApp TRecord _) = throwError a $ text "Invalid record:" <+> pretty t
 tryMakeRow _ (TBody TRegex) = Just <$> Builtins.regexRowType
 tryMakeRow _ (TBody TString) = Just <$> Builtins.stringRowType
 tryMakeRow _ (TBody TDate) = Just <$> Builtins.dateRowType
@@ -87,14 +87,14 @@ unify = decycledUnify
 -- >>> let recRow = Fix $ TRow $ TRowProp "x" (schemeEmpty tvar0) $ TRowProp "y" (schemeEmpty tvar3) (TRowEnd $ Just $ RowTVar 2)
 -- >>> let s = fromRight $ u tvar0 recRow
 -- >>> s
--- fromList [(0,Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]))]
+-- fromList [(0,Fix (TApp (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))]))]
 -- >>> applySubst s tvar0
--- Fix (TCons (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])
+-- Fix (TApp (TName (TypeId 1)) [Fix (TBody (TVar 2)),Fix (TBody (TVar 3))])
 --
 -- >>> :{
 -- pretty $ runInfer $ do
 --     s <- du tvar0 recRow
---     let (Fix (TCons (TName n1) targs1)) = applySubst s tvar0
+--     let (Fix (TApp (TName n1) targs1)) = applySubst s tvar0
 --     t <- unrollName p n1 targs1
 --     return t
 -- :}
@@ -106,7 +106,7 @@ unify = decycledUnify
 -- runInfer $ do
 --     s <-  du tvar0 recRow
 --     let rolledT = applySubst s tvar0
---     let (Fix (TCons (TName n1) targs1)) = rolledT
+--     let (Fix (TApp (TName n1) targs1)) = rolledT
 --     unrolledT <- unrollName p n1 targs1
 --     du rolledT unrolledT
 --     return (rolledT == unrolledT)
@@ -123,7 +123,7 @@ unify = decycledUnify
 -- :}
 -- "{x: <Named Type: mu 'B'. {} f>, y: f}"
 --
--- >>> let rec2 = Fix $ TCons TFunc [recRow, Fix $ TBody TNumber]
+-- >>> let rec2 = Fix $ TApp TFunc [recRow, Fix $ TBody TNumber]
 -- >>> :{
 -- pretty $ runInfer $ do
 --     s1 <- du tvar0 rec2
@@ -247,7 +247,7 @@ unify' _ _ (TBody TUndefined) (TBody TEmptyThis) = return ()
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
 -- | Two recursive types
-unify' recurse a t1@(TCons (TName n1 k1) targs1) t2@(TCons (TName n2 k2) targs2) =
+unify' recurse a t1@(TApp (TName n1 k1) targs1) t2@(TApp (TName n2 k2) targs2) =
     -- TODO check kinds
     if n1 == n2
     then case matchZip targs1 targs2 of
@@ -262,18 +262,18 @@ unify' recurse a t1@(TCons (TName n1 k1) targs1) t2@(TCons (TName n2 k2) targs2)
            recurse a (qualType t1') (qualType t2')
 
 -- | A recursive type and another type
-unify' recurse a (TCons (TName n1 k) targs1) t2 =
+unify' recurse a (TApp (TName n1 k) targs1) t2 =
     unrollName a n1 targs1
     >>= assertNoPred
     >>= flip (recurse a) (Fix t2)
-unify' recurse a t1 (TCons (TName n2 k) targs2) =
+unify' recurse a t1 (TApp (TName n2 k) targs2) =
     unrollName a n2 targs2
     >>= assertNoPred
     >>= recurse a (Fix t1)
 
 -- | Two type constructors
 -- | Any others
-unify' recurse a t1@(TCons n1 ts1) t2@(TCons n2 ts2)
+unify' recurse a t1@(TApp n1 ts1) t2@(TApp n2 ts2)
     | (n1 == n2) = case matchZip ts1 ts2 of
         Nothing -> unificationError a t1 t2
         Just ts -> unifyl recurse a ts
@@ -288,20 +288,20 @@ unify' recurse a t1@(TFunc ts1 tres1) t2@(TFunc ts2 tres2) =
                        recurse a tres1 tres2
 
 -- | A type constructor vs. a simple type
-unify' r a t1@(TBody{}) t2@(TCons{}) = unifyTryMakeRow r a t1 t2
-unify' r a t1@(TCons{}) t2@(TBody{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TBody{}) t2@(TApp{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TApp{}) t2@(TBody{}) = unifyTryMakeRow r a t1 t2
 
 -- | A function vs. a simple type
 unify' r a t1@(TBody{}) t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TFunc{}) t2@(TBody{}) = unifyTryMakeRow r a t1 t2
 
 -- | A function vs. a type constructor
-unify' r a t1@(TFunc{}) t2@(TCons{}) = unifyTryMakeRow r a t1 t2
-unify' r a t1@(TCons{}) t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TFunc{}) t2@(TApp{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TApp{}) t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
 
 -- | Type constructor vs. row type
-unify' r a t1@(TRow{})  t2@(TCons{}) = unifyTryMakeRow r a t1 t2
-unify' r a t1@(TCons{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TRow{})  t2@(TApp{}) = unifyTryMakeRow r a t1 t2
+unify' r a t1@(TApp{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TRow{})  t2@(TBody{}) = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TBody{}) t2@(TRow{})  = unifyTryMakeRow r a t1 t2
 unify' r a t1@(TRow{})  t2@(TFunc{}) = unifyTryMakeRow r a t1 t2
@@ -365,8 +365,8 @@ unifyTryMakeRow r a t1 t2 =
          where t1' = Fix $ TRow (label t1) rowType1
                t2' = Fix $ TRow (label t2) rowType2
                label t = case t of
-                   TCons TRecord [Fix (TRow n _)] -> n
-                   TCons cons _ -> Just $ show $ pretty cons
+                   TApp TRecord [Fix (TRow n _)] -> n
+                   TApp cons _ -> Just $ show $ pretty cons
                    TRow l _ -> l
                    _ -> Just $ show $ pretty $ Fix t
       _ -> wrapError' a t1 t2 $ throwError a
@@ -436,7 +436,7 @@ unifyRows recurse a r (_t1, names1, m1) (t2, names2, r2) =
                                                             , indent 4 $ pretty t2
                                                             ]
          FlatRowEndTVar (Just r2') -> recurse a in1NotIn2row (Fix . TBody . TVar $ getRowTVar r2')
-         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TCons (TName tid (karrow KStar $ map kind ts)) ts)
+         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TApp (TName tid (karrow KStar $ map kind ts)) ts)
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Source -> [(Type, Type)] -> Infer ()
@@ -480,12 +480,12 @@ varBind' :: Source -> TVarName -> Type -> Infer (Maybe TSubst)
 varBind' a n t | t == Fix (TBody (TVar n)) = return Nothing
                | Just (rowN, rowList) <- getSingleton $ isInsideRowType n t =
                    do recVar <- flip Flex KStar <$> fresh
-                      let rowT = Fix $ TCons TRecord [Fix $ TRow rowN rowList]
+                      let rowT = Fix $ TApp TRecord [Fix $ TRow rowN rowList]
                           withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
                           recT = applySubst (singletonSubst n withRecVar) rowT
                       traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
                       namedType <- getNamedType a recVar KStar recT
-                      -- let (TCons (TName n1) targs1) = unFix namedType
+                      -- let (TApp (TName n1) targs1) = unFix namedType
                       -- t' <- unrollName a n1 targs1
                       traceLog $ text "===> Resulting mu type: " <+> pretty n <+> text " = " <+> pretty withRecVar
                       return . Just $ singletonSubst recVar namedType `composeSubst` singletonSubst n withRecVar

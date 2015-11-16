@@ -53,7 +53,7 @@ closeRowList unrollRec a r@(TRowRec tid ts) =
 -- "{a: {a.a: Number, ..b}, ..c}.(() -> String)"
 closeRow :: Source -> Type -> Infer Type
 closeRow a (Fix (TRow l r)) = Fix . TRow (fmap (++"*") l) <$> closeRowList True a r
-closeRow a (Fix (TCons TRecord [t])) = (\t' -> Fix (TCons TRecord [t'])) <$> closeRow a t
+closeRow a (Fix (TApp TRecord [t])) = (\t' -> Fix (TApp TRecord [t'])) <$> closeRow a t
 closeRow _ t = return t
 
 ----------------------------------------------------------------------
@@ -151,7 +151,7 @@ inferType' env (ENew a e1 eArgs) =
      preds' <- unifyPredsL a preds
      let thisT' = TQual preds' thisTLabeled
          thisTLabeled = case resolvedThisT of
-                            Fix (TCons TRecord [Fix (TRow Nothing rl)]) -> record (label e1) rl
+                            Fix (TApp TRecord [Fix (TRow Nothing rl)]) -> record (label e1) rl
                             _ -> resolvedThisT
      return (thisT', ENew (a, thisT') e1' eArgs')
 inferType' env (ELet a n e1 e2) =
@@ -204,11 +204,11 @@ inferType' env (EArray a exprs) =
      te <- accumInfer env exprs
      let types = map (qualType . fst) te
      unifyl unify a $ zip (tv:types) types
-     let t = qualEmpty $ Fix $ TCons TArray [tv]
+     let t = qualEmpty $ Fix $ TApp TArray [tv]
      return (t, EArray (a,t) $ map snd te)
 inferType' env (ETuple a exprs) =
   do te <- accumInfer env exprs
-     let t = TQual (concatMap (qualPred . fst) te) $ Fix . TCons TTuple . reverse $ map (qualType . fst) te
+     let t = TQual (concatMap (qualPred . fst) te) $ Fix . TApp TTuple . reverse $ map (qualType . fst) te
      return (t, ETuple (a,t) $ map snd te)
 inferType' env (EStringMap a exprs') =
   do let exprs = map snd exprs'
@@ -217,7 +217,7 @@ inferType' env (EStringMap a exprs') =
      let types = map (qualType . fst) te
      unifyAll a $ elemType:types
      allPreds <- unifyPredsL a . concatMap qualPred $ map fst te
-     let t = TQual { qualPred = allPreds, qualType = Fix $ TCons TStringMap [elemType] }
+     let t = TQual { qualPred = allPreds, qualType = Fix $ TApp TStringMap [elemType] }
      return (t, EStringMap (a,t) $ zip (map fst exprs') (map snd te))
 inferType' env (ERow a isOpen propExprs) =
   do te <- accumInfer env $ map snd propExprs

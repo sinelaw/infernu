@@ -190,7 +190,7 @@ addNamedType tid t scheme = do
 -- | Compares schemes up to alpha equivalence including named type constructors equivalence (TCons
 -- TName...).
 --
--- >>> let mkNamedType tid ts = Fix $ TCons (TName (TypeId tid)) ts
+-- >>> let mkNamedType tid ts = Fix $ TApp (TName (TypeId tid)) ts
 --
 -- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TBody TNumber)) (mkNamedType 1 [], schemeEmpty (Fix $ TBody TString))
 -- False
@@ -231,8 +231,8 @@ isRecParamOnly n1 typeId t1 =
   case unFix t1 of
    TBody (TVar n1') -> if n1' == n1 then sequence [typeId] else Just []
    TBody _ -> Just []
-   TCons (TName typeId' k) subTs -> recurseIntoNamedType typeId' subTs
-   TCons _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
+   TApp (TName typeId' k) subTs -> recurseIntoNamedType typeId' subTs
+   TApp _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
    TFunc ts tres -> isRecParamOnly n1 Nothing tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
    TRow _ rlist -> isRecParamRecList n1 rlist
      where isRecParamRecList n' rlist' =
@@ -260,10 +260,10 @@ replaceRecType typeId newTypeId indexToDrop t1 =
         mapTs' = map replace'
     in  case unFix t1 of
             TBody _ -> t1
-            TCons (TName typeId' k) subTs -> if typeId == typeId'
-                                          then Fix $ TCons (TName newTypeId $ dropKindPrefix indexToDrop k) $ dropAt indexToDrop subTs
+            TApp (TName typeId' k) subTs -> if typeId == typeId'
+                                          then Fix $ TApp (TName newTypeId $ dropKindPrefix indexToDrop k) $ dropAt indexToDrop subTs
                                           else t1
-            TCons n subTs -> Fix $ TCons n $ mapTs' subTs
+            TApp n subTs -> Fix $ TApp n $ mapTs' subTs
             TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
             TRow l rlist -> record l $ go rlist
              where go rlist' =
@@ -279,7 +279,7 @@ allocNamedType a n k t =
   do typeId <- TypeId <$> fresh
      let namedTypeParams = map (Fix . TBody . TVar) . Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
          namedTypeKind = karrow k $ map kind namedTypeParams
-         namedType = Fix $ TCons (TName typeId namedTypeKind) namedTypeParams
+         namedType = Fix $ TApp (TName typeId namedTypeKind) namedTypeParams
          target = applySubst (singletonSubst n namedType) t
 
      traceLog $ text "===> replacing" <+> pretty n <+> text "=>" <+> align (pretty namedType)
@@ -299,14 +299,14 @@ allocNamedType a n k t =
 
 resolveSimpleMutualRecursion :: TVarName -> Type -> TypeId -> Int -> Infer Type
 resolveSimpleMutualRecursion n t tid ix =
-  do (Fix (TCons (TName _ k) ts), scheme) <- (Map.lookup tid . namedTypes <$> get) `failWithM` error "oh no." -- TODO
+  do (Fix (TApp (TName _ k) ts), scheme) <- (Map.lookup tid . namedTypes <$> get) `failWithM` error "oh no." -- TODO
      newTypeId <- TypeId <$> fresh
      let qVars' = dropAt ix $ schemeVars scheme
          replaceOldNamedType = replaceRecType tid newTypeId ix
          sType' = (schemeType scheme) { qualType = replaceOldNamedType $ qualType $  schemeType scheme }
          newTs = dropAt ix ts
-         newNamedType = Fix (TCons (TName newTypeId $ dropKindPrefix ix k) newTs)
-         --updatedNamedType = Fix (TCons (TName tid) newTs)
+         newNamedType = Fix (TApp (TName newTypeId $ dropKindPrefix ix k) newTs)
+         --updatedNamedType = Fix (TApp (TName tid) newTs)
          updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars'  sType'
 
      addNamedType newTypeId newNamedType updatedScheme

@@ -6,7 +6,7 @@ import           Infernu.Prelude
 import           Infernu.Types
 
 tcons :: TConsName -> [Type] -> FType Type
-tcons n ts = TCons n ts
+tcons n ts = TApp n ts
 
 typeClasses :: [(ClassName, Class (Fix FType))]
 typeClasses =

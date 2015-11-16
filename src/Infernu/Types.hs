@@ -160,7 +160,7 @@ instance Eq t => Eq (TRowList t) where
     x == y = flattenRow x == flattenRow y
 
 data FType t = TBody !TBody
-             | TCons !TConsName ![t]
+             | TApp !TConsName ![t]
                -- | TFunc (functions) are Profunctor-types. Arguments could have been a single 't'
                -- and always wrapped in a Tuple - but are expanded to a list here for convenience
              | TFunc ![t] !t
@@ -173,7 +173,7 @@ type Type = Fix FType
 
 
 record :: Maybe String -> TRowList (Type) -> Type
-record name row = Fix $ TCons TRecord [Fix $ TRow name row]
+record name row = Fix $ TApp TRecord [Fix $ TRow name row]
 
 ----------------------------------------------------------------------
 
@@ -204,7 +204,7 @@ instance HasKind TConsName where
 
 instance HasKind Type where
     kind (Fix (TBody b)) = kind b
-    kind (Fix (TCons c ts)) = case kApply (kind c) (map kind ts) of
+    kind (Fix (TApp c ts)) = case kApply (kind c) (map kind ts) of
         Nothing -> error $ "Constructor: " ++ show c ++ " - Can't apply kind: " ++ show (kind c) ++ " on " ++ show ts
         Just k -> k
     kind (Fix (TFunc _ _)) = KStar
@@ -293,12 +293,12 @@ instance VarNames (FType (Fix FType)) where
 -- instance VarNames a => VarNames (FType a) where
 --   freeTypeVars = freeTypeVars'
 --   --                (TBody t) = freeTypeVars t
---   -- freeTypeVars (TCons _ ts) = freeTypeVars ts
+--   -- freeTypeVars (TApp _ ts) = freeTypeVars ts
 --   -- freeTypeVars (TRow r) = freeTypeVars r
 
 --   mapVarNames = mapVarNames'
 --   -- mapVarNames f (TBody t) = TBody $ mapVarNames f t
---   -- mapVarNames f (TCons n ts) = TCons n $ mapVarNames f ts
+--   -- mapVarNames f (TApp n ts) = TApp n $ mapVarNames f ts
 --   -- mapVarNames f (TRow r) = TRow $ mapVarNames f r
 
 ----------------------------------------------------------------------
@@ -399,7 +399,7 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow _ tRowList)) -> tRowList
-      Just t'@(Fix (TCons (TName tid k) ts))
+      Just t'@(Fix (TApp (TName tid k) ts))
           | k == KRow -> TRowRec tid ts
           | otherwise ->
                 error $ "Kind checking failed (expecting KRow) when substituting: " ++ show t ++ " -> " ++ show t'
