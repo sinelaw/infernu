@@ -177,7 +177,7 @@ type Type = Fix FType
 
 
 record :: Maybe String -> TRowList (Type) -> Type
-record name row = Fix $ TApp (TCons TRecord (KArrow KStar KRow)) [Fix $ TRow name row]
+record name row = Fix $ TApp (TCons TRecord (KArrow KRow KStar)) [Fix $ TRow name row]
 
 ----------------------------------------------------------------------
 
