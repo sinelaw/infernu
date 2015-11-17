@@ -61,11 +61,13 @@ closeRow _ t = return t
 
 -- For efficiency reasons, types list is returned in reverse order.
 accumInfer :: TypeEnv -> [Exp Source] -> Infer [(QualType, Exp (Source, QualType))]
-accumInfer env =
+accumInfer env exprs =
   do traceLog $ text "accumInfer: env: " <+> pretty env
-     foldM accumInfer' []
+     traceLog $ text "accumInfer: exprs: " <+> pretty exprs
+     tes <- foldM accumInfer' [] exprs
+     mapM postInferSubst tes
      where accumInfer' types expr =
-             do (t, e) <- inferType env expr
+             do (t, e) <- inferType' env expr
                 return ((t,e):types)
 
 -- wrapInferError :: Exp Source -> Infer a -> Infer a
@@ -77,17 +79,22 @@ accumInfer env =
 --                             ]
 --           s = head $ getAnnotations exp
 
+postInferSubst :: (QualType, Exp (Source, QualType)) -> Infer (QualType, Exp (Source, QualType))
+postInferSubst (t, e) = do
+  unifyPending
+  s <- getMainSubst
+  st <- getState
+  traceLog $ text ">> " <+> pretty e <+> text " -- inferred :: " <+> pretty (applySubst s t)
+  traceLog $ indent 4 $ text "infer state: " <+> pretty st
+  return (applySubst s t, fmap (applySubst s) e)
+
+
 inferType  :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType env expr = do
   traceLog $ text ">> " <+> pretty expr <+> text " -- env: " <+> pretty env
 --  (t, e) <- wrapInferError expr $ inferType' env expr
   (t, e) <- inferType' env expr
-  unifyPending
-  s <- getMainSubst
-  st <- getState
-  traceLog $ text ">> " <+> pretty expr <+> text " -- inferred :: " <+> pretty (applySubst s t)
-  traceLog $ indent 4 $ text "infer state: " <+> pretty st
-  return (applySubst s t, fmap (applySubst s) e)
+  postInferSubst (t, e)
 
 inferType' :: TypeEnv -> Exp Source -> Infer (QualType, Exp (Source, QualType))
 inferType' _ (ELit a lit) = do
