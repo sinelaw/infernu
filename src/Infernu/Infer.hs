@@ -257,6 +257,7 @@ inferType' env (ECase a eTest eBranches) =
      return (tRes, ECase (a, tRes) eTest' $ zip (map fst eBranches) (map snd infBranches))
 inferType' env e@(EProp a eObj propName) =
   do (tObj, eObj') <- inferType env eObj
+     traceLog $ text "EProp: Initial type for obj expr: " <+> pretty tObj
      -- This is a hack to make it easier to support higher-rank row properties.  We require to have
      -- determined the type of eObj "good enough" for us to find if it has the required property or
      -- not.  Otherwise we must assume the property is a monotype.
@@ -279,6 +280,11 @@ inferType' env e@(EProp a eObj propName) =
          case rowType of
              Just tRowList -> propTypefromTRow tRowList
              _ -> propTypeIfMono
+
+     -- for debugging only:
+     updatedRowType <- applyMainSubst tObj
+     traceLog $ text "EProp: Inferred row type for obj: " <+> pretty updatedRowType
+     traceLog $ text "EProp: Inferred type for property: " <+> pretty propName <+> text ":" <+> pretty propType
 
      return (propType, EProp (a,propType) eObj' propName)
 
