@@ -1,0 +1,31 @@
+digraph G {
+        objset -> obj1;
+        objset -> set;
+        objset [label="Prop"];
+        obj1 [label="Var obj"];
+        set [label="'set'"];
+
+        objsetApp -> objset [label="func"];
+        objsetApp -> obj2objget [label="arg"];
+        objsetApp [label="App"];
+
+        obj2objget [label="(,)"];
+        obj2objget -> obj2;
+        obj2objget -> objgetApp;
+        obj2 [label="Var obj"];
+
+        objgetApp [label="App"];
+        objgetApp -> objget [label="func"];
+        objgetApp -> obj4 [label="arg"];
+
+        objget [label="Prop"];
+        objget -> obj3;
+
+        obj3 [label="Var obj"];
+        objget -> get;
+
+        get [label="'get'"];
+        obj4 [label="Var obj"];
+
+}
+

@@ -1,0 +1,18 @@
+digraph G {
+        c -> fun;
+        fun -> rec;
+
+        fun -> d;
+        fun [label="->"];
+
+        rec -> set;
+        rec [label="{}"];
+        set [label="'set'"];
+        get [label="'get'"];
+
+        set -> b;
+        rec -> get;
+        get -> c;
+        rec -> r2;
+
+}

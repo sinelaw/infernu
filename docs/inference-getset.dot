@@ -1,0 +1,28 @@
+digraph G {
+        c -> funGet;
+        funGet -> rec;
+
+        funGet -> d;
+        funGet [label="->"];
+
+        rec -> set;
+        rec [label="{}"];
+        set [label="'set'"];
+        get [label="'get'"];
+
+        set -> b;
+        rec -> get;
+        get -> c;
+        rec -> r2;
+
+        b -> funSet;
+        funSet -> rec;
+
+        funSet -> e;
+        funSet [label="->"];
+
+        {rank=same;
+                b;
+                c;
+                }
+}
