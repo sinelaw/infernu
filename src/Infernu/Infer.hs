@@ -36,13 +36,13 @@ import           Infernu.Unify      (unify, unifyAll, unifyPending, unifyPredsL,
 closeRowList :: Bool -> Source -> TRowList Type -> Infer (TRowList Type)
 closeRowList unrollRec a   (TRowProp p t l) = TRowProp p t <$> closeRowList unrollRec a l
 closeRowList _         _   (TRowEnd _)      = return $ TRowEnd Nothing
-closeRowList unrollRec a r@(TRowRec tid ts) =
-  if not unrollRec
-  then return $ r
-  else do qt <- unrollName a tid ts
-          case qualType qt of
-            Fix (TRow _ r') -> closeRowList False a r'
-            _ -> error $ show $ text "Expected row type, got: " <+> pretty qt
+-- closeRowList unrollRec a r@(TRowRec tid ts) =
+--   if not unrollRec
+--   then return $ r
+--   else do qt <- unrollName a tid ts
+--           case qualType qt of
+--             Fix (TRow _ r') -> closeRowList False a r'
+--             _ -> error $ show $ text "Expected row type, got: " <+> pretty qt
 
 -- | Replaces a top-level open row type with the closed equivalent.
 -- >>> pretty $ closeRow (Fix $ TRow $ TRowProp "a" (schemeEmpty $ Fix $ TRow $ TRowProp "aa" (schemeEmpty $ Fix $ TBody TNumber) (TRowEnd (Just $ RowTVar 1))) (TRowEnd (Just $ RowTVar 2)))
@@ -281,12 +281,21 @@ inferType' env e@(EProp a eObj propName) =
              Just tRowList -> propTypefromTRow tRowList
              _ -> propTypeIfMono
 
+
      -- for debugging only:
      updatedRowType <- applyMainSubst tObj
      traceLog $ text "EProp: Inferred row type for obj: " <+> pretty updatedRowType
      traceLog $ text "EProp: Inferred type for property: " <+> pretty propName <+> text ":" <+> pretty propType
 
      return (propType, EProp (a,propType) eObj' propName)
+inferType' env (EUnroll a expr) =
+  do (exprT, expr') <- inferType env expr
+     muTVName <- freshFlex KStar
+     recTV <- Fix . TBody . TVar <$> freshFlex KStar
+     let t = Fix $ TMu muTVName recTV
+         qrecTV = qualEmpty recTV
+     unify a t (qualType exprT)
+     return (qrecTV, EUnroll (a, qrecTV) expr')
 
 createEnv :: Map EVarName TypeScheme -> Infer (Map EVarName VarId)
 createEnv builtins = foldM addVarScheme' Map.empty $ Map.toList builtins

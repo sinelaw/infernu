@@ -15,7 +15,7 @@ module Infernu.InferState
        , freshVarId
        , generalize
        , getMainSubst
-       , getNamedType
+       -- , getNamedType
        , getPendingUnifications
        , getState
        , getVarId
@@ -35,18 +35,18 @@ module Infernu.InferState
        , setVarScheme
        , skolemiseScheme
        , throwError
-       , unrollName
+       -- , unrollName
        , wrapError
 --             , getVarScheme
          )
        where
 
 
-import           Control.Monad (foldM, forM, liftM2)
+import           Control.Monad (foldM, forM)
 import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.Either (EitherT (..), bimapEitherT, left, runEitherT)
 import           Control.Monad.Trans.State (StateT (..), evalStateT, get, mapStateT, modify, put)
-import           Data.Foldable (msum)
+
 
 import           Data.Functor.Identity (Identity (..), runIdentity)
 import qualified Data.List as List
@@ -58,7 +58,7 @@ import qualified Data.Set as Set
 import           Text.PrettyPrint.ANSI.Leijen (Doc, Pretty (..), align, squotes, text, (<+>))
 
 import qualified Infernu.Builtins.TypeClasses
-import           Infernu.Lib
+
 import           Infernu.Log
 import           Infernu.Prelude
 import           Infernu.Pretty ()
@@ -181,170 +181,170 @@ getFreeTVars env = do
                 tr = tracePretty $ text " collected from" <+> pretty varId <+> text "free type variables:"
   foldM collectFreeTVs Set.empty (Map.elems env)
 
-addNamedType :: TypeId -> Type -> TypeScheme -> Infer ()
-addNamedType tid t scheme = do
-  traceLog $ text "===> Introducing named type:" <+> pretty tid <+> text "=>" <+> align (pretty scheme)
-  modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
-  return ()
+-- addNamedType :: TypeId -> Type -> TypeScheme -> Infer ()
+-- addNamedType tid t scheme = do
+--   traceLog $ text "===> Introducing named type:" <+> pretty tid <+> text "=>" <+> align (pretty scheme)
+--   modify $ \is -> is { namedTypes = Map.insert tid (t, scheme) $ namedTypes is }
+--   return ()
 
--- | Compares schemes up to alpha equivalence including named type constructors equivalence (TCons
--- TName...).
---
--- >>> let mkNamedType tid ts = Fix $ TApp (TName (TypeId tid)) ts
---
--- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TBody TNumber)) (mkNamedType 1 [], schemeEmpty (Fix $ TBody TString))
--- False
--- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (mkNamedType 0 [])) (mkNamedType 1 [], schemeEmpty (mkNamedType 1 []))
--- True
--- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TFunc [Fix $ TBody TNumber] (mkNamedType 0 [])))
---                             (mkNamedType 1 [], schemeEmpty (Fix $ TFunc [Fix $ TBody TNumber] (mkNamedType 1 [])))
--- :}
--- True
---
--- >>> :{
---     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 10] (mkNamedType 0 [Fix $ TBody $ TVar 10])))
---                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 11] (mkNamedType 1 [Fix $ TBody $ TVar 11])))
--- :}
--- True
-areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
-areEquivalentNamedTypes (t1, s1) (t2, s2) =
-    case matchZip (schemeVars s1) (schemeVars s2) of
-        Just zipvars -> s2 == (s2 { schemeType = applySubst subst' $ replaceFixQual (unFix t1) (unFix t2) $ schemeType s1 })
-            where subst' = foldr accumSubst' nullSubst zipvars
-                  accumSubst' (x,y) s = singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s
-        Nothing -> False
+-- -- | Compares schemes up to alpha equivalence including named type constructors equivalence (TCons
+-- -- TName...).
+-- --
+-- -- >>> let mkNamedType tid ts = Fix $ TApp (TName (TypeId tid)) ts
+-- --
+-- -- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TBody TNumber)) (mkNamedType 1 [], schemeEmpty (Fix $ TBody TString))
+-- -- False
+-- -- >>> areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (mkNamedType 0 [])) (mkNamedType 1 [], schemeEmpty (mkNamedType 1 []))
+-- -- True
+-- -- >>> :{
+-- --     areEquivalentNamedTypes (mkNamedType 0 [], schemeEmpty (Fix $ TFunc [Fix $ TBody TNumber] (mkNamedType 0 [])))
+-- --                             (mkNamedType 1 [], schemeEmpty (Fix $ TFunc [Fix $ TBody TNumber] (mkNamedType 1 [])))
+-- -- :}
+-- -- True
+-- --
+-- -- >>> :{
+-- --     areEquivalentNamedTypes (mkNamedType 0 [Fix $ TBody $ TVar 10], TScheme [10] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 10] (mkNamedType 0 [Fix $ TBody $ TVar 10])))
+-- --                             (mkNamedType 1 [Fix $ TBody $ TVar 11], TScheme [11] (qualEmpty $ Fix $ TFunc [Fix $ TBody $ TVar 11] (mkNamedType 1 [Fix $ TBody $ TVar 11])))
+-- -- :}
+-- -- True
+-- areEquivalentNamedTypes :: (Type, TypeScheme) -> (Type, TypeScheme) -> Bool
+-- areEquivalentNamedTypes (t1, s1) (t2, s2) =
+--     case matchZip (schemeVars s1) (schemeVars s2) of
+--         Just zipvars -> s2 == (s2 { schemeType = applySubst subst' $ replaceFixQual (unFix t1) (unFix t2) $ schemeType s1 })
+--             where subst' = foldr accumSubst' nullSubst zipvars
+--                   accumSubst' (x,y) s = singletonSubst x (Fix $ TBody $ TVar y) `composeSubst` s
+--         Nothing -> False
 
--- | Returns a TQual with the `src` type replaced everywhere with the `dest` type.
-replaceFixQual :: (Functor f, Eq (f (Fix f))) => f (Fix f) -> f (Fix f) -> TQual (Fix f) -> TQual (Fix f)
-replaceFixQual src dest (TQual preds t) = TQual (map (replacePredType' $ replaceFix src dest) preds) (replaceFix src dest t)
-    where replacePredType' f p = p { predType = f $ predType p } -- TODO needs some lens goodness
+-- -- | Returns a TQual with the `src` type replaced everywhere with the `dest` type.
+-- replaceFixQual :: (Functor f, Eq (f (Fix f))) => f (Fix f) -> f (Fix f) -> TQual (Fix f) -> TQual (Fix f)
+-- replaceFixQual src dest (TQual preds t) = TQual (map (replacePredType' $ replaceFix src dest) preds) (replaceFix src dest t)
+--     where replacePredType' f p = p { predType = f $ predType p } -- TODO needs some lens goodness
 
 -- Checks if a given type variable appears in the given type *only* as a parameter to a recursive
 -- type name.  If yes, returns the name of recursive types (and position within) in which it
 -- appears; otherwise returns Nothing.
 --isRecParamOnly :: TVarName -> Maybe (TypeId, Int) -> Type -> Maybe [(TypeId, Int)]
-isRecParamOnly
-  :: (Num t, Enum t) =>
-     TVarName -> Maybe (TypeId, t) -> Type -> Maybe [(TypeId, t)]
-isRecParamOnly n1 typeId t1 =
-  case unFix t1 of
-   TBody (TVar n1') -> if n1' == n1 then sequence [typeId] else Just []
-   TBody _ -> Just []
-   TApp (TCons (TName typeId') k) subTs -> recurseIntoNamedType typeId' subTs
-   TApp _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
-   TFunc ts tres -> isRecParamOnly n1 Nothing tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
-   TRow _ rlist -> isRecParamRecList n1 rlist
-     where isRecParamRecList n' rlist' =
-             case rlist' of
-              TRowEnd _ -> Just []
-              -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
-              -- TODO: Can we safely ignore preds here?
-              TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing $ qualType t') (isRecParamRecList n' rlist'')
-              TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
-  where recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
+-- isRecParamOnly
+--   :: (Num t, Enum t) =>
+--      TVarName -> Maybe (TypeId, t) -> Type -> Maybe [(TypeId, t)]
+-- isRecParamOnly n1 typeId t1 =
+--   case unFix t1 of
+--    TBody (TVar n1') -> if n1' == n1 then sequence [typeId] else Just []
+--    TBody _ -> Just []
+   -- TApp (TCons (TName typeId') k) subTs -> recurseIntoNamedType typeId' subTs
+--    TApp _ subTs -> msum $ map (isRecParamOnly n1 Nothing) subTs
+--    TFunc ts tres -> isRecParamOnly n1 Nothing tres `mappend` msum (map (isRecParamOnly n1 Nothing) ts)
+--    TRow _ rlist -> isRecParamRecList n1 rlist
+--      where isRecParamRecList n' rlist' =
+--              case rlist' of
+--               TRowEnd _ -> Just []
+--               -- TODO: assumes the quanitified vars in TScheme do not shadow other type variable names
+--               -- TODO: Can we safely ignore preds here?
+--               TRowProp _ (TScheme _ t') rlist'' -> liftM2 (++) (isRecParamOnly n1 Nothing $ qualType t') (isRecParamRecList n' rlist'')
+--               TRowRec typeId' subTs -> recurseIntoNamedType typeId' subTs
+--   where recurseIntoNamedType typeId' subTs = msum $ map (\(t,i) -> isRecParamOnly n1 (Just (typeId', i)) t) $ zip subTs [0..]
 
-dropAt :: Integral a => a -> [b] -> [b]
-dropAt _ [] = []
-dropAt 0 (_:xs) = xs
-dropAt n (_:xs) = dropAt (n-1) xs
+-- dropAt :: Integral a => a -> [b] -> [b]
+-- dropAt _ [] = []
+-- dropAt 0 (_:xs) = xs
+-- dropAt n (_:xs) = dropAt (n-1) xs
 
-dropKindPrefix :: Int -> Kind -> Kind
-dropKindPrefix 0 k = k
-dropKindPrefix n (KArrow _ k) = dropKindPrefix (n - 1) k
-dropKindPrefix n k = error . show $ text "Can't drop" <+> pretty n <+> text "from kind" <+> pretty k
+-- dropKindPrefix :: Int -> Kind -> Kind
+-- dropKindPrefix 0 k = k
+-- dropKindPrefix n (KArrow _ k) = dropKindPrefix (n - 1) k
+-- dropKindPrefix n k = error . show $ text "Can't drop" <+> pretty n <+> text "from kind" <+> pretty k
 
-replaceRecType :: TypeId -> TypeId -> Int -> Type -> Type
-replaceRecType typeId newTypeId indexToDrop t1 =
-    let replace' = replaceRecType typeId newTypeId indexToDrop
-        mapTs' = map replace'
-    in  case unFix t1 of
-            TBody _ -> t1
-            TApp (TCons (TName typeId') k) subTs ->
-                if typeId == typeId'
-                then Fix $ TApp (TCons (TName newTypeId) $ dropKindPrefix indexToDrop k) $ dropAt indexToDrop subTs
-                else t1
-            TApp n subTs -> Fix $ TApp n $ mapTs' subTs
-            TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
-            TRow l rlist -> record l $ go rlist
-             where go rlist' =
-                     case rlist' of
-                      TRowEnd _ -> rlist'
-                      TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (go rlist'')
-                      TRowRec tid ts -> if typeId == tid
-                                        then TRowRec newTypeId $ dropAt indexToDrop ts
-                                        else rlist'
+-- replaceRecType :: TypeId -> TypeId -> Int -> Type -> Type
+-- replaceRecType typeId newTypeId indexToDrop t1 =
+--     let replace' = replaceRecType typeId newTypeId indexToDrop
+--         mapTs' = map replace'
+--     in  case unFix t1 of
+--             TBody _ -> t1
+--             TApp (TCons (TName typeId') k) subTs ->
+--                 if typeId == typeId'
+--                 then Fix $ TApp (TCons (TName newTypeId) $ dropKindPrefix indexToDrop k) $ dropAt indexToDrop subTs
+--                 else t1
+--             TApp n subTs -> Fix $ TApp n $ mapTs' subTs
+--             TFunc ts tres -> Fix $ TFunc (mapTs' ts) (replace' tres)
+--             TRow l rlist -> record l $ go rlist
+--              where go rlist' =
+--                      case rlist' of
+--                       TRowEnd _ -> rlist'
+--                       TRowProp p (TScheme qv t') rlist'' -> TRowProp p (TScheme qv (t' { qualType = replace' $ qualType t' })) (go rlist'')
+--                       TRowRec tid ts -> if typeId == tid
+--                                         then TRowRec newTypeId $ dropAt indexToDrop ts
+--                                         else rlist'
 
-allocNamedType :: Source -> TVarName -> Kind -> Type -> Infer Type
-allocNamedType a n k t =
-  do typeId <- TypeId <$> fresh
-     let namedTypeParams = map (Fix . TBody . TVar) . Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
-         namedTypeKind = karrow k $ map kind namedTypeParams
-         namedType = Fix $ TApp (TCons (TName typeId) namedTypeKind) namedTypeParams
-         target = applySubst (singletonSubst n namedType) t
+-- allocNamedType :: Source -> TVarName -> Kind -> Type -> Infer Type
+-- allocNamedType a n k t =
+--   do typeId <- TypeId <$> fresh
+--      let namedTypeParams = map (Fix . TBody . TVar) . Set.toList $ freeTypeVars t `Set.difference` Set.singleton n
+--          namedTypeKind = karrow k $ map kind namedTypeParams
+--          namedType = Fix $ TApp (TCons (TName typeId) namedTypeKind) namedTypeParams
+--          target = applySubst (singletonSubst n namedType) t
 
-     traceLog $ text "===> replacing" <+> pretty n <+> text "=>" <+> align (pretty namedType)
-     traceLog $ text "===> allocNamedType: source =" <+> align (pretty t)
-     traceLog $ text "===> allocNamedType: target =" <+> align (pretty target)
-     (scheme, ps) <- unsafeGeneralize Map.empty $ qualEmpty target
-     traceLog $ text "===> Generated scheme for mu type:" <+> align (pretty scheme)
-     currentNamedTypes <- filter (\(_, ts) -> areEquivalentNamedTypes (namedType, scheme) ts) . Map.toList . namedTypes <$> get
-     case currentNamedTypes of
-      [] -> do traceLog $ text "===> Didn't find existing rec type, adding new: " <+> pretty namedType <+> text "=" <+> align (pretty scheme)
-               addNamedType typeId namedType scheme
-               return namedType
-      (otherTID, (otherNT, _)):_ ->
-          do traceLog $ text "===> Found existing rec type:" <+> pretty otherNT
-             -- TODO: don't ignore the preds!
-             qualType <$> unrollName a otherTID namedTypeParams
+--      traceLog $ text "===> replacing" <+> pretty n <+> text "=>" <+> align (pretty namedType)
+--      traceLog $ text "===> allocNamedType: source =" <+> align (pretty t)
+--      traceLog $ text "===> allocNamedType: target =" <+> align (pretty target)
+--      (scheme, ps) <- unsafeGeneralize Map.empty $ qualEmpty target
+--      traceLog $ text "===> Generated scheme for mu type:" <+> align (pretty scheme)
+--      currentNamedTypes <- filter (\(_, ts) -> areEquivalentNamedTypes (namedType, scheme) ts) . Map.toList . namedTypes <$> get
+--      case currentNamedTypes of
+--       [] -> do traceLog $ text "===> Didn't find existing rec type, adding new: " <+> pretty namedType <+> text "=" <+> align (pretty scheme)
+--                addNamedType typeId namedType scheme
+--                return namedType
+--       (otherTID, (otherNT, _)):_ ->
+--           do traceLog $ text "===> Found existing rec type:" <+> pretty otherNT
+--              -- TODO: don't ignore the preds!
+--              qualType <$> unrollName a otherTID namedTypeParams
 
-resolveSimpleMutualRecursion :: TVarName -> Type -> TypeId -> Int -> Infer Type
-resolveSimpleMutualRecursion n t tid ix =
-  do (Fix (TApp (TCons (TName _) k) ts), scheme) <- (Map.lookup tid . namedTypes <$> get) `failWithM` error "oh no." -- TODO
-     newTypeId <- TypeId <$> fresh
-     let qVars' = dropAt ix $ schemeVars scheme
-         replaceOldNamedType = replaceRecType tid newTypeId ix
-         sType' = (schemeType scheme) { qualType = replaceOldNamedType $ qualType $  schemeType scheme }
-         newTs = dropAt ix ts
-         newNamedType = Fix (TApp (TCons (TName newTypeId) $ dropKindPrefix ix k) newTs)
-         --updatedNamedType = Fix (TApp (TName tid) newTs)
-         updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars'  sType'
+-- resolveSimpleMutualRecursion :: TVarName -> Type -> TypeId -> Int -> Infer Type
+-- resolveSimpleMutualRecursion n t tid ix =
+--   do (Fix (TApp (TCons (TName _) k) ts), scheme) <- (Map.lookup tid . namedTypes <$> get) `failWithM` error "oh no." -- TODO
+--      newTypeId <- TypeId <$> fresh
+--      let qVars' = dropAt ix $ schemeVars scheme
+--          replaceOldNamedType = replaceRecType tid newTypeId ix
+--          sType' = (schemeType scheme) { qualType = replaceOldNamedType $ qualType $  schemeType scheme }
+--          newTs = dropAt ix ts
+--          newNamedType = Fix (TApp (TCons (TName newTypeId) $ dropKindPrefix ix k) newTs)
+--          --updatedNamedType = Fix (TApp (TName tid) newTs)
+--          updatedScheme = applySubst (singletonSubst n newNamedType) $ TScheme qVars'  sType'
 
-     addNamedType newTypeId newNamedType updatedScheme
-     -- TODO: we could alternatively update the existing named type, but that will break it's schema (will now take less params?)
-     --addNamedType tid updatedNamedType updatedScheme
-     return $ replaceOldNamedType t
-
-
-getNamedType :: Source -> TVarName -> Kind -> Type -> Infer Type
-getNamedType a n k t =
-  do let recTypeParamPos = isRecParamOnly n Nothing t
-     traceLog $ text "isRecParamOnly:" <+> pretty n <+> text "in" <+> pretty t <+> text ":" <+> align (text $ show (fmap show recTypeParamPos))
-     case recTypeParamPos of
-      Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
-      -- either the variable appears outside a recursive type's type parameter list, or it appears
-      -- in more than one such position:
-      _ -> applyMainSubst t >>= allocNamedType a n k
+--      addNamedType newTypeId newNamedType updatedScheme
+--      -- TODO: we could alternatively update the existing named type, but that will break it's schema (will now take less params?)
+--      --addNamedType tid updatedNamedType updatedScheme
+--      return $ replaceOldNamedType t
 
 
-unrollNameByScheme :: Substable a => [Type] -> [TVarName] -> a -> a
-unrollNameByScheme ts qvars = applySubst subst
-  where assocs = case matchZip qvars ts of
-                     Just x -> x
-                     Nothing -> error "Assertion failed: Expected number of types = number of tvars when unrolling a recursive type."
-        subst = foldr (\(tvar,destType) s -> singletonSubst tvar destType `composeSubst` s) nullSubst assocs
+-- getNamedType :: Source -> TVarName -> Kind -> Type -> Infer Type
+-- getNamedType a n k t =
+--   do let recTypeParamPos = isRecParamOnly n Nothing t
+--      traceLog $ text "isRecParamOnly:" <+> pretty n <+> text "in" <+> pretty t <+> text ":" <+> align (text $ show (fmap show recTypeParamPos))
+--      case recTypeParamPos of
+--       Just [(tid, ix)] -> resolveSimpleMutualRecursion n t tid ix
+--       -- either the variable appears outside a recursive type's type parameter list, or it appears
+--       -- in more than one such position:
+--       _ -> applyMainSubst t >>= allocNamedType a n k
 
-getNamedTypeScheme :: Source -> TypeId -> Infer TypeScheme
-getNamedTypeScheme a tid = (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a (text "Unknown type id")
 
--- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
--- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh
--- type variables.
-unrollName :: Source -> TypeId -> [Type] -> Infer QualType
-unrollName a tid ts =
-    -- TODO: Is it safe to ignore the scheme preds here?
-    do (TScheme qvars t) <- getNamedTypeScheme a tid
-       return $ unrollNameByScheme ts qvars t
+-- unrollNameByScheme :: Substable a => [Type] -> [TVarName] -> a -> a
+-- unrollNameByScheme ts qvars = applySubst subst
+--   where assocs = case matchZip qvars ts of
+--                      Just x -> x
+--                      Nothing -> error "Assertion failed: Expected number of types = number of tvars when unrolling a recursive type."
+--         subst = foldr (\(tvar,destType) s -> singletonSubst tvar destType `composeSubst` s) nullSubst assocs
+
+-- getNamedTypeScheme :: Source -> TypeId -> Infer TypeScheme
+-- getNamedTypeScheme a tid = (fmap snd . Map.lookup tid . namedTypes <$> get) `failWithM` throwError a (text "Unknown type id")
+
+-- -- | Unrolls (expands) a TName recursive type by plugging in the holes from the given list of types.
+-- -- Similar to instantiation, but uses a pre-defined set of type instances instead of using fresh
+-- -- type variables.
+-- unrollName :: Source -> TypeId -> [Type] -> Infer QualType
+-- unrollName a tid ts =
+--     -- TODO: Is it safe to ignore the scheme preds here?
+--     do (TScheme qvars t) <- getNamedTypeScheme a tid
+--        return $ unrollNameByScheme ts qvars t
 
 -- | Applies a subsitution onto the state (basically on the variable -> scheme map).
 --
@@ -478,7 +478,7 @@ isExpansive (ETuple{})  = True
 isExpansive (EStringMap{})  = True
 isExpansive (ERow{})        = True
 isExpansive (ENew{})        = True
-
+isExpansive (EUnroll{})     = True -- TODO maybe not?
 
 generalize :: Exp a -> TypeEnv -> QualType -> Infer (TypeScheme, [TPred Type])
 generalize exp' env t = if isExpansive exp'

@@ -246,30 +246,37 @@ unify' _ _ (TBody TUndefined) (TBody TEmptyThis) = return ()
 -- | Two simple types
 unify' _ a (TBody x) (TBody y) = unlessEq x y $ unificationError a x y
 
--- | Two recursive types
-unify' recurse a t1@(TApp (TCons (TName n1) k1) targs1) t2@(TApp (TCons (TName n2) k2) targs2) =
-    -- TODO check kinds
-    if n1 == n2
-    then case matchZip targs1 targs2 of
-             Nothing -> unificationError a t1 t2
-             Just targs -> unifyl recurse a targs
-    else
-        do let unroll' = unrollName a
-           t1' <- unroll' n1 targs1
-           t2' <- unroll' n2 targs2
-           -- TODO don't ignore qual preds...
-           mapM_ assertNoPred [t1', t2']
-           recurse a (qualType t1') (qualType t2')
+unify' r a (TMu tv1 t1) (TMu tv2 t2) = --unlessEq x y $ unificationError a x y
+    -- TODO alpha-equivalence
+    let t2' = applySubst (singletonSubst tv2 (Fix $ TBody (TVar tv1))) t2
+    in r a t1 t2'
+unify' _ a x@(TMu{}) y = unificationError a x y
+unify' _ a x y@(TMu{}) = unificationError a x y
 
--- | A recursive type and another type
-unify' recurse a (TApp (TCons (TName n1) k) targs1) t2 =
-    unrollName a n1 targs1
-    >>= assertNoPred
-    >>= flip (recurse a) (Fix t2)
-unify' recurse a t1 (TApp (TCons (TName n2) k) targs2) =
-    unrollName a n2 targs2
-    >>= assertNoPred
-    >>= recurse a (Fix t1)
+-- -- | Two recursive types
+-- unify' recurse a t1@(TApp (TCons (TName n1) k1) targs1) t2@(TApp (TCons (TName n2) k2) targs2) =
+--     -- TODO check kinds
+--     if n1 == n2
+--     then case matchZip targs1 targs2 of
+--              Nothing -> unificationError a t1 t2
+--              Just targs -> unifyl recurse a targs
+--     else
+--         do let unroll' = unrollName a
+--            t1' <- unroll' n1 targs1
+--            t2' <- unroll' n2 targs2
+--            -- TODO don't ignore qual preds...
+--            mapM_ assertNoPred [t1', t2']
+--            recurse a (qualType t1') (qualType t2')
+
+-- -- | A recursive type and another type
+-- unify' recurse a (TApp (TCons (TName n1) k) targs1) t2 =
+--     unrollName a n1 targs1
+--     >>= assertNoPred
+--     >>= flip (recurse a) (Fix t2)
+-- unify' recurse a t1 (TApp (TCons (TName n2) k) targs2) =
+--     unrollName a n2 targs2
+--     >>= assertNoPred
+--     >>= recurse a (Fix t1)
 
 -- | Two type constructors
 -- | Any others
@@ -436,7 +443,7 @@ unifyRows recurse a r (_t1, names1, m1) (t2, names2, r2) =
                                                             , indent 4 $ pretty t2
                                                             ]
          FlatRowEndTVar (Just r2') -> recurse a in1NotIn2row (Fix . TBody . TVar $ getRowTVar r2')
-         FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TApp (TCons (TName tid) (karrow KStar $ map kind ts)) ts)
+         -- FlatRowEndRec tid ts -> recurse a in1NotIn2row (Fix $ TApp (TCons (TName tid) (karrow KStar $ map kind ts)) ts)
 
 -- | Unifies pairs of types, accumulating the substs
 unifyl :: UnifyF -> Source -> [(Type, Type)] -> Infer ()
@@ -454,20 +461,20 @@ unifyl r a = mapM_ $ uncurry $ r a
 -- Nothing
 -- >>> getSingleton $ isInsideRowType 0 (Fix (TFunc [Fix $ TBody $ TVar 1] (Fix $ TRow $ TRowEnd (Just $ RowTVar 0))))
 -- Just Fix (TRow (TRowEnd (Just (RowTVar 0))))
-isInsideRowType :: TVarName -> Type -> Set (Maybe String, TRowList Type)
-isInsideRowType n (Fix t) =
-  case t of
-   TRow name t' ->
-       if n `Set.member` freeTypeVars t'
-       then Set.singleton (name, t')
-       else Set.empty
-   _ -> foldr (\x l -> isInsideRowType n x `Set.union` l) Set.empty t
---   _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
+-- isInsideRowType :: TVarName -> Type -> Set (Maybe String, TRowList Type)
+-- isInsideRowType n (Fix t) =
+--   case t of
+--    TRow name t' ->
+--        if n `Set.member` freeTypeVars t'
+--        then Set.singleton (name, t')
+--        else Set.empty
+--    _ -> foldr (\x l -> isInsideRowType n x `Set.union` l) Set.empty t
+-- --   _ -> unOrBool $ fst (traverse (\x -> (OrBool $ isInsideRowType n x, x)) t)
 
-getSingleton :: Set a -> Maybe a
-getSingleton s = case foldr (:) [] s of
-                     [x] -> Just x
-                     _ -> Nothing
+-- getSingleton :: Set a -> Maybe a
+-- getSingleton s = case foldr (:) [] s of
+--                      [x] -> Just x
+--                      _ -> Nothing
 
 varBind :: Source -> TVarName -> Type -> Infer ()
 varBind a n t =
@@ -477,22 +484,16 @@ varBind a n t =
          Just s' -> applySubstInfer s'
 
 varBind' :: Source -> TVarName -> Type -> Infer (Maybe TSubst)
-varBind' a n t | t == Fix (TBody (TVar n)) = return Nothing
-               | Just (rowN, rowList) <- getSingleton $ isInsideRowType n t =
-                   do recVar <- flip Flex KStar <$> fresh
-                      let rowT = Fix $ TApp (TCons TRecord (KArrow KRow KStar)) [Fix $ TRow rowN rowList]
-                          withRecVar = replaceFix (unFix rowT) (TBody (TVar recVar)) t
-                          recT = applySubst (singletonSubst n withRecVar) rowT
-                      traceLog $ text "===> Generalizing mu-type: " <+> pretty n <+> text " recursive in: " <+> pretty t <+> text ", found enclosing row type: " <+> text " = " <+> pretty rowT
-                      namedType <- getNamedType a recVar KStar recT
-                      -- let (TApp (TName n1) targs1) = unFix namedType
-                      -- t' <- unrollName a n1 targs1
-                      traceLog $ text "===> Resulting mu type: " <+> pretty n <+> text " = " <+> pretty withRecVar
-                      return . Just $ singletonSubst recVar namedType `composeSubst` singletonSubst n withRecVar
-               | n `Set.member` freeTypeVars t = let f = minifyVarsFunc t
-                                                 in throwError a
-                                                    $ text "Occurs check failed: "
-                                                    <+> pretty (f n) <+> text " in " <+> align (pretty (mapVarNames f t))
+varBind' _ n (Fix (TBody (TVar n'))) | n == n' = return Nothing
+                 -- case t of
+varBind' a n t@(Fix (TMu n' _)) = return . Just $ singletonSubst n t --(Fix $ TBody $ TVar n') -- TODO rly?
+varBind' a n t | n `Set.member` freeTypeVars t =
+                 -- case t of
+                 -- Fix (TMu n' _) -> return . Just $ singletonSubst n (Fix $ TBody $ TVar n') -- TODO rly?
+                 let f = minifyVarsFunc t
+                 in throwError a
+                    $ text "Occurs check failed: "
+                    <+> pretty (f n) <+> text " in " <+> align (pretty (mapVarNames f t))
                | otherwise = return . Just $ singletonSubst n t
 
 unifyAll :: Source -> [Type] -> Infer ()

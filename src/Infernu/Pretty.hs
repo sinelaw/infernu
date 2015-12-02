@@ -3,7 +3,6 @@
 module Infernu.Pretty where
 
 
-
 import           Infernu.Prelude
 import           Infernu.Expr
 import           Infernu.Source
@@ -115,7 +114,7 @@ instance Pretty (Exp a) where
     pretty (EProp _ e n) = pretty e <> dot <> pretty n
     pretty (ENew _ e args) = string "new" <> space <> pretty e <> space <> nakedSingleOrTuple (map pretty args)
     pretty (EStringMap _ exprs) = encloseSep langle rangle comma $ map (\(n,v) -> pretty n <+> string "=>" <+> pretty v) exprs
-
+    pretty (EUnroll _ expr) = parens $ string "unroll" <> space <> pretty expr
 
 -----------------------------------------------------------------------------
 
@@ -195,11 +194,11 @@ prettyType (TFunc ts tres) = wrapThis this $ parens $ args <+> string "->" <+> p
         wrapThis Nothing s = s
         wrapThis (Just (Fix (TBody TUndefined))) s = s
         wrapThis (Just (Fix (TBody TEmptyThis))) s = s
-        wrapThis (Just (Fix (TApp (TCons (TName name) k) ts'))) s = pretty name <> colon <+> hsep (map pretty ts') <> dot <> s
+        -- wrapThis (Just (Fix (TApp (TCons (TName name) k) ts'))) s = pretty name <> colon <+> hsep (map pretty ts') <> dot <> s
         wrapThis (Just (Fix (TBody (TVar n)))) s | not (n `Set.member` (freeTypeVars $ drop 1 ts)) = s
         wrapThis (Just t) s = pretty t <> dot <> s
 -- prettyTab _ (TApp TFunc ts) = error $ "Malformed TFunc: " ++ intercalate ", " (map pretty ts)
-prettyType (TApp (TCons (TName name) k) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
+-- prettyType (TApp (TCons (TName name) k) ts) = angles $ pretty name <> colon <+> hsep (map pretty ts)
 prettyType (TApp (TCons TArray k) [t]) = brackets $ pretty t
 prettyType (TApp (TCons TTuple k) ts) = pretty ts
 prettyType (TApp (TCons TStringMap k) [t]) = text "StringMap " <+> pretty t
@@ -212,13 +211,14 @@ prettyType (TRow label rl) =
                Nothing -> empty
          , pretty rl
          ]
+prettyType (TMu tv t) = text "mu" <+> pretty tv <> text "." <+> pretty t
 
 instance Pretty (TRowList Type) where
   pretty rl =
       encloseSep (string "{ ") space (string ", ") body'
       <> case r of
       FlatRowEndTVar r' -> maybe empty ((text "|" <+>) . pretty) r'
-      FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TApp (TCons (TName tid) KRow) ts)) -- TODO
+      -- FlatRowEndRec tid ts -> comma <+> indent 4 (pretty (Fix $ TApp (TCons (TName tid) KRow) ts)) -- TODO
       <> rbrace
       where (props, r) = flattenRow rl
             isGet (TPropGetName _) = True

@@ -4,4 +4,4 @@ packages:
 extra-deps:
 - digits-0.2
 - base-orphans-0.3.3
-resolver: lts-2.15
+resolver: lts-3.5

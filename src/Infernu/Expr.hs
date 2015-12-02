@@ -57,6 +57,7 @@ data Exp a = EVar !a !EVarName
            | ETuple !a ![Exp a]
            | ERow !a !Bool ![(EPropName, Exp a)]
            | EStringMap !a ![(String, Exp a)]
+           | EUnroll !a !(Exp a)
              deriving (Show, Eq, Ord, Functor, Foldable)
 
 ----------------------------------------------------------------------
@@ -78,7 +79,7 @@ mapTopAnnotation f expr =
         (ECase a x ys) -> ECase (f a) x ys
         (EProp a x y) -> EProp (f a) x y
         (ENew a x y) -> ENew (f a) x y
-
+        (EUnroll a x) -> EUnroll (f a) x
 ----------------------------------------------------------------------
 
 getAnnotations :: Exp a -> [a]

@@ -310,15 +310,19 @@ fromExpression f (ES3.CallExpr z expr argExprs) =
   -- (<complicated expr>, ...)) by binding the object expression to '__obj__'.
   -- So that we get: let __obj__ = <complicated expr> in __obj__.method(__obj__, ...)
   case expr of
-   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') var (EPropName propName)) var
+   ES3.DotRef z' varExpr@(ES3.VarRef _ _) (ES3.Id _ propName) -> appExpr (Just propName) (EProp (src z') (EUnroll (gen z') var) (EPropName propName)) var
      where var = fromExpression f varExpr
-   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet (gen z') objVarName obj $ appExpr (Just propName) (EProp (src z') objVar (EPropName propName)) objVar
+   ES3.DotRef z' objExpr (ES3.Id _ propName) -> ELet (gen z') objVarName obj $ appExpr (Just propName) (EProp (src z') (EUnroll (gen z') objVar) (EPropName propName)) objVar
      where obj = fromExpression f objExpr
            objVar = EVar (gen z') objVarName
            objVarName = "_/obj/_"
    _ -> appExpr Nothing (fromExpression f expr) (ELit (gen z) LitEmptyThis)
-  where appExpr (Just "call") _ obj = (EApp (src z) obj (map (fromExpression f) argExprs)) -- TODO: may be wrong if object expression is not a function!
-        appExpr _ funcExpr thisExpr = (EApp (src z) funcExpr (thisExpr : map (fromExpression f) argExprs))
+  where appExpr (Just "call") _ obj = (EApp (src z)
+                                       (EUnroll (gen z) obj)
+                                       (map (fromExpression f) argExprs)) -- TODO: may be wrong if object expression is not a function!
+        appExpr _ funcExpr thisExpr = (EApp (src z)
+                                       funcExpr
+                                       (thisExpr : map (fromExpression f) argExprs))
   --error $ "Assetion failed: expecting at least 'this'"
 fromExpression f (ES3.AssignExpr z op target expr) = toAssignExpr f z op target expr Nothing
 

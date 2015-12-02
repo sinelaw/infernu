@@ -126,7 +126,7 @@ instance Hashable TypeId where
 data TConsName
     = TArray
     | TTuple
-    | TName !TypeId
+--    | TName !TypeId
     | TStringMap
     | TRef
     | TRecord
@@ -157,7 +157,7 @@ tpropName (TPropGetName x) = x
 
 data TRowList t = TRowProp !TProp !(TScheme t) !(TRowList t)
                 | TRowEnd !(Maybe RowTVar)
-                | TRowRec !TypeId ![t]
+                -- | TRowRec !TypeId ![t]
                   deriving (Show, Ord, Functor, Foldable, Traversable)
 
 instance Eq t => Eq (TRowList t) where
@@ -171,6 +171,7 @@ data FType t = TBody !TBody
                -- | Row types have an optional label, so that structural (non-nominal) types can
                -- have a name. The label has no effect on type checking.
              | TRow !(Maybe String) !(TRowList t)
+             | TMu !TVarName !t
                deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 type Type = Fix FType
@@ -208,6 +209,7 @@ instance HasKind Type where
         Just k -> k
     kind (Fix (TFunc _ _)) = KStar
     kind (Fix (TRow _ _)) = KRow
+    kind (Fix (TMu _ t)) = kind t
 
 class VarNames a where
   freeTypeVars :: a -> Set.Set TVarName
@@ -258,11 +260,11 @@ instance VarNames t => VarNames (TRowList t) where
   freeTypeVars (TRowEnd (Just (RowTVar n))) = Set.singleton n
   freeTypeVars (TRowEnd _) = Set.empty
   freeTypeVars (TRowProp _ t r) = Set.union (freeTypeVars t) (freeTypeVars r)
-  freeTypeVars (TRowRec _ ts) = foldr (Set.union . freeTypeVars) Set.empty ts
+  -- freeTypeVars (TRowRec _ ts) = foldr (Set.union . freeTypeVars) Set.empty ts
 
   mapVarNames f (TRowEnd n) = TRowEnd $ fmap (liftRowTVar f) n
   mapVarNames f (TRowProp n t r) = TRowProp n (mapVarNames f t) (mapVarNames f r)
-  mapVarNames f (TRowRec tid ts) = TRowRec tid (mapVarNames f ts)
+  -- mapVarNames f (TRowRec tid ts) = TRowRec tid (mapVarNames f ts)
 
 -- | VarNames instance for Type t
 --
@@ -279,10 +281,12 @@ instance VarNames t => VarNames (TRowList t) where
 instance VarNames Type where
   freeTypeVars (Fix (TBody b)) = freeTypeVars b
   freeTypeVars (Fix (TRow _ trlist)) = freeTypeVars trlist
+  freeTypeVars (Fix (TMu n t)) = Set.empty -- freeTypeVars t `Set.difference` (Set.singleton n)
   freeTypeVars (Fix t) = freeTypeVars' t
 
   mapVarNames f (Fix (TBody b)) = Fix $ TBody $ mapVarNames f b
   mapVarNames f (Fix (TRow l trlist)) = Fix $ TRow l (mapVarNames f trlist)
+  mapVarNames f (Fix (TMu n t)) = Fix $ TMu n t -- (f n) (mapVarNames f t)
   mapVarNames f (Fix t) = Fix $ mapVarNames' f t
 
 instance VarNames (FType (Fix FType)) where
@@ -369,6 +373,7 @@ instance Substable Type where
       case t of
           TBody (TVar n) -> fromMaybe ft $ Map.lookup n s
           TRow l r' -> Fix $ TRow l $ applySubst s r'
+          TMu n t' -> Fix $ TMu n t' -- opaque
           _ -> Fix $ fmap (applySubst s) t
 
 ----------------------------------------------------------------------
@@ -376,7 +381,7 @@ instance Substable Type where
 sortRow :: TRowList t -> TRowList t
 sortRow row = row -- TODO implement
 
-data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) | FlatRowEndRec TypeId [t]
+data FlatRowEnd t = FlatRowEndTVar (Maybe RowTVar) -- | FlatRowEndRec TypeId [t]
                   deriving (Eq, Show)
 
 flattenRow :: TRowList t -> (Map TProp (TScheme t), FlatRowEnd t)
@@ -384,13 +389,13 @@ flattenRow = flattenRow' (Map.empty, FlatRowEndTVar Nothing)
     where flattenRow' :: (Map TProp (TScheme t), FlatRowEnd t) -> TRowList t -> (Map TProp (TScheme t), FlatRowEnd t)
           flattenRow' (m,r) (TRowProp n t rest) = flattenRow' (Map.insert n t m, r) rest
           flattenRow' (m,_) (TRowEnd r') = (m, FlatRowEndTVar r')
-          flattenRow' (m,_) (TRowRec tid ts) = (m, FlatRowEndRec tid ts)
+          -- flattenRow' (m,_) (TRowRec tid ts) = (m, FlatRowEndRec tid ts)
 
 unflattenRow :: Map TProp (TScheme t) -> FlatRowEnd t -> (TProp -> Bool) -> TRowList t
 unflattenRow m r f = Map.foldrWithKey (\n t l -> if f n then TRowProp n t l else l) rend m
   where rend = case r of
           FlatRowEndTVar r' -> TRowEnd r'
-          FlatRowEndRec tid ts -> TRowRec tid ts
+          -- FlatRowEndRec tid ts -> TRowRec tid ts
 
 instance Substable (TRowList Type) where
   applySubst s (TRowProp propName propType rest) = sortRow $ TRowProp propName (applySubst s propType) (applySubst s rest)
@@ -398,14 +403,14 @@ instance Substable (TRowList Type) where
     case Map.lookup tvarName s of
       Nothing -> t
       Just (Fix (TRow _ tRowList)) -> tRowList
-      Just t'@(Fix (TApp (TCons (TName tid) k) ts))
-          | k == KRow -> TRowRec tid ts -- TODO: Bug! k is the constructor kind
-          | otherwise ->
-                error $ "Kind checking failed (expecting KRow) when substituting: " ++ show t ++ " -> " ++ show t'
+      -- Just t'@(Fix (TApp (TCons (TName tid) k) ts))
+      --     | k == KRow -> TRowRec tid ts -- TODO: Bug! k is the constructor kind
+      --     | otherwise ->
+      --           error $ "Kind checking failed (expecting KRow) when substituting: " ++ show t ++ " -> " ++ show t'
       Just (Fix (TBody (TVar n))) -> TRowEnd $ Just $ RowTVar n
       Just t' -> error $ "Cannot subst row variable into non-row: " ++ show t'
   applySubst _ (TRowEnd Nothing) = TRowEnd Nothing
-  applySubst s (TRowRec tid ts) = TRowRec tid $ applySubst s ts
+  -- applySubst s (TRowRec tid ts) = TRowRec tid $ applySubst s ts
 
 ----------------------------------------------------------------------
 newtype ClassName = ClassName String
