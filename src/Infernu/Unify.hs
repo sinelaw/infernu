@@ -250,8 +250,12 @@ unify' r a (TMu tv1 t1) (TMu tv2 t2) = --unlessEq x y $ unificationError a x y
     -- TODO alpha-equivalence
     let t2' = applySubst (singletonSubst tv2 (Fix $ TBody (TVar tv1))) t2
     in r a t1 t2'
-unify' _ a x@(TMu{}) y = unificationError a x y
-unify' _ a x y@(TMu{}) = unificationError a x y
+unify' r a mu@(TMu mtv mt) y =
+    let unroll' = applySubst (singletonSubst mtv (Fix mu))
+    in r a (unroll' mt) (unroll' $ Fix y)
+unify' r a x mu@(TMu mtv mt) =
+    let unroll' = applySubst (singletonSubst mtv (Fix mu))
+    in r a (unroll' $ Fix x) (unroll' mt)
 
 -- -- | Two recursive types
 -- unify' recurse a t1@(TApp (TCons (TName n1) k1) targs1) t2@(TApp (TCons (TName n2) k2) targs2) =

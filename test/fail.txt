@@ -1,0 +1,26 @@
+// FAIL valid/arguably/if-undefined.js:8:3: Error:  |      Failed unif y valid/arguably/if-undefined.js
+// FAIL valid/arguably/poly-method-recursive-this.js:18:17: Error:  |  y valid/arguably/poly-method-recursive-this.js
+// FAIL *valid/array-2d-get.js:1:26: Error:  |      Failed unifying: | y valid/array-2d-get.js
+// FAIL *valid/array-with-magic-props.js:2:27: Error:  |      Failed u y valid/array-with-magic-props.js
+// FAIL valid/builtins/Date.js:1:5:x:: Error:  |      Failed unifying: y valid/builtins/Date.js
+// FAIL *valid/builtins/regex-exec-2.js:2:27: Error:  |      Failed un y valid/builtins/regex-exec-2.js
+// FAIL *valid/builtins/regex-exec.js:10:7: Error:  |      Failed unif y valid/builtins/regex-exec.js
+// FAIL *valid/complex/kinda-underscore.js:4:23: Error:  |      Failed y valid/complex/kinda-underscore.js
+// FAIL *valid/complex/sortedUniq.js:10:27: Error:  |      Failed unif y valid/complex/sortedUniq.js
+// FAIL *valid/debounce-indexable.js:30:47: Error:  |      Failed unif y valid/debounce-indexable.js
+// FAIL *valid/index-and-plus.js:2:14: Error:  |      Failed unifying: y valid/index-and-plus.js
+// FAIL *valid/map.js:5:24: Error:  |      Failed unifying: |          y valid/map.js
+// FAIL *valid/new-recursive.js:1:1: Error:  |      Failed unifying: | y valid/new-recursive.js
+// FAIL valid/nothis-as-obj-param.js:10:7: Error:  |      Failed unify y valid/nothis-as-obj-param.js
+// FAIL valid/nothis-as-param.js:5:11: Error:  |      Failed unifying: y valid/nothis-as-param.js
+// FAIL valid/object-chaining.js:6:8: Error:  |      Failed unifying:  y valid/object-chaining.js
+// FAIL valid/objlit-func.js:9:1: Error:  |      Failed unifying: |    y valid/objlit-func.js
+// FAIL *valid/poly-array-assign2.js:2:31: Error:  |      Failed unify y valid/poly-array-assign2.js
+// FAIL *valid/poly-array-assign.js:2:31: Error:  |      Failed unifyi y valid/poly-array-assign.js
+// FAIL valid/poly-this-new.js:8:8: Error:  |      Failed unifying: |  y valid/poly-this-new.js
+// FAIL valid/promise.js:56:5:p1:: Error:  |      Failed unifying: |   y valid/promise.js
+// FAIL valid/promise-method-workaround.js:60:14: Error:  |      Faile y valid/promise-method-workaround.js
+// FAIL valid/promise-simple-api.js:6:46: Error:  |      Failed unifyi y valid/promise-simple-api.js
+// FAIL valid/promise-simplified2.js:10:5:p1:: Error:  |      Failed u y valid/promise-simplified2.js
+// FAIL *valid/where.js:2:16: Error:  |      Failed unifying: |        y valid/where.js
+// FAIL  n invalid/method-type.js
