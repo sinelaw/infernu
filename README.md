@@ -2,6 +2,8 @@
 
 Static type inference for JavaScript.
 
+# MOTHBALLED
+
 ## Features
 
 * It's just JavaScript: runs as-is in your browser. No transpilation or compilation required for running.
