@@ -2,7 +2,11 @@
 
 Static type inference for JavaScript.
 
-# MOTHBALLED
+*Inside every big ugly language there is a small beautiful language trying to come out.*
+
+## MOTHBALLED
+
+I have little time for this project, and don't use JS at work anymore so I'm less motivated to continue. But I still believe it's the right way to go with type safety in JS.
 
 ## Features
 
