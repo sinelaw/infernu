@@ -16,3 +16,4 @@ cabal.sandbox.config
 TAGS
 *.orig
 
+.stack-work/

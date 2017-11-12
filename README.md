@@ -32,9 +32,14 @@ Also see the [intro blog post](https://noamlewis.wordpress.com/2015/01/20/introd
 
 ### Quick and Dirty
 
+First, install [haskell stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
+
+Then use stack to install infernu:
+
     git clone git@github.com:sinelaw/infernu.git
     cd infernu/
-    cabal install
+    stack setup
+    stack install
 
 Usage: see `infernu --help`
 
@@ -54,31 +59,22 @@ Output:
 
 ### A bit more detailed instructions
 
-1. Install Haskell's **cabal** package manager. See [Haskell.org](https://www.haskell.org/downloads) for some installation options. On ubuntu, I recommend using [Herbert V. Riedel's ppa](https://launchpad.net/~hvr/+archive/ubuntu/ghc).
+1. Install [Haskell stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
 2. Clone this repository.
 
 Then run:
 
-    cabal update
-    cd infernu
-    cabal install
+    cd infernu/
+    stack setup
+    stack install
 
-The `infernu` executable will be installed to your `~/.cabal/bin`. You may want to add it to your `PATH`.
-
-If you have trouble in the last command due to package incompatibilities, use a **cabal sandbox**:
-
-    cd infernu
-    cabal sandbox init
-    cabal install
-
-The `infernu` executable will be placed in `infernu/.cabal-sandbox/bin`
+The `infernu` executable will be installed to your `~/.local/bin`. You may want to add it to your `PATH`.
 
 ### Running tests
 
     cd infernu
-    cabal sandbox init # if you haven't already
-    cabal install --only-dependencies
-    cabal build
+    stack setup
+    stack build
     cd test
     ./test.sh
 
